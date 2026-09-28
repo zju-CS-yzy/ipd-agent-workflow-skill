@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "defaults": {
+    "preserve_traceability": true,
+    "require_evidence_for_acceptance": true,
+    "require_authorized_human_gate_approval": true,
+    "block_gate_on_incomplete_deliverables": true
+  },
+  "tailoring": {
+    "may": [
+      "add-deliverables",
+      "add-reviews",
+      "merge-non-final-reviews",
+      "tighten-evidence-requirements"
+    ],
+    "must_not": [
+      "remove-traceability",
+      "accept-without-evidence",
+      "close-with-unmet-dependencies",
+      "delegate-final-gate-approval-to-agent"
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPD Tailoring Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "defaults", "tailoring"],
+  "properties": {
+    "version": { "const": 1 },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preserve_traceability",
+        "require_evidence_for_acceptance",
+        "require_authorized_human_gate_approval",
+        "block_gate_on_incomplete_deliverables"
+      ],
+      "properties": {
+        "preserve_traceability": { "const": true },
+        "require_evidence_for_acceptance": { "const": true },
+        "require_authorized_human_gate_approval": { "const": true },
+        "block_gate_on_incomplete_deliverables": { "const": true }
+      }
+    },
+    "tailoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["may", "must_not"],
+      "properties": {
+        "may": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "must_not": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

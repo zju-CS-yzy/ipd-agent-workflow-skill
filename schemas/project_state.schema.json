@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPD Project State",
+  "description": "Structural contract for .ipd/project-state.json. Use ipdctl validate for cross-reference and workflow invariants.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "project",
+    "claims",
+    "deliverables",
+    "gates",
+    "traceability"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "phase", "workflow_step"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "phase": {
+          "enum": ["concept", "plan", "develop", "qualify", "launch", "lifecycle"]
+        },
+        "workflow_step": {
+          "enum": ["context", "claim", "work", "close", "verify"]
+        },
+        "repository": { "$ref": "#/$defs/repository" }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/claim" }
+    },
+    "deliverables": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deliverable" }
+    },
+    "gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "traceability": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trace" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "stringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["none", "git", "svn"] },
+        "revision": { "type": ["string", "null"], "minLength": 1 },
+        "dirty": { "type": ["boolean", "null"] }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "status", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "statement": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["open", "supported", "rejected"] },
+        "evidence": { "$ref": "#/$defs/stringList" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "supported" } } },
+          "then": { "properties": { "evidence": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "depends_on", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "status": {
+          "enum": ["planned", "in_progress", "blocked", "ready_for_review", "accepted"]
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "evidence": { "$ref": "#/$defs/stringList" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "accepted" } } },
+          "then": { "properties": { "evidence": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "reviewer_type", "authorized", "decision", "evidence"],
+      "properties": {
+        "reviewer": { "type": "string", "minLength": 1 },
+        "reviewer_type": { "enum": ["human", "agent"] },
+        "authorized": { "type": "boolean" },
+        "decision": { "enum": ["approve", "reject"] },
+        "evidence": { "type": "string", "minLength": 1 }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind", "status", "required_deliverables", "reviews"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["TR", "DCP"] },
+        "status": { "enum": ["planned", "ready", "approved", "rejected"] },
+        "required_deliverables": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "reviews": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/review" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "approved" } } },
+          "then": {
+            "properties": {
+              "reviews": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer_type": { "const": "human" },
+                    "authorized": { "const": true },
+                    "decision": { "const": "approve" }
+                  },
+                  "required": ["reviewer_type", "authorized", "decision"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "relation"],
+      "properties": {
+        "source": { "$ref": "#/$defs/identifier" },
+        "target": { "$ref": "#/$defs/identifier" },
+        "relation": { "enum": ["supports", "depends_on", "verifies", "supersedes"] }
+      }
+    }
+  }
+}
