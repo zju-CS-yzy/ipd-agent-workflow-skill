@@ -23,8 +23,17 @@ jobs:
       - name: Check release tree
         run: python -B scripts/release_check.py .
       - name: Install package
-        run: python -m pip install --no-deps .
+        run: python -m pip install .
+      - name: Compile Python sources
+        run: python -m compileall -q ipdctl
       - name: Run behavior tests
         run: python -B -m unittest discover -s tests -v
-      - name: Smoke-test CLI
-        run: ipdctl --help
+      - name: Smoke-test lifecycle
+        shell: bash
+        run: |
+          project="$(mktemp -d)"
+          ipdctl init "$project/test-project" --name test-project
+          ipdctl tailor "$project/test-project"
+          ipdctl context "$project/test-project"
+          ipdctl refresh "$project/test-project"
+          ipdctl verify "$project/test-project"

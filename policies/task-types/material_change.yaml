@@ -1,0 +1,38 @@
+schema_version: "1.0"
+task_type: material_change
+activities:
+  - id: concept.material_impact_assessment
+    title: Assess material-change scope, interfaces, and risks
+    phase: concept
+    sequence: 16
+  - id: develop.material_qualification
+    title: Qualify the candidate material and affected process
+    phase: develop
+    sequence: 36
+  - id: qualify.material_change_validation
+    title: Validate the changed product and production controls
+    phase: qualify
+    sequence: 46
+deliverables:
+  - id: material_change.impact_assessment
+    title: Material-change impact assessment
+    phase: concept
+    activity_id: concept.material_impact_assessment
+    review_required: true
+    depends_on:
+      - concept.problem_definition
+  - id: material_change.qualification_record
+    title: Material and process qualification record
+    phase: develop
+    activity_id: develop.material_qualification
+    review_required: true
+    depends_on:
+      - material_change.impact_assessment
+      - develop.solution_baseline
+  - id: material_change.validation_report
+    title: Material-change validation report
+    phase: qualify
+    activity_id: qualify.material_change_validation
+    review_required: true
+    depends_on:
+      - material_change.qualification_record

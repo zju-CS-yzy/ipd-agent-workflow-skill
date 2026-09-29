@@ -55,6 +55,9 @@ def set_deliverable_status(
     identifier: str,
     target: str,
     evidence: Iterable[str] = (),
+    *,
+    blocked_reason: str | None = None,
+    replacement: str | None = None,
 ) -> dict[str, Any]:
     """Apply a legal deliverable transition and optionally add evidence."""
 
@@ -69,10 +72,128 @@ def set_deliverable_status(
             f"allowed: {allowed}"
         )
     deliverable["status"] = target
+    if blocked_reason is not None:
+        deliverable["blocked_reason"] = blocked_reason
+    elif target != "blocked":
+        deliverable["blocked_reason"] = None
+    if replacement is not None:
+        deliverable["replacement"] = replacement
     for item in evidence:
         if item not in deliverable["evidence"]:
             deliverable["evidence"].append(item)
     return _finalize(updated)
+
+
+def record_deliverable_review(
+    state: dict[str, Any],
+    identifier: str,
+    *,
+    reviewer: str,
+    reviewer_type: str,
+    authorized: bool,
+    decision: str,
+    evidence: str,
+) -> dict[str, Any]:
+    """Append an auditable review record to a deliverable."""
+
+    _ensure_valid(state)
+    if reviewer_type not in REVIEWER_TYPES:
+        raise TransitionError(f"invalid reviewer type: {reviewer_type!r}")
+    if decision not in REVIEW_DECISIONS:
+        raise TransitionError(f"invalid review decision: {decision!r}")
+    if not reviewer.strip() or not evidence.strip():
+        raise TransitionError("reviewer and review evidence must not be empty")
+    updated = revised_copy(state)
+    deliverable = _find(updated["deliverables"], identifier, "deliverable")
+    deliverable.setdefault("reviews", []).append(
+        {
+            "reviewer": reviewer,
+            "reviewer_type": reviewer_type,
+            "authorized": authorized,
+            "decision": decision,
+            "evidence": evidence,
+        }
+    )
+    return _finalize(updated)
+
+
+def claim_deliverable(state: dict[str, Any], identifier: str) -> dict[str, Any]:
+    """Claim planned, blocked, or rejected work and enter ``in_progress``."""
+
+    return set_deliverable_status(state, identifier, "in_progress")
+
+
+def close_deliverable(
+    state: dict[str, Any], identifier: str, *, evidence: Iterable[str]
+) -> dict[str, Any]:
+    """Submit completed work for review; this never accepts it."""
+
+    entries = tuple(evidence)
+    if not entries:
+        raise TransitionError("closing a deliverable requires evidence")
+    return set_deliverable_status(
+        state, identifier, "ready_for_review", evidence=entries
+    )
+
+
+def start_deliverable_review(
+    state: dict[str, Any], identifier: str
+) -> dict[str, Any]:
+    return set_deliverable_status(state, identifier, "in_review")
+
+
+def approve_deliverable(
+    state: dict[str, Any],
+    identifier: str,
+    *,
+    reviewer: str,
+    reviewer_type: str,
+    authorized: bool,
+    evidence: str,
+) -> dict[str, Any]:
+    """Accept reviewed work only with an explicitly authorized human record."""
+
+    if reviewer_type != "human" or not authorized:
+        raise TransitionError(
+            "final deliverable approval requires an authorized human reviewer"
+        )
+    updated = record_deliverable_review(
+        state,
+        identifier,
+        reviewer=reviewer,
+        reviewer_type=reviewer_type,
+        authorized=authorized,
+        decision="approve",
+        evidence=evidence,
+    )
+    return set_deliverable_status(updated, identifier, "accepted")
+
+
+def reject_deliverable(
+    state: dict[str, Any],
+    identifier: str,
+    *,
+    reviewer: str,
+    reviewer_type: str,
+    authorized: bool,
+    evidence: str,
+) -> dict[str, Any]:
+    """Reject reviewed work while preserving a human review record."""
+
+    if reviewer_type != "human" or not authorized:
+        raise TransitionError(
+            "final deliverable rejection requires an authorized human reviewer"
+        )
+    updated = record_deliverable_review(
+        state,
+        identifier,
+        reviewer=reviewer,
+        reviewer_type=reviewer_type,
+        authorized=authorized,
+        decision="reject",
+        evidence=evidence,
+    )
+    return set_deliverable_status(updated, identifier, "rejected")
 
 
 def record_gate_review(

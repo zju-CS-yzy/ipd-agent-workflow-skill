@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IPD Project State",
-  "description": "Structural contract for .ipd/project-state.json. Use ipdctl validate for cross-reference and workflow invariants.",
+  "description": "Structural contract for .ipd/project_state.yaml. Use ipdctl verify for cross-reference and workflow invariants.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,20 +14,39 @@
     "traceability"
   ],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "const": "2.0" },
     "revision": { "type": "integer", "minimum": 0 },
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "phase", "workflow_step"],
+      "required": [
+        "name",
+        "task_types",
+        "phase",
+        "workflow_step",
+        "current_tr",
+        "current_dcp",
+        "current_gate"
+      ],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
+        "task_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["software", "hardware", "embedded", "robotics", "ai_system", "material_change"]
+          }
+        },
         "phase": {
           "enum": ["concept", "plan", "develop", "qualify", "launch", "lifecycle"]
         },
         "workflow_step": {
           "enum": ["context", "claim", "work", "close", "verify"]
         },
+        "current_tr": { "type": ["string", "null"], "minLength": 1 },
+        "current_dcp": { "type": ["string", "null"], "minLength": 1 },
+        "current_gate": { "type": ["string", "null"], "minLength": 1 },
         "repository": { "$ref": "#/$defs/repository" }
       }
     },
@@ -64,8 +83,11 @@
       "required": ["kind"],
       "properties": {
         "kind": { "enum": ["none", "git", "svn"] },
+        "root": { "type": ["string", "null"], "minLength": 1 },
+        "branch": { "type": ["string", "null"], "minLength": 1 },
         "revision": { "type": ["string", "null"], "minLength": 1 },
-        "dirty": { "type": ["boolean", "null"] }
+        "dirty": { "type": ["boolean", "null"] },
+        "remote": { "type": ["string", "null"], "minLength": 1 }
       }
     },
     "claim": {
@@ -88,24 +110,83 @@
     "deliverable": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "status", "depends_on", "evidence"],
+      "required": [
+        "id",
+        "title",
+        "status",
+        "review_required",
+        "depends_on",
+        "evidence",
+        "reviews"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "title": { "type": "string", "minLength": 1 },
+        "phase": { "type": ["string", "null"], "minLength": 1 },
+        "activity_id": { "type": ["string", "null"], "minLength": 1 },
         "status": {
-          "enum": ["planned", "in_progress", "blocked", "ready_for_review", "accepted"]
+          "enum": [
+            "planned",
+            "in_progress",
+            "ready_for_review",
+            "in_review",
+            "accepted",
+            "rejected",
+            "blocked",
+            "superseded"
+          ]
         },
+        "review_required": { "type": "boolean" },
         "depends_on": {
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/identifier" }
         },
-        "evidence": { "$ref": "#/$defs/stringList" }
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "reviews": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/review" }
+        },
+        "blocked_reason": { "type": ["string", "null"], "minLength": 1 },
+        "replacement": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]*$" }
       },
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "accepted" } } },
-          "then": { "properties": { "evidence": { "minItems": 1 } } }
+          "then": {
+            "properties": {
+              "evidence": { "minItems": 1 },
+              "reviews": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer_type": { "const": "human" },
+                    "authorized": { "const": true },
+                    "decision": { "const": "approve" }
+                  },
+                  "required": ["reviewer_type", "authorized", "decision"]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "rejected" } } },
+          "then": {
+            "properties": {
+              "reviews": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer_type": { "const": "human" },
+                    "authorized": { "const": true },
+                    "decision": { "const": "reject" }
+                  },
+                  "required": ["reviewer_type", "authorized", "decision"]
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -128,8 +209,9 @@
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "title": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["TR", "DCP"] },
+        "kind": { "enum": ["TR", "DCP", "Gate"] },
         "status": { "enum": ["planned", "ready", "approved", "rejected"] },
+        "phase": { "type": ["string", "null"], "minLength": 1 },
         "required_deliverables": {
           "type": "array",
           "uniqueItems": true,
@@ -138,7 +220,10 @@
         "reviews": {
           "type": "array",
           "items": { "$ref": "#/$defs/review" }
-        }
+        },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "blockers": { "$ref": "#/$defs/stringList" },
+        "approval": { "type": ["string", "null"], "minLength": 1 }
       },
       "allOf": [
         {

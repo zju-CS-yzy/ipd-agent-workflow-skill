@@ -1,0 +1,38 @@
+schema_version: "1.0"
+task_type: hardware
+activities:
+  - id: plan.hardware_architecture
+    title: Define hardware architecture and engineering constraints
+    phase: plan
+    sequence: 22
+  - id: develop.hardware_realization
+    title: Realize and integrate hardware
+    phase: develop
+    sequence: 32
+  - id: qualify.hardware_qualification
+    title: Qualify hardware against environmental and performance targets
+    phase: qualify
+    sequence: 42
+deliverables:
+  - id: hardware.architecture
+    title: Hardware architecture baseline
+    phase: plan
+    activity_id: plan.hardware_architecture
+    review_required: true
+    depends_on:
+      - plan.integrated_plan
+  - id: hardware.prototype
+    title: Integrated hardware prototype
+    phase: develop
+    activity_id: develop.hardware_realization
+    review_required: true
+    depends_on:
+      - hardware.architecture
+      - develop.solution_baseline
+  - id: hardware.qualification_report
+    title: Hardware qualification report
+    phase: qualify
+    activity_id: qualify.hardware_qualification
+    review_required: true
+    depends_on:
+      - hardware.prototype

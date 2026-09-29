@@ -1,18 +1,20 @@
-# IPD Agent Workflow Skill
+# IPD Agent Workflow Framework
 
-`0.1.0a1` is an alpha release of a Codex Skill and dependency-free Python runtime for evidence-backed Integrated Product Development (IPD) work. It keeps claims, deliverables, dependencies, reviews, and TR/DCP gates in a versioned project-state contract.
+`v0.2.0-beta` combines a Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts.
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 
 ## Capabilities
 
-- Run one canonical agent loop: `context -> claim -> work -> close -> verify`.
-- Tailor reviews and deliverables without removing evidence, dependency, traceability, or human-approval invariants.
-- Detect missing dependencies, dependency cycles, dangling trace links, and unsupported closure claims.
-- Persist state atomically in `.ipd/project-state.json` and reject unknown contract fields.
-- Inspect Git or SVN revision and dirty-state metadata without mutating the repository.
+- Generate Phase, TR, DCP, Gate, Activity, Deliverable, Dependency, and Review requirements from `task_profile.yaml`.
+- Tailor for `software`, `hardware`, `embedded`, `robotics`, `ai_system`, and `material_change` work.
+- Run the Agent protocol `context -> claim -> work -> close -> review -> refresh -> verify`.
+- Enforce the eight-state deliverable lifecycle, dependency closure, evidence, review records, and authorized-human acceptance.
+- Generate process, dependency, Deliverable Matrix, and Gate Matrix views as HTML, JSON, and Markdown under `.ipd/dashboard/`.
+- Inspect Git or SVN branch/revision/dirty/remote metadata and reconcile changed paths without mutating the repository.
+- Persist YAML fact sources atomically and keep generated dashboards separate from source state.
 
-This alpha does not provide a hosted service, a graphical interface, or autonomous approval. It also does not commit, tag, push, or modify SVN state.
+This beta does not provide a hosted service, authenticated enterprise approval, or a writable web UI. It never commits, tags, pushes, pulls, fetches, updates, or otherwise mutates Git/SVN state.
 
 ## Quick start
 
@@ -22,21 +24,24 @@ Python 3.10 or newer is required. From this checkout:
 git clone https://github.com/zju-CS-yzy/ipd-agent-workflow-skill.git
 cd ipd-agent-workflow-skill
 python -m pip install -e .
-ipdctl init /path/to/project --name my-project
-ipdctl validate /path/to/project --policy policies/default/tailoring_rules.yaml
-ipdctl status /path/to/project
-ipdctl repository /path/to/project
+ipdctl init /path/to/project --name my-project --task-type software
+ipdctl tailor /path/to/project
+ipdctl context /path/to/project
+ipdctl refresh /path/to/project
+ipdctl verify /path/to/project
 ```
 
 Without installation, run the same commands as `python -m ipdctl ...` from the repository root.
 
 To make the Skill discoverable by Codex, place this checkout at `$CODEX_HOME/skills/ipd-agent-workflow-skill` (or the equivalent user Skill directory). Invoke it as `$ipd-agent-workflow-skill` or let normal Skill discovery select it for IPD-governed work.
 
-## State contract
+## Project contract
 
-`.ipd/project-state.json` is intentional, reviewable project state and may be version-controlled. `.ipd/generated/` is runtime output and is ignored. The structural contract is [schemas/project_state.schema.json](schemas/project_state.schema.json); `ipdctl validate` adds cross-reference and semantic checks that JSON Schema alone cannot express.
+The authoritative files are `.ipd/task_profile.yaml`, `.ipd/tailored_process.yaml`, `.ipd/project_state.yaml`, `.ipd/agent_runtime.yaml`, and optional `.ipd/artifact_bindings.yaml`. `.ipd/dashboard/`, reconciliation reports, and verification reports are derived views.
 
-The default policy at [policies/default/tailoring_rules.yaml](policies/default/tailoring_rules.yaml) uses JSON-compatible YAML so the runtime needs no third-party YAML parser. Its contract is [schemas/tailoring_policy.schema.json](schemas/tailoring_policy.schema.json).
+The structural contracts live in [schemas/](schemas/). Runtime validation additionally enforces dependency cycles, referential integrity, legal transitions, review authority, evidence presence, dashboard freshness, and repository reconciliation.
+
+The non-negotiable policy remains at [policies/default/tailoring_rules.yaml](policies/default/tailoring_rules.yaml). Generic task-type policies are under [policies/task-types/](policies/task-types/) and are included in installed distributions.
 
 Never place tokens, passwords, private keys, or private review content in project state. Evidence entries should be repository-relative paths, immutable revision references, or approved external record identifiers.
 
@@ -46,9 +51,13 @@ Never place tokens, passwords, private keys, or private review content in projec
 SKILL.md                         Skill entry point
 agents/openai.yaml               Codex UI metadata
 references/                      Conditional Skill guidance
-ipdctl/                          Python state, policy, engine, and VCS runtime
-schemas/                         State and tailoring-policy contracts
-policies/default/                Safe default tailoring policy
+AGENT_RUNTIME_PROTOCOL.md        Agent execution and authority contract
+ipdctl/                          Tailoring, state, dashboard, runtime, and VCS modules
+schemas/                         Profile, process, state, and runtime contracts
+policies/default/                Non-negotiable governance policy
+policies/task-types/             Generic task-type tailoring policies
+templates/project/               Project scaffold reference
+templates/hooks/                 Optional, non-installing verification guards
 scripts/release_check.py         Release hygiene and secret-pattern audit
 tests/                           Standard-library behavior tests
 docs/                            Architecture and deployment guidance
@@ -58,6 +67,7 @@ RELEASE_CHECKLIST.md             GitHub publication checklist
 ## Verification
 
 ```bash
+python -B -m compileall -q ipdctl tests scripts
 python -B -m unittest discover -s tests -v
 python -B -m ipdctl --help
 python -B scripts/release_check.py .

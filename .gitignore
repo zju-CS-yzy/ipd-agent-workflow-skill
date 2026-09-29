@@ -21,9 +21,15 @@ venv/
 .env.*
 !.env.example
 
-# Runtime output; project-state.json remains eligible for version control
+# Runtime output; task, process, and project state remain eligible for version control
 .ipd/generated/
+.ipd/dashboard/
+.ipd/reconcile_report.json
+.ipd/verify_report.json
 .ipd/*.tmp
+
+# Local migration working note; intentionally excluded from public releases
+MIGRATION_REPORT.md
 
 # Editors, operating systems, and transient files
 .idea/

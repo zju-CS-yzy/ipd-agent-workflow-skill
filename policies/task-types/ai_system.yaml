@@ -1,0 +1,38 @@
+schema_version: "1.0"
+task_type: ai_system
+activities:
+  - id: plan.ai_assurance
+    title: Define data, model, evaluation, and human-oversight controls
+    phase: plan
+    sequence: 25
+  - id: develop.ai_model_realization
+    title: Develop and integrate the model and supporting system
+    phase: develop
+    sequence: 35
+  - id: qualify.ai_system_evaluation
+    title: Evaluate model and system behavior against acceptance criteria
+    phase: qualify
+    sequence: 45
+deliverables:
+  - id: ai_system.assurance_plan
+    title: AI system assurance and evaluation plan
+    phase: plan
+    activity_id: plan.ai_assurance
+    review_required: true
+    depends_on:
+      - plan.integrated_plan
+  - id: ai_system.model_baseline
+    title: Versioned model and system baseline
+    phase: develop
+    activity_id: develop.ai_model_realization
+    review_required: true
+    depends_on:
+      - ai_system.assurance_plan
+      - develop.solution_baseline
+  - id: ai_system.evaluation_report
+    title: AI system evaluation report
+    phase: qualify
+    activity_id: qualify.ai_system_evaluation
+    review_required: true
+    depends_on:
+      - ai_system.model_baseline

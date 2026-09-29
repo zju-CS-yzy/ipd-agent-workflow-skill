@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest published alpha or stable release. Older pre-release builds are not maintained after a replacement is available.
+Security fixes are provided for the latest published pre-release or stable release. Older pre-release builds are not maintained after a replacement is available.
 
 ## Reporting a vulnerability
 
@@ -12,4 +12,4 @@ A useful report includes the affected version, impact, minimal reproduction, and
 
 ## Sensitive data boundary
 
-Never store passwords, API tokens, private keys, embedded-credential URLs, personal access tokens, or private logs in `.ipd/project-state.json`, policies, evidence fields, fixtures, prompts, or generated artifacts. Use repository-relative paths or approved external record identifiers. `scripts/release_check.py` provides a high-confidence pre-publication scan, but it does not replace secret revocation if a credential was ever committed.
+Never store passwords, API tokens, private keys, embedded-credential URLs, personal access tokens, or private logs in `.ipd/project_state.yaml`, policies, evidence fields, fixtures, prompts, or generated artifacts. Use repository-relative paths or approved external record identifiers. `scripts/release_check.py` provides a high-confidence pre-publication scan, but it does not replace secret revocation if a credential was ever committed.

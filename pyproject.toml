@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipd-agent-workflow-skill"
-version = "0.1.0a1"
-description = "Traceable IPD workflow state, gate, dependency, and repository tooling for AI agents"
+version = "0.2.0b1"
+description = "IPD Agent Workflow Framework with tailoring, execution state, dashboards, and repository reconciliation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 keywords = ["ipd", "workflow", "ai-agent", "traceability", "governance"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
@@ -21,7 +21,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-dependencies = []
+dependencies = ["PyYAML>=6,<7"]
 
 [project.urls]
 Homepage = "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill"
@@ -29,7 +29,19 @@ Repository = "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill.git"
 Issues = "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/issues"
 
 [project.scripts]
-ipdctl = "ipdctl.cli:main"
+ipdctl = "ipdctl.cli_v2:main"
 
 [tool.setuptools]
 packages = ["ipdctl"]
+
+[tool.setuptools.data-files]
+"share/ipd-agent-workflow-skill/policies/default" = ["policies/default/*.yaml"]
+"share/ipd-agent-workflow-skill/policies/task-types" = ["policies/task-types/*.yaml"]
+"share/ipd-agent-workflow-skill/schemas" = ["schemas/*.json"]
+"share/ipd-agent-workflow-skill/templates/hooks" = ["templates/hooks/*.sh"]
+"share/ipd-agent-workflow-skill/templates/project/.ipd" = ["templates/project/.ipd/README.md", "templates/project/.ipd/task_profile.yaml"]
+"share/ipd-agent-workflow-skill/templates/project/docs" = ["templates/project/docs/README.md"]
+"share/ipd-agent-workflow-skill/templates/project/dashboard" = ["templates/project/dashboard/README.md"]
+"share/ipd-agent-workflow-skill/templates/project/state" = ["templates/project/state/README.md"]
+"share/ipd-agent-workflow-skill/templates/project/src" = ["templates/project/src/.gitkeep"]
+"share/ipd-agent-workflow-skill/templates/project/tests" = ["templates/project/tests/.gitkeep"]

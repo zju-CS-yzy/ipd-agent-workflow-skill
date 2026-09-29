@@ -6,24 +6,34 @@ Read this reference when deciding how to tailor an IPD flow, close evidence, or 
 
 The project phase describes product maturity: `concept`, `plan`, `develop`, `qualify`, `launch`, or `lifecycle`.
 
-The agent workflow step describes the current unit of work:
+The core workflow step describes the current unit of work; review and refresh
+are execution controls between close and verify:
 
 1. `context` — establish scope, authority, state, repository facts, and applicable policy.
 2. `claim` — define a falsifiable result and the evidence that would support it.
 3. `work` — produce or change the deliverable while maintaining dependencies and links.
-4. `close` — satisfy acceptance criteria and attach evidence.
-5. `verify` — independently check the result and reconcile the state.
+4. `close` — submit evidence as `ready_for_review`.
+5. `review` — record review facts and an authorized human decision where required.
+6. `refresh` — regenerate derived dashboards and matrices.
+7. `verify` — independently check the result and reconcile the state.
 
 After `verify`, a new unit of work may return to `context`. A product phase changes only when project governance calls for it; completing one agent loop does not imply a phase change.
 
 ## Deliverables and evidence
 
-A deliverable moves through `planned`, `in_progress`, `blocked`, `ready_for_review`, and `accepted`. Rework may move `ready_for_review` back to `in_progress`. Acceptance requires:
+A deliverable moves through `planned`, `in_progress`, `ready_for_review`,
+`in_review`, `accepted`, `rejected`, `blocked`, and `superseded`. Rework may
+move `rejected`, `blocked`, or review states back to `in_progress`. Acceptance
+requires:
 
 - at least one durable evidence reference;
+- an authorized human approval review record and no conflicting authorized human rejection;
 - every `depends_on` deliverable in `accepted` state;
 - no dependency cycle; and
 - state validation after the transition.
+
+`superseded` is terminal and requires a replacement deliverable plus an
+explicit `supersedes` trace link.
 
 Good evidence is reproducible and specific: a repository-relative document, test record, immutable commit/revision, approved review record, or stable external record identifier. A statement that work was checked is not itself evidence.
 

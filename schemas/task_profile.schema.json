@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/schemas/task_profile.schema.json",
+  "title": "IPD Task Profile",
+  "description": "Input used to select one or more domain-neutral IPD task-type extensions.",
+  "type": "object",
+  "required": ["schema_version"],
+  "anyOf": [
+    { "required": ["task_type"] },
+    { "required": ["task_types"] }
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "project_name": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "project": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "task_type": { "$ref": "#/$defs/taskType" },
+    "task_types": {
+      "oneOf": [
+        { "$ref": "#/$defs/taskType" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/taskType" }
+        }
+      ]
+    },
+    "description": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "taskType": {
+      "type": "string",
+      "enum": [
+        "software",
+        "hardware",
+        "embedded",
+        "robotics",
+        "ai_system",
+        "ai-system",
+        "ai system",
+        "material_change",
+        "material-change",
+        "material change"
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+schema_version: "1.0"
+task_type: embedded
+activities:
+  - id: plan.embedded_partitioning
+    title: Define hardware and software partitioning
+    phase: plan
+    sequence: 23
+  - id: develop.embedded_integration
+    title: Integrate firmware with the target platform
+    phase: develop
+    sequence: 33
+  - id: qualify.embedded_system_verification
+    title: Verify timing, interfaces, and target behavior
+    phase: qualify
+    sequence: 43
+deliverables:
+  - id: embedded.partition_specification
+    title: Hardware and software partition specification
+    phase: plan
+    activity_id: plan.embedded_partitioning
+    review_required: true
+    depends_on:
+      - plan.integrated_plan
+  - id: embedded.integrated_build
+    title: Integrated embedded-system build
+    phase: develop
+    activity_id: develop.embedded_integration
+    review_required: true
+    depends_on:
+      - embedded.partition_specification
+      - develop.solution_baseline
+  - id: embedded.verification_report
+    title: Embedded-system verification report
+    phase: qualify
+    activity_id: qualify.embedded_system_verification
+    review_required: true
+    depends_on:
+      - embedded.integrated_build

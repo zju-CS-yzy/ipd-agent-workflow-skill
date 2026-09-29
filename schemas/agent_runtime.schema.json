@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IPD Agent Runtime",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "active_claims",
+    "events",
+    "last_refresh",
+    "last_verification"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "active_claims": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["deliverable", "actor", "started_at", "expires_at"],
+        "properties": {
+          "deliverable": { "type": "string", "minLength": 1 },
+          "actor": { "type": "string", "minLength": 1 },
+          "started_at": { "type": "string", "minLength": 1 },
+          "expires_at": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "at"],
+        "properties": {
+          "action": { "type": "string", "minLength": 1 },
+          "at": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "last_refresh": { "type": ["object", "null"] },
+    "last_verification": { "type": ["object", "null"] }
+  }
+}

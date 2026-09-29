@@ -19,12 +19,31 @@ REQUIRED_FILES = (
     "CONTRIBUTING.md",
     "CHANGELOG.md",
     "RELEASE_CHECKLIST.md",
+    "AGENT_RUNTIME_PROTOCOL.md",
     "pyproject.toml",
     "agents/openai.yaml",
     "schemas/project_state.schema.json",
     "schemas/tailoring_policy.schema.json",
+    "schemas/task_profile.schema.json",
+    "schemas/tailored_process.schema.json",
+    "schemas/agent_runtime.schema.json",
     "policies/default/tailoring_rules.yaml",
+    "policies/task-types/software.yaml",
+    "policies/task-types/hardware.yaml",
+    "policies/task-types/embedded.yaml",
+    "policies/task-types/robotics.yaml",
+    "policies/task-types/ai_system.yaml",
+    "policies/task-types/material_change.yaml",
+    "templates/project/.ipd/task_profile.yaml",
+    "templates/project/docs/README.md",
+    "templates/project/dashboard/README.md",
+    "templates/project/state/README.md",
+    "templates/hooks/git-pre-commit.sh",
+    "templates/hooks/git-pre-push.sh",
+    "templates/hooks/svn-pre-commit.sh",
 )
+
+FORBIDDEN_ROOT_DIRECTORIES = {".ipd", "examples", "generated"}
 
 GENERATED_DIRECTORIES = {
     "__pycache__",
@@ -127,6 +146,9 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
             if directory == ".git":
                 continue
             relative = (current_path / directory).relative_to(root)
+            if relative.parent == Path(".") and directory in FORBIDDEN_ROOT_DIRECTORIES:
+                findings.append(Finding(relative.as_posix(), "project instance or generated output is present"))
+                continue
             if _is_generated_directory(relative):
                 findings.append(Finding(relative.as_posix(), "generated/cache directory is present"))
                 continue
@@ -137,6 +159,8 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
             path = current_path / filename
             relative = path.relative_to(root)
             rendered = relative.as_posix()
+            if rendered == "MIGRATION_REPORT.md":
+                continue
             if filename in GENERATED_FILES or path.suffix.lower() in GENERATED_SUFFIXES:
                 findings.append(Finding(rendered, "generated or temporary file is present"))
                 continue
@@ -161,14 +185,8 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
         if not re.search(r"(?m)^description:\s*\S", skill_text):
             findings.append(Finding("SKILL.md", "skill description is missing"))
 
-    for relative in (
-        "schemas/project_state.schema.json",
-        "schemas/tailoring_policy.schema.json",
-        "policies/default/tailoring_rules.yaml",
-    ):
-        path = root / relative
-        if not path.is_file():
-            continue
+    for path in sorted((root / "schemas").glob("*.json")):
+        relative = path.relative_to(root).as_posix()
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:

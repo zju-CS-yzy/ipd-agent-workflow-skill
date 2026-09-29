@@ -1,6 +1,6 @@
 """Module entry point for ``python -m ipdctl``."""
 
-from .cli import main
+from .cli_v2 import main
 
 
 if __name__ == "__main__":

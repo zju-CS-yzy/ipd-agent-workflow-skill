@@ -22,7 +22,7 @@ class CliAndPolicyTests(unittest.TestCase):
                 self.assertEqual(main(["init", directory, "--name", "demo"]), 0)
                 self.assertEqual(main(["validate", directory]), 0)
                 self.assertEqual(main(["status", directory, "--json"]), 0)
-            self.assertTrue((Path(directory) / ".ipd" / "project-state.json").is_file())
+            self.assertTrue((Path(directory) / ".ipd" / "project_state.yaml").is_file())
             self.assertIn('"workflow_step": "context"', output.getvalue())
 
     def test_cli_does_not_overwrite_without_force(self) -> None:

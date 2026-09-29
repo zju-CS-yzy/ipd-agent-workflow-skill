@@ -4,9 +4,17 @@ Read this reference when repository revisions, dirty state, or VCS-specific evid
 
 ## Detection
 
-`ipdctl repository PATH` checks for an enclosing Git worktree first and then an SVN working copy. It reports the VCS kind, root, revision when available, and dirty state. An unborn Git branch has no revision and is still a valid Git repository.
+`ipdctl repository PATH` checks for an enclosing Git worktree first and then an SVN working copy. It reports kind, root, branch where applicable, revision, dirty state, and a credential-sanitized remote. An unborn Git branch has no revision and is still a valid Git repository.
 
-Detection is read-only. It does not add files, commit, update, switch branches, tag, push, lock, or modify SVN properties.
+Detection and reconciliation are local and read-only. They never fetch, pull,
+update, add, commit, switch branches, tag, push, lock, or modify SVN
+properties. Optional hook templates only delegate to `ipdctl verify`; the
+framework does not install them automatically.
+
+`ipdctl reconcile` maps locally changed paths through
+`.ipd/artifact_bindings.yaml`. Unbound paths under configured critical roots
+are errors; other unbound paths are warnings. Generated dashboards and VCS
+metadata directories are ignored.
 
 ## Evidence references
 

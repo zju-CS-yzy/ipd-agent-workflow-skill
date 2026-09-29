@@ -1,4 +1,4 @@
 interface:
   display_name: "IPD Agent Workflow"
-  short_description: "Run traceable IPD workflows with human-gated TR/DCP reviews"
-  default_prompt: "Use $ipd-agent-workflow-skill to guide and validate a traceable IPD engineering task."
+  short_description: "Tailor auditable IPD workflows with human-gated reviews"
+  default_prompt: "Use $ipd-agent-workflow-skill to tailor, execute, visualize, and verify this IPD engineering workflow."

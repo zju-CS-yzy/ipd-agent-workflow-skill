@@ -1,0 +1,38 @@
+schema_version: "1.0"
+task_type: robotics
+activities:
+  - id: plan.robotics_system_design
+    title: Define robotic system behavior, interfaces, and operating envelope
+    phase: plan
+    sequence: 24
+  - id: develop.robotics_integration
+    title: Integrate sensing, actuation, compute, and control
+    phase: develop
+    sequence: 34
+  - id: qualify.robotics_validation
+    title: Validate integrated behavior in representative conditions
+    phase: qualify
+    sequence: 44
+deliverables:
+  - id: robotics.system_design
+    title: Robotic system design baseline
+    phase: plan
+    activity_id: plan.robotics_system_design
+    review_required: true
+    depends_on:
+      - plan.integrated_plan
+  - id: robotics.integrated_prototype
+    title: Integrated robotic-system prototype
+    phase: develop
+    activity_id: develop.robotics_integration
+    review_required: true
+    depends_on:
+      - robotics.system_design
+      - develop.solution_baseline
+  - id: robotics.validation_report
+    title: Robotic-system validation report
+    phase: qualify
+    activity_id: qualify.robotics_validation
+    review_required: true
+    depends_on:
+      - robotics.integrated_prototype

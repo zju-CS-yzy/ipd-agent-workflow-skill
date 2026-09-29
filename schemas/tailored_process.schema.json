@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/schemas/tailored_process.schema.json",
+  "title": "Tailored IPD Process",
+  "description": "Deterministic process definition generated from an IPD task profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile",
+    "phases",
+    "technical_reviews",
+    "decision_checkpoints",
+    "gates",
+    "activities",
+    "deliverables",
+    "dependencies",
+    "review_requirements"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "task_types"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "task_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "software",
+              "hardware",
+              "embedded",
+              "robotics",
+              "ai_system",
+              "material_change"
+            ]
+          }
+        }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/phase" }
+    },
+    "technical_reviews": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/checkpoint" }
+    },
+    "decision_checkpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/checkpoint" }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "activities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/activity" }
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/deliverable" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "review_requirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reviewRequirement" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "phaseId": {
+      "enum": ["concept", "plan", "develop", "qualify", "launch", "lifecycle"]
+    },
+    "identifierList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "sequence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/phaseId" },
+        "title": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "sequence", "gate_id", "required_deliverables"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "gate_id": { "$ref": "#/$defs/identifier" },
+        "required_deliverables": { "$ref": "#/$defs/identifierList" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "phase",
+        "checkpoint_id",
+        "required_deliverables",
+        "review_required",
+        "final_approval"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["TR", "DCP", "Gate"] },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "checkpoint_id": { "$ref": "#/$defs/identifier" },
+        "required_deliverables": { "$ref": "#/$defs/identifierList" },
+        "review_required": { "const": true },
+        "final_approval": { "const": "authorized_human" }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "sequence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "sequence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "activity_id", "review_required", "depends_on"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "activity_id": { "$ref": "#/$defs/identifier" },
+        "review_required": { "type": "boolean" },
+        "depends_on": { "$ref": "#/$defs/identifierList" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "relation"],
+      "properties": {
+        "source": { "$ref": "#/$defs/identifier" },
+        "target": { "$ref": "#/$defs/identifier" },
+        "relation": { "enum": ["depends_on", "supports", "verifies", "supersedes"] }
+      }
+    },
+    "reviewRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "subject_type",
+        "subject_id",
+        "reviewer_type",
+        "authorization_required",
+        "decision_required"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "subject_type": { "enum": ["deliverable", "gate"] },
+        "subject_id": { "$ref": "#/$defs/identifier" },
+        "reviewer_type": { "enum": ["human", "agent"] },
+        "authorization_required": { "type": "boolean" },
+        "decision_required": { "type": "boolean" }
+      }
+    }
+  }
+}
