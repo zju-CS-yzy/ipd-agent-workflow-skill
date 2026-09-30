@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from .dependencies import unmet_dependencies
 from .model import DELIVERABLE_TRANSITIONS, REVIEW_DECISIONS, REVIEWER_TYPES, WORKFLOW_STEPS
 from .state import revised_copy
 from .validation import validate_state
@@ -35,7 +36,7 @@ def _find(items: list[dict[str, Any]], identifier: str, kind: str) -> dict[str, 
 
 
 def transition_workflow(state: dict[str, Any], target: str) -> dict[str, Any]:
-    """Move one step through context -> claim -> work -> close -> verify."""
+    """Move one step through the canonical seven-step Agent runtime loop."""
 
     _ensure_valid(state)
     current = state["project"]["workflow_step"]
@@ -120,6 +121,24 @@ def record_deliverable_review(
 def claim_deliverable(state: dict[str, Any], identifier: str) -> dict[str, Any]:
     """Claim planned, blocked, or rejected work and enter ``in_progress``."""
 
+    _ensure_valid(state)
+    deliverable = _find(state["deliverables"], identifier, "deliverable")
+    deliverable_phase = deliverable.get("phase")
+    current_phase = state["project"].get("phase")
+    if deliverable_phase is not None and deliverable_phase != current_phase:
+        raise TransitionError(
+            f"deliverable {identifier!r} belongs to phase {deliverable_phase!r}; "
+            f"current phase is {current_phase!r}"
+        )
+    graph = {
+        item["id"]: item.get("depends_on", []) for item in state["deliverables"]
+    }
+    statuses = {item["id"]: item.get("status") for item in state["deliverables"]}
+    unmet = list(unmet_dependencies(identifier, graph, statuses))
+    if unmet:
+        raise TransitionError(
+            f"deliverable {identifier!r} has unmet dependencies: {', '.join(unmet)}"
+        )
     return set_deliverable_status(state, identifier, "in_progress")
 
 
@@ -213,6 +232,8 @@ def record_gate_review(
         raise TransitionError(f"invalid reviewer type: {reviewer_type!r}")
     if decision not in REVIEW_DECISIONS:
         raise TransitionError(f"invalid review decision: {decision!r}")
+    if not reviewer.strip() or not evidence.strip():
+        raise TransitionError("reviewer and review evidence must not be empty")
     updated = revised_copy(state)
     gate = _find(updated["gates"], gate_id, "gate")
     gate["reviews"].append(
@@ -228,14 +249,15 @@ def record_gate_review(
 
 
 def set_gate_ready(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
-    """Mark a planned gate ready only after all required deliverables close."""
+    """Mark a planned or rejected gate ready after its prerequisites close."""
 
     _ensure_valid(state)
     updated = revised_copy(state)
     gate = _find(updated["gates"], gate_id, "gate")
-    if gate["status"] != "planned":
-        raise TransitionError("only a planned gate can be marked ready")
+    if gate["status"] not in {"planned", "rejected"}:
+        raise TransitionError("only a planned or rejected gate can be marked ready")
     gate["status"] = "ready"
+    gate["approval"] = None
     return _finalize(updated)
 
 
@@ -248,4 +270,36 @@ def approve_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
     if gate["status"] != "ready":
         raise TransitionError("only a ready gate can be approved")
     gate["status"] = "approved"
+    authorized_human = [
+        review
+        for review in gate.get("reviews", [])
+        if review.get("reviewer_type") == "human"
+        and review.get("authorized") is True
+    ]
+    if authorized_human and authorized_human[-1].get("decision") == "approve":
+        gate["approval"] = authorized_human[-1].get("reviewer")
+    return _finalize(updated)
+
+
+def reject_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
+    """Reject a ready gate only when its latest human decision is a rejection."""
+
+    _ensure_valid(state)
+    updated = revised_copy(state)
+    gate = _find(updated["gates"], gate_id, "gate")
+    if gate["status"] != "ready":
+        raise TransitionError("only a ready gate can be rejected")
+    gate["status"] = "rejected"
+    gate["approval"] = None
+    reviews = gate.get("reviews", [])
+    authorized_human = [
+        review
+        for review in reviews
+        if review.get("reviewer_type") == "human"
+        and review.get("authorized") is True
+    ]
+    if not authorized_human or authorized_human[-1].get("decision") != "reject":
+        raise TransitionError(
+            "gate rejection requires a latest authorized human rejection review"
+        )
     return _finalize(updated)

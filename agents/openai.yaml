@@ -1,4 +1,4 @@
 interface:
   display_name: "IPD Agent Workflow"
-  short_description: "Tailor auditable IPD workflows with human-gated reviews"
-  default_prompt: "Use $ipd-agent-workflow-skill to tailor, execute, visualize, and verify this IPD engineering workflow."
+  short_description: "Auditable bilingual IPD workflows and dashboards"
+  default_prompt: "Use $ipd-agent-workflow-skill to govern this IPD project in the conversation language before initialization and the configured project locale afterward."

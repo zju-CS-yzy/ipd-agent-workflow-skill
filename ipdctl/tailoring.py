@@ -204,6 +204,46 @@ def _duplicate_ids(items: list[dict[str, Any]]) -> list[str]:
     return sorted(identifier for identifier, count in counts.items() if count > 1)
 
 
+def _required_deliverable_issues(
+    *,
+    path: str,
+    required: Any,
+    expected: set[str],
+    deliverable_ids: set[str],
+) -> list[str]:
+    """Validate the complete, duplicate-free deliverable set for a phase control."""
+
+    if not isinstance(required, list) or not all(
+        isinstance(identifier, str) and identifier.strip()
+        for identifier in required
+    ):
+        return [f"{path}: must be an array of non-empty strings"]
+
+    issues: list[str] = []
+    if len(required) != len(set(required)):
+        issues.append(f"{path}: must not contain duplicates")
+    for identifier in required:
+        if identifier not in deliverable_ids:
+            issues.append(
+                f"{path}: references unknown deliverable {identifier!r}"
+            )
+
+    actual = set(required)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        detail: list[str] = []
+        if missing:
+            detail.append(f"missing {missing!r}")
+        if unexpected:
+            detail.append(f"unexpected {unexpected!r}")
+        issues.append(
+            f"{path}: must equal the complete deliverable set for its phase"
+            + (f" ({'; '.join(detail)})" if detail else "")
+        )
+    return issues
+
+
 def validate_process(value: Any) -> list[str]:
     """Validate structural references and dependency invariants in a process."""
 
@@ -266,6 +306,17 @@ def validate_process(value: Any) -> list[str]:
             issues.extend(f"$.{field}[{index}]: must be an object" for index in bad)
             collections[field] = [item for item in collection if isinstance(item, dict)]
 
+    expected_phase_contract = [
+        (item["id"], item["sequence"]) for item in phases()
+    ]
+    actual_phase_contract = [
+        (item.get("id"), item.get("sequence")) for item in collections["phases"]
+    ]
+    if actual_phase_contract != expected_phase_contract:
+        issues.append(
+            "$.phases: must preserve the canonical concept-to-lifecycle order and sequence"
+        )
+
     for field in (
         "phases",
         "technical_reviews",
@@ -309,6 +360,180 @@ def validate_process(value: Any) -> list[str]:
         if isinstance(item.get("id"), str)
     }
     all_entity_ids = phase_ids | activity_ids | deliverable_ids | gate_ids | tr_ids | dcp_ids
+
+    canonical_phases = phases()
+    deliverables_by_phase = {
+        phase["id"]: {
+            item["id"]
+            for item in collections["deliverables"]
+            if isinstance(item.get("id"), str)
+            and item.get("phase") == phase["id"]
+        }
+        for phase in canonical_phases
+    }
+
+    checkpoint_specs = (
+        ("technical_reviews", "tr"),
+        ("decision_checkpoints", "dcp"),
+    )
+    checkpoint_by_id: dict[str, dict[str, Any]] = {}
+    for field, prefix in checkpoint_specs:
+        expected_ids = {f"{prefix}.{phase['id']}" for phase in canonical_phases}
+        for index, checkpoint in enumerate(collections[field]):
+            identifier = checkpoint.get("id")
+            if isinstance(identifier, str):
+                checkpoint_by_id.setdefault(identifier, checkpoint)
+                if identifier not in expected_ids:
+                    issues.append(
+                        f"$.{field}[{index}].id: only canonical {prefix.upper()} "
+                        "checkpoints are allowed"
+                    )
+
+        for phase in canonical_phases:
+            phase_id = phase["id"]
+            checkpoint_id = f"{prefix}.{phase_id}"
+            gate_id = f"gate.{checkpoint_id}"
+            matching = [
+                (index, item)
+                for index, item in enumerate(collections[field])
+                if item.get("id") == checkpoint_id
+            ]
+            if not matching:
+                issues.append(
+                    f"$.{field}: missing canonical checkpoint {checkpoint_id!r}"
+                )
+                continue
+
+            index, checkpoint = matching[0]
+            path = f"$.{field}[{index}]"
+            if checkpoint.get("phase") != phase_id:
+                issues.append(f"{path}.phase: must equal {phase_id!r}")
+            if checkpoint.get("sequence") != phase["sequence"]:
+                issues.append(
+                    f"{path}.sequence: must equal canonical phase sequence "
+                    f"{phase['sequence']!r}"
+                )
+            if checkpoint.get("gate_id") != gate_id:
+                issues.append(f"{path}.gate_id: must equal {gate_id!r}")
+            issues.extend(
+                _required_deliverable_issues(
+                    path=f"{path}.required_deliverables",
+                    required=checkpoint.get("required_deliverables"),
+                    expected=deliverables_by_phase[phase_id],
+                    deliverable_ids=deliverable_ids,
+                )
+            )
+
+    gate_by_id = {
+        item["id"]: item
+        for item in collections["gates"]
+        if isinstance(item.get("id"), str)
+    }
+    canonical_gate_ids: set[str] = set()
+    for phase in canonical_phases:
+        phase_id = phase["id"]
+        for prefix, kind in (("tr", "TR"), ("dcp", "DCP")):
+            checkpoint_id = f"{prefix}.{phase_id}"
+            gate_id = f"gate.{checkpoint_id}"
+            canonical_gate_ids.add(gate_id)
+            gate = gate_by_id.get(gate_id)
+            if gate is None:
+                issues.append(f"$.gates: missing canonical gate {gate_id!r}")
+                continue
+
+            index = next(
+                index
+                for index, item in enumerate(collections["gates"])
+                if item.get("id") == gate_id
+            )
+            path = f"$.gates[{index}]"
+            if gate.get("kind") != kind:
+                issues.append(f"{path}.kind: must equal {kind!r}")
+            if gate.get("phase") != phase_id:
+                issues.append(f"{path}.phase: must equal {phase_id!r}")
+            if gate.get("checkpoint_id") != checkpoint_id:
+                issues.append(
+                    f"{path}.checkpoint_id: must equal {checkpoint_id!r}"
+                )
+
+    expected_canonical_gate_order = [
+        f"gate.{prefix}.{phase['id']}"
+        for phase in canonical_phases
+        for prefix in ("tr", "dcp")
+    ]
+    actual_canonical_gate_order = [
+        item.get("id")
+        for item in collections["gates"]
+        if item.get("id") in canonical_gate_ids
+    ]
+    if actual_canonical_gate_order != expected_canonical_gate_order:
+        issues.append(
+            "$.gates: must preserve canonical phase order with TR before DCP"
+        )
+
+    gate_positions = {
+        item.get("id"): index
+        for index, item in enumerate(collections["gates"])
+        if isinstance(item.get("id"), str)
+    }
+    for phase in canonical_phases:
+        phase_id = phase["id"]
+        canonical_positions = [
+            gate_positions[identifier]
+            for identifier in (f"gate.tr.{phase_id}", f"gate.dcp.{phase_id}")
+            if identifier in gate_positions
+        ]
+        generic_rows = [
+            (index, item.get("id"))
+            for index, item in enumerate(collections["gates"])
+            if item.get("phase") == phase_id
+            and item.get("kind") == "Gate"
+            and isinstance(item.get("id"), str)
+        ]
+        if canonical_positions and any(
+            index <= max(canonical_positions) for index, _ in generic_rows
+        ):
+            issues.append(
+                f"$.gates: generic gates for phase {phase_id!r} must follow its canonical TR and DCP gates"
+            )
+        generic_ids = [identifier for _, identifier in generic_rows]
+        if generic_ids != sorted(generic_ids):
+            issues.append(
+                f"$.gates: generic gates for phase {phase_id!r} must be ordered by id"
+            )
+
+    for index, gate in enumerate(collections["gates"]):
+        path = f"$.gates[{index}]"
+        identifier = gate.get("id")
+        kind = gate.get("kind")
+        if kind in {"TR", "DCP"} and identifier not in canonical_gate_ids:
+            issues.append(
+                f"{path}.kind: TR and DCP kinds are reserved for canonical gates"
+            )
+        if gate.get("review_required") is not True:
+            issues.append(f"{path}.review_required: must equal true")
+        if gate.get("final_approval") != "authorized_human":
+            issues.append(
+                f"{path}.final_approval: must equal 'authorized_human'"
+            )
+
+        gate_phase = gate.get("phase")
+        if gate_phase in deliverables_by_phase:
+            issues.extend(
+                _required_deliverable_issues(
+                    path=f"{path}.required_deliverables",
+                    required=gate.get("required_deliverables"),
+                    expected=deliverables_by_phase[gate_phase],
+                    deliverable_ids=deliverable_ids,
+                )
+            )
+
+        checkpoint_id = gate.get("checkpoint_id")
+        checkpoint = checkpoint_by_id.get(checkpoint_id)
+        if checkpoint is not None and checkpoint.get("phase") != gate_phase:
+            issues.append(
+                f"{path}.checkpoint_id: checkpoint phase must match gate phase"
+            )
 
     for field in ("activities", "deliverables", "technical_reviews", "decision_checkpoints", "gates"):
         for index, item in enumerate(collections[field]):

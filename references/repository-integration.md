@@ -13,8 +13,50 @@ framework does not install them automatically.
 
 `ipdctl reconcile` maps locally changed paths through
 `.ipd/artifact_bindings.yaml`. Unbound paths under configured critical roots
-are errors; other unbound paths are warnings. Generated dashboards and VCS
-metadata directories are ignored.
+are errors; other unbound paths are warnings. The complete `.ipd/**` tree is
+ignored by repository reconciliation because framework state and generated
+views are validated by their own schema, transition, freshness, and audit
+checks. VCS metadata directories are also ignored.
+
+## Binding project paths before work
+
+Before a real Agent changes a path under `critical_roots`, the project must
+contain an explicit rule that binds that path to the Deliverable already held
+by the Agent's active claim. Do not infer ownership from a directory name. For
+example, the Agent first runs
+`ipdctl claim develop.runtime --actor runtime-agent`, then the project can add
+this user-owned rule:
+
+```yaml
+critical_roots:
+  - src/**
+  - tests/**
+bindings:
+  - id: runtime-owner
+    glob: src/runtime/**
+    deliverable: develop.runtime
+    critical: true
+    review_required: true
+```
+
+Only after both the claim and binding exist may the Agent modify
+`src/runtime/**`. A different critical path needs its own explicit binding;
+the framework never guesses that `docs/**`, `src/**`, or `tests/**` belongs to
+a particular Deliverable.
+
+Reconciliation normally runs after `close`, when the active lease has already
+ended. It therefore validates each mapped changed path against the auditable
+`claim` events retained in `.ipd/agent_runtime.yaml`. A binding to a known
+Deliverable that has no Claim provenance fails with
+`BINDING_UNCLAIMED_DELIVERABLE`; merely naming another Deliverable in the YAML
+does not establish ownership. A provenance event is valid only when it records
+the Deliverable, Actor, timezone-aware timestamp, and a non-negative project
+state revision no newer than the current state.
+
+`ipdctl tailor` manages one deterministic rule per current Deliverable for
+`evidence/<deliverable-id>/**`. Re-tailoring updates those framework-managed
+evidence rules and removes only framework-managed rules for Deliverables that
+no longer exist. Hand-authored binding rules are preserved.
 
 ## Evidence references
 

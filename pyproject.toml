@@ -1,18 +1,18 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipd-agent-workflow-skill"
-version = "0.2.0b1"
-description = "IPD Agent Workflow Framework with tailoring, execution state, dashboards, and repository reconciliation"
+version = "0.3.0b1"
+description = "Bilingual IPD Agent Workflow Framework with tailoring, execution state, dashboards, and repository reconciliation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 keywords = ["ipd", "workflow", "ai-agent", "traceability", "governance"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.10",
@@ -33,6 +33,10 @@ ipdctl = "ipdctl.cli_v2:main"
 
 [tool.setuptools]
 packages = ["ipdctl"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+ipdctl = ["messages.yaml"]
 
 [tool.setuptools.data-files]
 "share/ipd-agent-workflow-skill/policies/default" = ["policies/default/*.yaml"]

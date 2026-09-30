@@ -11,8 +11,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+PACKAGE_VERSION = "0.3.0b1"
+PUBLIC_VERSION = "0.3.0-beta"
+
 REQUIRED_FILES = (
     "README.md",
+    "README.zh-CN.md",
     "SKILL.md",
     "LICENSE",
     "SECURITY.md",
@@ -22,6 +26,14 @@ REQUIRED_FILES = (
     "AGENT_RUNTIME_PROTOCOL.md",
     "pyproject.toml",
     "agents/openai.yaml",
+    ".github/workflows/test.yml",
+    ".github/workflows/release.yml",
+    ".github/release-notes/v0.3.0-beta.md",
+    "ipdctl/messages.yaml",
+    "docs/architecture.md",
+    "docs/architecture.zh-CN.md",
+    "docs/deployment.md",
+    "docs/deployment.zh-CN.md",
     "schemas/project_state.schema.json",
     "schemas/tailoring_policy.schema.json",
     "schemas/task_profile.schema.json",
@@ -43,7 +55,8 @@ REQUIRED_FILES = (
     "templates/hooks/svn-pre-commit.sh",
 )
 
-FORBIDDEN_ROOT_DIRECTORIES = {".ipd", "examples", "generated"}
+FORBIDDEN_ROOT_DIRECTORIES = {".ipd", "examples", "generated", "locales"}
+FORBIDDEN_DIRECTORY_NAMES = {"examples", "generated", "locales"}
 
 GENERATED_DIRECTORIES = {
     "__pycache__",
@@ -60,6 +73,7 @@ GENERATED_DIRECTORIES = {
 GENERATED_DIRECTORY_SUFFIXES = (".egg-info",)
 GENERATED_FILES = {".coverage", "coverage.xml"}
 GENERATED_SUFFIXES = {".pyc", ".pyo", ".tmp", ".bak", ".log", ".swp"}
+FORBIDDEN_BINARY_SUFFIXES = {".png"}
 
 SENSITIVE_FILENAMES = (
     re.compile(r"^\.env(?:\..+)?$", re.IGNORECASE),
@@ -125,6 +139,91 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _require_pattern(
+    findings: list[Finding],
+    root: Path,
+    relative: str,
+    pattern: str,
+    message: str,
+) -> None:
+    path = root / relative
+    text = _read_text(path) if path.is_file() else None
+    if (
+        text is not None
+        and re.search(pattern, text, re.MULTILINE | re.DOTALL) is None
+    ):
+        findings.append(Finding(relative, message))
+
+
+def _check_release_contract(findings: list[Finding], root: Path) -> None:
+    escaped_package = re.escape(PACKAGE_VERSION)
+    escaped_public = re.escape(PUBLIC_VERSION)
+    checks = (
+        (
+            "pyproject.toml",
+            rf'^version\s*=\s*"{escaped_package}"\s*$',
+            f'project version must be "{PACKAGE_VERSION}"',
+        ),
+        (
+            "pyproject.toml",
+            r'\[tool\.setuptools\.package-data\].*?^ipdctl\s*=\s*\[\s*"messages\.yaml"\s*\]',
+            "ipdctl/messages.yaml must be declared as package data",
+        ),
+        (
+            "ipdctl/__init__.py",
+            rf'^__version__\s*=\s*"{escaped_package}"\s*$',
+            f'__version__ must be "{PACKAGE_VERSION}"',
+        ),
+        (
+            "ipdctl/cli_v2.py",
+            rf'^VERSION\s*=\s*"{escaped_public}"\s*$',
+            f'CLI VERSION must be "{PUBLIC_VERSION}"',
+        ),
+        (
+            "CHANGELOG.md",
+            rf'^## \[{escaped_package}\]',
+            f"changelog must contain a {PACKAGE_VERSION} release section",
+        ),
+        (
+            "README.md",
+            rf'`v{escaped_public}`',
+            f"README must identify v{PUBLIC_VERSION}",
+        ),
+        (
+            ".github/release-notes/v0.3.0-beta.md",
+            r"^### Compatibility\s*$.*?^### Approval boundary\s*$.*?^### Known limitations\s*$",
+            "English release notes must document compatibility, approval boundaries, and known limitations",
+        ),
+        (
+            ".github/release-notes/v0.3.0-beta.md",
+            r"^### 兼容性\s*$.*?^### 审批边界\s*$.*?^### 已知限制\s*$",
+            "Chinese release notes must document compatibility, approval boundaries, and known limitations",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"uses:\s*softprops/action-gh-release@v3.*?body_path:\s*\.github/release-notes/v0\.3\.0-beta\.md.*?prerelease:\s*true",
+            "release workflow must use the supported action, curated notes, and prerelease status",
+        ),
+        (
+            "SKILL.md",
+            r'presentation\.locale.*?zh-CN',
+            "Skill language contract must route generated presentation by project locale",
+        ),
+        (
+            "ipdctl/messages.yaml",
+            r'^\s*en:\s*$',
+            "message catalog must contain the en locale",
+        ),
+        (
+            "ipdctl/messages.yaml",
+            r'^\s*zh-CN:\s*$',
+            "message catalog must contain the zh-CN locale",
+        ),
+    )
+    for relative, pattern, message in checks:
+        _require_pattern(findings, root, relative, pattern, message)
+
+
 def audit_repository(root: Path) -> tuple[list[Finding], int]:
     findings: list[Finding] = []
     scanned_files = 0
@@ -139,6 +238,8 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
         elif path.stat().st_size == 0:
             findings.append(Finding(required, "required release file is empty"))
 
+    _check_release_contract(findings, root)
+
     for current, directories, files in os.walk(root):
         current_path = Path(current)
         kept_directories: list[str] = []
@@ -146,7 +247,10 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
             if directory == ".git":
                 continue
             relative = (current_path / directory).relative_to(root)
-            if relative.parent == Path(".") and directory in FORBIDDEN_ROOT_DIRECTORIES:
+            if (
+                relative.parent == Path(".")
+                and directory in FORBIDDEN_ROOT_DIRECTORIES
+            ) or directory in FORBIDDEN_DIRECTORY_NAMES:
                 findings.append(Finding(relative.as_posix(), "project instance or generated output is present"))
                 continue
             if _is_generated_directory(relative):
@@ -163,6 +267,9 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
                 continue
             if filename in GENERATED_FILES or path.suffix.lower() in GENERATED_SUFFIXES:
                 findings.append(Finding(rendered, "generated or temporary file is present"))
+                continue
+            if path.suffix.lower() in FORBIDDEN_BINARY_SUFFIXES:
+                findings.append(Finding(rendered, "generated screenshot or binary project output is present"))
                 continue
             if _is_sensitive_filename(filename):
                 findings.append(Finding(rendered, "credential-like filename is present"))

@@ -1,10 +1,47 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.2.0-beta` maps to package version `0.2.0b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.0-beta` maps to package version `0.3.0b1`.
 
 ## [Unreleased]
 
-No changes yet.
+## [0.3.0b1] - 2026-09-30
+
+### Added
+
+- One bundled `messages.yaml` catalog and locale-aware runtime presentation for
+  English (`en`) and Simplified Chinese (`zh-CN`).
+- `init --locale`, persisted as `task_profile.presentation.locale`, with
+  backward-compatible English behavior for v0.2 profiles that omit it.
+- Simplified Chinese README, architecture, and deployment guidance.
+- Locale-aware CLI, HTML, SVG, matrix, report, freshness, package, and Golden
+  tests while preserving English machine contracts.
+- Explicit Deliverable/Gate review subjects, latest-authorized-human-decision
+  resolution with full review history, and governed phase advancement.
+- Strict single-claim Agent iterations, expired-claim recovery, verification
+  fingerprints, canonical TR/DCP/Gate pointers, and one-time lifecycle completion
+  records.
+- Fail-closed Gate ordering, pointer and Phase-transition-history validation,
+  plus Claim provenance that requires Actor, timestamp, and a non-future
+  project state revision.
+- Managed Deliverable evidence bindings with explicit source/test path binding for
+  repository reconciliation.
+
+### Changed
+
+- Versioned the single bilingual Skill and Python distribution as
+  `v0.3.0-beta` / `0.3.0b1`; no locale-specific code packages are published.
+- Restored the Dashboard rendering pipeline with a canonical nested output
+  tree, deterministic hierarchical SVGs, phase swimlanes, typed workflow nodes,
+  relation-specific edges, interactive details, searchable matrices, and
+  output-derived v1.4 Golden testing.
+- Dashboard refresh now atomically replaces its managed output tree and
+  verification enforces the required files and manifest boundary.
+- Dashboard manifests now record locale, and changing presentation language
+  invalidates only generated views rather than workflow facts.
+- Phase advancement now requires a fresh successful verification and starts the
+  next phase at `refresh`; rejected work cannot skip the refresh/verify loop.
+- Common lifecycle failures are fully localized in Chinese while IDs, phases,
+  statuses, commands, and machine reports remain English.
 
 ## [0.2.0b1] - 2026-09-29
 

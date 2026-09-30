@@ -148,6 +148,21 @@ def _authorized_reviews(
     ]
 
 
+def _latest_authorized_human_decision(
+    reviews: list[dict[str, Any]],
+) -> str | None:
+    """Return the latest governed decision while preserving earlier review history."""
+
+    for review in reversed(reviews):
+        if (
+            review.get("reviewer_type") == "human"
+            and review.get("authorized") is True
+            and review.get("decision") in REVIEW_DECISIONS
+        ):
+            return review["decision"]
+    return None
+
+
 def validate_state(value: Any) -> list[ValidationIssue]:
     """Validate both the v0.2 contract and the non-negotiable IPD invariants."""
 
@@ -299,21 +314,14 @@ def validate_state(value: Any) -> list[ValidationIssue]:
         if status == "accepted":
             if not evidence:
                 issues.append(ValidationIssue(f"{path}.evidence", "an accepted deliverable requires evidence"))
-            if not _authorized_reviews(reviews, "approve"):
+            if _latest_authorized_human_decision(reviews) != "approve":
                 issues.append(
                     ValidationIssue(
                         f"{path}.reviews",
                         "an accepted deliverable requires an authorized human approval review",
                     )
                 )
-            if _authorized_reviews(reviews, "reject"):
-                issues.append(
-                    ValidationIssue(
-                        f"{path}.reviews",
-                        "accepted deliverable conflicts with an authorized human rejection",
-                    )
-                )
-        if status == "rejected" and not _authorized_reviews(reviews, "reject"):
+        if status == "rejected" and _latest_authorized_human_decision(reviews) != "reject":
             issues.append(
                 ValidationIssue(
                     f"{path}.reviews",
@@ -510,17 +518,10 @@ def _validate_gate(
                 )
             )
     if status == "approved":
-        if not _authorized_reviews(reviews, "approve"):
+        if _latest_authorized_human_decision(reviews) != "approve":
             issues.append(
                 ValidationIssue(
                     f"{path}.reviews",
                     "approved TR/DCP gate requires an authorized human approval",
-                )
-            )
-        if _authorized_reviews(reviews, "reject"):
-            issues.append(
-                ValidationIssue(
-                    f"{path}.reviews",
-                    "approved gate conflicts with an authorized human rejection",
                 )
             )

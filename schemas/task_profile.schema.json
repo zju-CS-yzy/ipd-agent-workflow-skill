@@ -33,7 +33,18 @@
       ]
     },
     "description": { "type": "string" },
-    "metadata": { "type": "object" }
+    "metadata": { "type": "object" },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locale": {
+          "type": "string",
+          "enum": ["en", "zh-CN"],
+          "default": "en"
+        }
+      }
+    }
   },
   "additionalProperties": true,
   "$defs": {

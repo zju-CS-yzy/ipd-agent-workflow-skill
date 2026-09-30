@@ -42,7 +42,7 @@
           "enum": ["concept", "plan", "develop", "qualify", "launch", "lifecycle"]
         },
         "workflow_step": {
-          "enum": ["context", "claim", "work", "close", "verify"]
+          "enum": ["context", "claim", "work", "close", "review", "refresh", "verify"]
         },
         "current_tr": { "type": ["string", "null"], "minLength": 1 },
         "current_dcp": { "type": ["string", "null"], "minLength": 1 },

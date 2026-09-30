@@ -9,6 +9,7 @@ from pathlib import Path
 from ipdctl.cli import main
 from ipdctl.policy import PolicyError, load_policy, validate_policy
 from ipdctl.repository import inspect_repository
+from ipdctl.state import load_state
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +24,21 @@ class CliAndPolicyTests(unittest.TestCase):
                 self.assertEqual(main(["validate", directory]), 0)
                 self.assertEqual(main(["status", directory, "--json"]), 0)
             self.assertTrue((Path(directory) / ".ipd" / "project_state.yaml").is_file())
+            profile = load_state(Path(directory) / ".ipd" / "task_profile.yaml")
+            self.assertEqual(profile["presentation"]["locale"], "en")
             self.assertIn('"workflow_step": "context"', output.getvalue())
+
+    def test_cli_init_accepts_chinese_locale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(
+                    main(["init", directory, "--name", "演示", "--locale", "zh-CN"]),
+                    0,
+                )
+            profile = load_state(Path(directory) / ".ipd" / "task_profile.yaml")
+            self.assertEqual(profile["presentation"]["locale"], "zh-CN")
+            self.assertIn("已初始化", output.getvalue())
 
     def test_cli_does_not_overwrite_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

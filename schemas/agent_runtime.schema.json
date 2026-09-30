@@ -23,8 +23,8 @@
         "properties": {
           "deliverable": { "type": "string", "minLength": 1 },
           "actor": { "type": "string", "minLength": 1 },
-          "started_at": { "type": "string", "minLength": 1 },
-          "expires_at": { "type": "string", "minLength": 1 }
+          "started_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" }
         }
       }
     },
@@ -35,8 +35,33 @@
         "required": ["action", "at"],
         "properties": {
           "action": { "type": "string", "minLength": 1 },
-          "at": { "type": "string", "minLength": 1 }
-        }
+          "at": { "type": "string", "format": "date-time" },
+          "deliverable": { "type": "string", "minLength": 1 },
+          "actor": { "type": "string", "minLength": 1 },
+          "from_phase": { "type": "string", "minLength": 1 },
+          "to_phase": { "type": "string", "minLength": 1 },
+          "state_revision": { "type": "integer", "minimum": 0 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "action": { "const": "claim" } },
+              "required": ["action"]
+            },
+            "then": {
+              "required": ["deliverable", "actor", "state_revision"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "action": { "const": "advance_phase" } },
+              "required": ["action"]
+            },
+            "then": {
+              "required": ["from_phase", "to_phase", "state_revision"]
+            }
+          }
+        ]
       }
     },
     "last_refresh": { "type": ["object", "null"] },

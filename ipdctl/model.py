@@ -2,7 +2,15 @@
 
 SCHEMA_VERSION = "2.0"
 
-WORKFLOW_STEPS = ("context", "claim", "work", "close", "verify")
+WORKFLOW_STEPS = (
+    "context",
+    "claim",
+    "work",
+    "close",
+    "review",
+    "refresh",
+    "verify",
+)
 PROJECT_PHASES = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
 
 CLAIM_STATUSES = ("open", "supported", "rejected")

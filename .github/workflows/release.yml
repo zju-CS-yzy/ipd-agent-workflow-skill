@@ -1,0 +1,76 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v0.3.0-beta"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Verify release source
+        run: |
+          python -B scripts/release_check.py .
+          python -m pip install . build
+          python -B -m unittest discover -s tests -v
+      - name: Build the single bilingual distribution
+        shell: bash
+        run: |
+          python -m build --outdir dist
+          git archive \
+            --format=zip \
+            --prefix=ipd-agent-workflow-skill/ \
+            --output=dist/ipd-agent-workflow-skill-v0.3.0-beta.zip \
+            HEAD
+          cd dist
+          sha256sum \
+            ipd-agent-workflow-skill-v0.3.0-beta.zip \
+            ipd_agent_workflow_skill-0.3.0b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.3.0b1.tar.gz \
+            > SHA256SUMS.txt
+      - name: Inspect and smoke-test release artifacts
+        shell: bash
+        run: |
+          wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+          sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
+          tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
+          cd "$RUNNER_TEMP"
+          artifact_index=0
+          for artifact in "$wheel" "$sdist"; do
+            artifact_index=$((artifact_index + 1))
+            environment="$RUNNER_TEMP/release-venv-$artifact_index"
+            python -m venv "$environment"
+            "$environment/bin/pip" install "$artifact"
+            for locale in en zh-CN; do
+              project="$(mktemp -d)/project-$locale"
+              "$environment/bin/ipdctl" init "$project" --name "release-$locale" --locale "$locale"
+              "$environment/bin/ipdctl" tailor "$project"
+              "$environment/bin/ipdctl" context "$project"
+              "$environment/bin/ipdctl" refresh "$project"
+              "$environment/bin/ipdctl" verify "$project"
+              test "$(find "$project/.ipd/dashboard" -type f | wc -l)" -eq 15
+            done
+          done
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          name: "IPD Agent Workflow Framework v0.3.0-beta"
+          body_path: .github/release-notes/v0.3.0-beta.md
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/ipd-agent-workflow-skill-v0.3.0-beta.zip
+            dist/ipd_agent_workflow_skill-0.3.0b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.3.0b1.tar.gz
+            dist/SHA256SUMS.txt

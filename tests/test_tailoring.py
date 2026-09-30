@@ -103,6 +103,180 @@ class TailoringTests(unittest.TestCase):
             with self.assertRaisesRegex(TailoringError, "invalid YAML"):
                 tailor_file(source, Path(directory) / "out.yaml")
 
+    def test_canonical_phase_order_cannot_be_resequenced(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "phase-order",
+                "task_type": "software",
+            }
+        )
+        process["phases"][1]["sequence"] = 99
+        self.assertTrue(
+            any(
+                "canonical concept-to-lifecycle order" in issue
+                for issue in validate_tailored_process(process)
+            )
+        )
+
+    def test_every_phase_requires_its_canonical_tr_dcp_and_gates(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "governance-controls",
+                "task_type": "software",
+            }
+        )
+        mutations = {
+            "technical review": lambda value: value["technical_reviews"].pop(0),
+            "decision checkpoint": lambda value: value[
+                "decision_checkpoints"
+            ].pop(0),
+            "TR gate": lambda value: value["gates"].pop(0),
+            "DCP gate": lambda value: value["gates"].pop(1),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                broken = deepcopy(process)
+                mutate(broken)
+                issues = validate_tailored_process(broken)
+                self.assertTrue(
+                    any("missing canonical" in issue for issue in issues),
+                    issues,
+                )
+
+    def test_canonical_checkpoint_links_and_phase_deliverable_sets_are_fixed(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "checkpoint-contract",
+                "task_type": "software",
+            }
+        )
+        mutations = {
+            "TR phase": (
+                lambda value: value["technical_reviews"][0].update(phase="plan"),
+                ".phase: must equal 'concept'",
+            ),
+            "DCP gate link": (
+                lambda value: value["decision_checkpoints"][0].update(
+                    gate_id="gate.dcp.plan"
+                ),
+                ".gate_id: must equal 'gate.dcp.concept'",
+            ),
+            "TR required set": (
+                lambda value: value["technical_reviews"][0][
+                    "required_deliverables"
+                ].pop(),
+                "complete deliverable set",
+            ),
+            "DCP required set": (
+                lambda value: value["decision_checkpoints"][0][
+                    "required_deliverables"
+                ].append("plan.integrated_plan"),
+                "complete deliverable set",
+            ),
+        }
+        for label, (mutate, expected) in mutations.items():
+            with self.subTest(label=label):
+                broken = deepcopy(process)
+                mutate(broken)
+                issues = validate_tailored_process(broken)
+                self.assertTrue(any(expected in issue for issue in issues), issues)
+
+    def test_canonical_gate_contract_cannot_be_weakened_or_relinked(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "gate-contract",
+                "task_type": "software",
+            }
+        )
+        mutations = {
+            "phase": (
+                lambda gate: gate.update(phase="plan"),
+                ".phase: must equal 'concept'",
+            ),
+            "checkpoint link": (
+                lambda gate: gate.update(checkpoint_id="tr.plan"),
+                ".checkpoint_id: must equal 'tr.concept'",
+            ),
+            "kind": (lambda gate: gate.update(kind="Gate"), ".kind: must equal 'TR'"),
+            "required set": (
+                lambda gate: gate["required_deliverables"].pop(),
+                "complete deliverable set",
+            ),
+            "review": (
+                lambda gate: gate.update(review_required=False),
+                ".review_required: must equal true",
+            ),
+            "approval": (
+                lambda gate: gate.update(final_approval="agent"),
+                ".final_approval: must equal 'authorized_human'",
+            ),
+        }
+        for label, (mutate, expected) in mutations.items():
+            with self.subTest(label=label):
+                broken = deepcopy(process)
+                mutate(broken["gates"][0])
+                issues = validate_tailored_process(broken)
+                self.assertTrue(any(expected in issue for issue in issues), issues)
+
+    def test_canonical_gate_order_cannot_be_reversed(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "gate-order",
+                "task_type": "software",
+            }
+        )
+        process["gates"][0], process["gates"][1] = (
+            process["gates"][1],
+            process["gates"][0],
+        )
+        issues = validate_tailored_process(process)
+        self.assertTrue(
+            any("TR before DCP" in issue for issue in issues),
+            issues,
+        )
+
+    def test_additional_generic_gate_cannot_replace_canonical_controls(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "generic-gate",
+                "task_type": "software",
+            }
+        )
+        process["gates"].append(
+            {
+                "id": "gate.concept.security",
+                "title": "Concept Security Gate",
+                "kind": "Gate",
+                "phase": "concept",
+                "checkpoint_id": "tr.concept",
+                "required_deliverables": [
+                    item["id"]
+                    for item in process["deliverables"]
+                    if item["phase"] == "concept"
+                ],
+                "review_required": True,
+                "final_approval": "authorized_human",
+            }
+        )
+        self.assertEqual(validate_tailored_process(process), [])
+
+        without_tr = deepcopy(process)
+        without_tr["gates"] = [
+            gate for gate in without_tr["gates"] if gate["id"] != "gate.tr.concept"
+        ]
+        self.assertTrue(
+            any(
+                "missing canonical gate 'gate.tr.concept'" in issue
+                for issue in validate_tailored_process(without_tr)
+            )
+        )
+
     def test_dependency_edges_match_deliverables_and_invalid_graphs_are_reported(self) -> None:
         process = tailor_profile(
             {
@@ -168,6 +342,11 @@ class TailoringTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        runtime_schema = json.loads(
+            (ROOT / "schemas" / "agent_runtime.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
         self.assertIn("task_types", task_schema["properties"])
         self.assertEqual(
             set(process_schema["required"]),
@@ -183,6 +362,16 @@ class TailoringTests(unittest.TestCase):
                 "dependencies",
                 "review_requirements",
             },
+        )
+        claim_schema = runtime_schema["properties"]["events"]["items"]
+        self.assertEqual(claim_schema["properties"]["at"]["format"], "date-time")
+        self.assertEqual(
+            set(claim_schema["allOf"][0]["then"]["required"]),
+            {"deliverable", "actor", "state_revision"},
+        )
+        self.assertEqual(
+            set(claim_schema["allOf"][1]["then"]["required"]),
+            {"from_phase", "to_phase", "state_revision"},
         )
 
 

@@ -2,3 +2,5 @@ schema_version: "1.0"
 project_name: example-project
 task_types:
   - software
+presentation:
+  locale: en

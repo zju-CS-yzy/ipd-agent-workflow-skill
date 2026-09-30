@@ -15,6 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.14"]
+        locale: ["en", "zh-CN"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -32,8 +33,42 @@ jobs:
         shell: bash
         run: |
           project="$(mktemp -d)"
-          ipdctl init "$project/test-project" --name test-project
+          ipdctl init "$project/test-project" --name test-project --locale "${{ matrix.locale }}"
           ipdctl tailor "$project/test-project"
           ipdctl context "$project/test-project"
           ipdctl refresh "$project/test-project"
           ipdctl verify "$project/test-project"
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install build
+          python -m build --outdir "$RUNNER_TEMP/dist"
+      - name: Inspect package contents
+        shell: bash
+        run: |
+          wheel="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+          sdist="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
+          tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
+      - name: Test installed wheel outside checkout
+        shell: bash
+        run: |
+          wheel="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install "$wheel"
+          cd "$RUNNER_TEMP"
+          for locale in en zh-CN; do
+            project="$(mktemp -d)/project-$locale"
+            "$RUNNER_TEMP/venv/bin/ipdctl" init "$project" --name "package-$locale" --locale "$locale"
+            "$RUNNER_TEMP/venv/bin/ipdctl" tailor "$project"
+            "$RUNNER_TEMP/venv/bin/ipdctl" context "$project"
+            "$RUNNER_TEMP/venv/bin/ipdctl" refresh "$project"
+            "$RUNNER_TEMP/venv/bin/ipdctl" verify "$project"
+          done
