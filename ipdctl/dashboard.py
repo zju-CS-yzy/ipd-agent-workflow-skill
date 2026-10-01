@@ -112,7 +112,11 @@ def render_dashboard(
     )
     current_phase = _string(state_data["project"]["current"].get("phase"))
     available_ids = [item["id"] for item in state_data["available_tasks"]]
-    blocked_ids = [item["id"] for item in state_data["blocked_items"]]
+    blocked_ids = [
+        item["id"]
+        for item in state_data["deliverables"]
+        if item.get("attention") == "explicitly_blocked"
+    ]
 
     output = Path(project_root) / DASHBOARD_RELATIVE_PATH
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +148,7 @@ def render_dashboard(
                 current_phase=current_phase,
                 available_ids=available_ids,
                 blocked_ids=blocked_ids,
+                filter_to_phase=False,
                 translator=translator,
             ),
         )
@@ -152,6 +157,7 @@ def render_dashboard(
             render_dependency_svg(
                 dependency_graph,
                 phase=current_phase or None,
+                filter_to_phase=False,
                 translator=translator,
             ),
         )
@@ -184,6 +190,7 @@ def render_dashboard(
                     phase_graph,
                     phase=phase_id,
                     title=translator.text("svg.phase_title", phase=phase_label),
+                    filter_to_phase=False,
                     translator=translator,
                 ),
             )

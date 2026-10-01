@@ -263,13 +263,23 @@ def _node_size(node: _Node) -> tuple[float, float]:
 
 
 def _topological_levels(nodes: Sequence[_Node], edges: Sequence[_Edge]) -> dict[str, int]:
+    """Return execution levels using only canonical dependency facts.
+
+    ``depends_on`` edges are stored as ``dependent -> prerequisite`` in the
+    graph contract.  Execution diagrams intentionally project that fact in the
+    readable direction ``prerequisite -> dependent``.  Traceability relations
+    must never influence the execution rank.
+    """
+
     ids = {node.id for node in nodes}
     incoming: dict[str, int] = {node.id: 0 for node in nodes}
     outgoing: dict[str, list[str]] = defaultdict(list)
     for edge in edges:
-        if edge.source in ids and edge.target in ids and edge.relation != "supersedes":
-            outgoing[edge.source].append(edge.target)
-            incoming[edge.target] += 1
+        if edge.source in ids and edge.target in ids and edge.relation == "depends_on":
+            prerequisite = edge.target
+            dependent = edge.source
+            outgoing[prerequisite].append(dependent)
+            incoming[dependent] += 1
     queue = deque(sorted((node_id for node_id, count in incoming.items() if count == 0)))
     levels = {node_id: 0 for node_id in incoming}
     visited: set[str] = set()
@@ -282,10 +292,20 @@ def _topological_levels(nodes: Sequence[_Node], edges: Sequence[_Edge]) -> dict[
             if incoming[target] == 0:
                 queue.append(target)
     # Cyclic/feedback nodes remain deterministic and are placed after their
-    # strongest already-known predecessor without attempting to break the data.
+    # strongest already-known prerequisite without attempting to break the
+    # canonical data.
     for node_id in sorted(set(incoming) - visited):
-        predecessors = [edge.source for edge in edges if edge.target == node_id and edge.source in levels]
-        levels[node_id] = max((levels[source] + 1 for source in predecessors), default=0)
+        prerequisites = [
+            edge.target
+            for edge in edges
+            if edge.relation == "depends_on"
+            and edge.source == node_id
+            and edge.target in visited
+        ]
+        levels[node_id] = max(
+            (levels[prerequisite] + 1 for prerequisite in prerequisites),
+            default=0,
+        )
     return levels
 
 
@@ -388,8 +408,10 @@ def _filter_graph(
     *,
     phase: str | None = None,
     node_types: set[str] | None = None,
+    relations: set[str] | None = None,
     include_neighbours: bool = False,
 ) -> tuple[list[_Node], list[_Edge]]:
+    active_edges = [edge for edge in edges if relations is None or edge.relation in relations]
     selected = {
         node.id
         for node in nodes
@@ -398,7 +420,7 @@ def _filter_graph(
     if include_neighbours:
         node_by_id = {node.id: node for node in nodes}
         seeds = set(selected)
-        for edge in edges:
+        for edge in active_edges:
             if edge.source in seeds and (
                 node_types is None or node_by_id[edge.target].type in node_types
             ):
@@ -408,7 +430,11 @@ def _filter_graph(
             ):
                 selected.add(edge.source)
     filtered_nodes = [node for node in nodes if node.id in selected]
-    filtered_edges = [edge for edge in edges if edge.source in selected and edge.target in selected]
+    filtered_edges = [
+        edge
+        for edge in active_edges
+        if edge.source in selected and edge.target in selected
+    ]
     return filtered_nodes, filtered_edges
 
 
@@ -493,8 +519,13 @@ def _render_edges(
 ) -> str:
     parts = ['<g class="edges" fill="none">']
     for index, edge in enumerate(edges):
-        source = boxes.get(edge.source)
-        target = boxes.get(edge.target)
+        # Canonical dependency storage is ``dependent -> prerequisite``.  Keep
+        # those endpoints in data-source/data-target for machine consumers,
+        # while drawing the execution flow as ``prerequisite -> dependent``.
+        visual_source_id = edge.target if edge.relation == "depends_on" else edge.source
+        visual_target_id = edge.source if edge.relation == "depends_on" else edge.target
+        source = boxes.get(visual_source_id)
+        target = boxes.get(visual_target_id)
         if not source or not target:
             continue
         colour, dash, marker = RELATION_STYLES[edge.relation]
@@ -502,6 +533,8 @@ def _render_edges(
         parts.append(
             f'<path class="edge edge-{edge.relation}" data-source="{escape(edge.source, quote=True)}" '
             f'data-target="{escape(edge.target, quote=True)}" data-relation="{edge.relation}" '
+            f'data-visual-source="{escape(visual_source_id, quote=True)}" '
+            f'data-visual-target="{escape(visual_target_id, quote=True)}" '
             f'd="{_edge_path(source, target, index)}" stroke="{colour}" stroke-width="2"'
             f'{dash_attr} marker-end="url(#{marker})"><title>'
             f'{escape(edge.source)} {escape(_t(translator, f"relation.{edge.relation}", edge.relation.replace("_", " ")))} {escape(edge.target)}'
@@ -631,7 +664,13 @@ def _render_node(
     return "".join(parts)
 
 
-def _render_legend(x: float, y: float, width: float, translator: Any) -> str:
+def _render_legend(
+    x: float,
+    y: float,
+    width: float,
+    translator: Any,
+    relations: set[str] | None = None,
+) -> str:
     parts = [
         f'<g class="legend" transform="translate({_fmt(x)} {_fmt(y)})">',
         f'<rect width="{_fmt(width)}" height="180" rx="16" fill="#FFFFFF" stroke="#D0D5DD"/>',
@@ -652,14 +691,32 @@ def _render_legend(x: float, y: float, width: float, translator: Any) -> str:
             f'<text x="{item_x + 31}" y="51" class="legend-label">{escape(_t(translator, f"node_type.{label.lower()}", label))}</text>'
         )
     edge_x = 18
-    for index, relation in enumerate(("depends_on", "supports", "verifies", "supersedes")):
+    edge_relations = tuple(
+        relation
+        for relation in ("depends_on", "supports", "verifies", "supersedes")
+        if relations is None or relation in relations
+    )
+    for index, relation in enumerate(edge_relations):
         colour, dash, marker = RELATION_STYLES[relation]
-        item_x = edge_x + index * 166
+        item_x = edge_x + index * 184
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+        relation_label = (
+            _t(
+                translator,
+                "svg.dependency_direction",
+                "Prerequisite → Dependent",
+            )
+            if relation == "depends_on"
+            else _t(
+                translator,
+                f"relation.{relation}",
+                relation.replace("_", " "),
+            )
+        )
         parts.append(
             f'<path d="M {item_x} 82 H {item_x + 46}" stroke="{colour}" stroke-width="2"{dash_attr} '
             f'marker-end="url(#{marker})"/>'
-            f'<text x="{item_x + 56}" y="87" class="legend-label">{escape(_t(translator, f"relation.{relation}", relation.replace("_", " ")))}</text>'
+            f'<text x="{item_x + 56}" y="87" class="legend-label">{escape(relation_label)}</text>'
         )
     statuses = tuple(STATUS_STYLES)
     for index, status in enumerate(statuses):
@@ -719,6 +776,7 @@ def render_svg(
     phase: str | None = None,
     current_phase: str | None = None,
     node_types: Iterable[str] | None = None,
+    relations: Iterable[str] | None = None,
     include_neighbours: bool = False,
     detail_href_prefix: str = "../index.html#node=",
     emphasise_ids: Iterable[str] = (),
@@ -736,11 +794,17 @@ def render_svg(
     translator = _translator(translator, locale)
     nodes, edges = _normalise_graph(graph)
     canonical_types = {_canonical_type(value) for value in node_types} if node_types is not None else None
+    canonical_relations = (
+        {_text(value).strip().lower() for value in relations}
+        if relations is not None
+        else None
+    )
     nodes, edges = _filter_graph(
         nodes,
         edges,
         phase=phase,
         node_types=canonical_types,
+        relations=canonical_relations,
         include_neighbours=include_neighbours,
     )
     emphasise = {_text(value) for value in emphasise_ids}
@@ -819,7 +883,19 @@ def render_svg(
         box = boxes.get(node.id)
         if box:
             parts.append(_render_node(node, box, detail_href_prefix, translator))
-    parts.extend(("</g>", _render_legend(36, height - 200, min(width - 72, 760), translator), "</svg>"))
+    parts.extend(
+        (
+            "</g>",
+            _render_legend(
+                36,
+                height - 200,
+                min(width - 72, 760),
+                translator,
+                canonical_relations,
+            ),
+            "</svg>",
+        )
+    )
     return "".join(parts)
 
 
@@ -851,6 +927,7 @@ def render_current_status_svg(
     current_phase: str,
     available_ids: Iterable[str] = (),
     blocked_ids: Iterable[str] = (),
+    filter_to_phase: bool = True,
     title: str = "Current Status Flow",
     detail_href_prefix: str = "../index.html#node=",
     translator: Any | None = None,
@@ -867,9 +944,9 @@ def render_current_status_svg(
         graph,
         title=title,
         layout="dependency",
-        phase=current_phase,
+        phase=current_phase if filter_to_phase else None,
         current_phase=current_phase,
-        include_neighbours=True,
+        include_neighbours=filter_to_phase,
         detail_href_prefix=detail_href_prefix,
         emphasise_ids=available,
         blocked_ids=blocked,
@@ -883,6 +960,8 @@ def render_dependency_svg(
     phase: str | None = None,
     title: str = "Deliverable Dependency",
     detail_href_prefix: str = "../index.html#node=",
+    relations: Iterable[str] | None = ("depends_on",),
+    filter_to_phase: bool = True,
     translator: Any | None = None,
     locale: str = "en",
 ) -> str:
@@ -897,10 +976,11 @@ def render_dependency_svg(
         graph,
         title=title,
         layout="dependency",
-        phase=phase,
+        phase=phase if filter_to_phase else None,
         current_phase=phase,
-        node_types={"Activity", "Deliverable"},
-        include_neighbours=True,
+        node_types={"Deliverable"},
+        relations=relations,
+        include_neighbours=filter_to_phase,
         detail_href_prefix=detail_href_prefix,
         translator=translator,
     )

@@ -1,6 +1,6 @@
 # Dashboard Golden Test Report
 
-**Overall result: PASS** — en: 25/25; zh-CN: 25/25.
+**Overall result: PASS** — en: 27/27; zh-CN: 27/27.
 
 ## Scope and limitation
 
@@ -39,12 +39,12 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 
 | Locale | Result | Passed | Total | Structure fingerprint |
 | --- | --- | ---: | ---: | --- |
-| `en` | PASS | 25 | 25 | `c5b717a38ed189ba8b540e0a7060927c70b5479604f14ce983211204b52f401b` |
-| `zh-CN` | PASS | 25 | 25 | `c5b717a38ed189ba8b540e0a7060927c70b5479604f14ce983211204b52f401b` |
+| `en` | PASS | 27 | 27 | `c5b717a38ed189ba8b540e0a7060927c70b5479604f14ce983211204b52f401b` |
+| `zh-CN` | PASS | 27 | 27 | `c5b717a38ed189ba8b540e0a7060927c70b5479604f14ce983211204b52f401b` |
 
 ## Locale `en`
 
-**PASS — 25 of 25 checks passed.**
+**PASS — 27 of 27 checks passed.**
 
 ### Current dashboard results
 
@@ -89,6 +89,8 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 | PASS | Interactive node details | {'node_links': True, 'hash_navigation': True, 'detail_panel': True, 'dependencies': True, 'evidence': True, 'review_history': True} |
 | PASS | Typed graph nodes | ['Activity', 'DCP', 'Deliverable', 'Gate', 'Phase', 'TR'] |
 | PASS | Typed graph relation capability | declared=['depends_on', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
+| PASS | Dependency view isolates dependency facts | relations=['depends_on'], expected=9, rendered=9, mismatches=[] |
+| PASS | Dependency projection is prerequisite to dependent | edges=23, views=7, canonical=True, state_graph=True, projection=True, order=True |
 | PASS | State is displayed | ['in_progress', 'planned'] |
 
 ### CLI commands
@@ -102,7 +104,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 
 ## Locale `zh-CN`
 
-**PASS — 25 of 25 checks passed.**
+**PASS — 27 of 27 checks passed.**
 
 ### Current dashboard results
 
@@ -147,6 +149,8 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 | PASS | Interactive node details | {'node_links': True, 'hash_navigation': True, 'detail_panel': True, 'dependencies': True, 'evidence': True, 'review_history': True} |
 | PASS | Typed graph nodes | ['Activity', 'DCP', 'Deliverable', 'Gate', 'Phase', 'TR'] |
 | PASS | Typed graph relation capability | declared=['depends_on', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
+| PASS | Dependency view isolates dependency facts | relations=['depends_on'], expected=9, rendered=9, mismatches=[] |
+| PASS | Dependency projection is prerequisite to dependent | edges=23, views=7, canonical=True, state_graph=True, projection=True, order=True |
 | PASS | State is displayed | ['in_progress', 'planned'] |
 
 ### CLI commands
@@ -160,7 +164,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 
 ## Conclusion
 
-**PASS** — en: 25/25; zh-CN: 25/25.
+**PASS** — en: 27/27; zh-CN: 27/27.
 
 Reproduce the bilingual formal report with one command:
 

@@ -14,6 +14,15 @@ from typing import Any
 PHASE_ORDER = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
 RELATIONS = ("depends_on", "supports", "verifies", "supersedes")
 DISPLAY_STATUSES = {"planned": "not_started", "accepted": "approved"}
+ACTIONABILITY_STATES = (
+    "actionable",
+    "waiting_on_dependencies",
+    "claimed",
+    "inactive",
+)
+ATTENTION_STATES = ("explicitly_blocked", "rework_required", "orphan_claim")
+
+
 def _string(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -449,12 +458,37 @@ def build_dashboard_model(
         ]
         is_claimed = item["id"] in active_claims
         in_current_scope = not current_phase or item.get("phase") in {None, current_phase}
-        if (
-            in_current_scope
-            and item["status"] in {"planned", "blocked", "rejected"}
-            and not unmet
-            and not is_claimed
-        ):
+        if item["status"] in {"accepted", "superseded"}:
+            actionability_state = "inactive"
+        elif is_claimed:
+            actionability_state = "claimed"
+        elif not in_current_scope:
+            actionability_state = "inactive"
+        elif unmet:
+            actionability_state = "waiting_on_dependencies"
+        elif item["status"] in {"planned", "blocked", "rejected"}:
+            actionability_state = "actionable"
+        else:
+            actionability_state = "inactive"
+
+        if item.get("recoverable_claim"):
+            attention = "orphan_claim"
+        elif item["status"] == "blocked":
+            attention = "explicitly_blocked"
+        elif item["status"] == "rejected":
+            attention = "rework_required"
+        else:
+            attention = None
+
+        item["actionability"] = {
+            "state": actionability_state,
+            "actionable": actionability_state == "actionable",
+            "in_current_scope": in_current_scope,
+            "unmet_dependencies": unmet,
+        }
+        item["attention"] = attention
+
+        if item["actionability"]["actionable"]:
             available_tasks.append(
                 {
                     "id": item["id"],
@@ -463,10 +497,14 @@ def build_dashboard_model(
                     "phase": item["phase"],
                     "owner": item["owner"],
                     "status": item["status"],
+                    "actionability": dict(item["actionability"]),
+                    "attention": attention,
                 }
             )
         if in_current_scope and (
-            item["status"] == "blocked" or unmet or item.get("recoverable_claim")
+            item["status"] == "blocked"
+            or actionability_state == "waiting_on_dependencies"
+            or item.get("recoverable_claim")
         ):
             blocked_items.append(
                 {
@@ -477,6 +515,8 @@ def build_dashboard_model(
                     "unmet_dependencies": unmet,
                     "reason": item["blocker"],
                     "recoverable": bool(item.get("recoverable_claim")),
+                    "actionability": dict(item["actionability"]),
+                    "attention": attention,
                 }
             )
 
@@ -700,7 +740,6 @@ def build_dashboard_model(
                 "detail_key": f"activity:{activity['id']}",
             }
         )
-    blocked_ids = {item["id"] for item in blocked_items}
     for deliverable in deliverables:
         graph_nodes.append(
             {
@@ -712,7 +751,12 @@ def build_dashboard_model(
                 "status": deliverable["status"],
                 "display_status": deliverable["display_status"],
                 "current": deliverable["phase"] == current_phase,
-                "blocked": deliverable["id"] in blocked_ids,
+                # ``blocked_items`` is a compatibility aggregation that also
+                # contains dependency waits and recoverable orphan claims.
+                # Only the lifecycle status is an explicit visual blocker.
+                "blocked": deliverable["status"] == "blocked",
+                "actionability": dict(deliverable["actionability"]),
+                "attention": deliverable["attention"],
                 "detail_key": f"deliverable:{deliverable['id']}",
             }
         )
@@ -767,6 +811,26 @@ def build_dashboard_model(
             "review_queue": review_queue,
             "blocked_items": len(blocked_items),
             "available_tasks": len(available_tasks),
+            "waiting_on_dependencies": sum(
+                item["actionability"]["state"] == "waiting_on_dependencies"
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
+            "explicitly_blocked": sum(
+                item["attention"] == "explicitly_blocked"
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
+            "rework_required": sum(
+                item["attention"] == "rework_required"
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
+            "orphan_claims": sum(
+                item["attention"] == "orphan_claim"
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
         },
         "phases": phases,
         "activities": activities,
@@ -783,6 +847,8 @@ def build_dashboard_model(
         "node_types": ["Phase", "TR", "DCP", "Gate", "Activity", "Deliverable"],
         "relation_types": list(RELATIONS),
         "status_aliases": dict(DISPLAY_STATUSES),
+        "actionability_states": list(ACTIONABILITY_STATES),
+        "attention_states": list(ATTENTION_STATES),
         "nodes": sorted(
             graph_nodes,
             key=lambda item: (
@@ -849,6 +915,8 @@ def graph_slice(
 
 
 __all__ = [
+    "ACTIONABILITY_STATES",
+    "ATTENTION_STATES",
     "DISPLAY_STATUSES",
     "PHASE_ORDER",
     "RELATIONS",

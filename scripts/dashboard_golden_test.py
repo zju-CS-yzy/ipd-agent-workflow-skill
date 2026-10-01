@@ -386,6 +386,49 @@ def _node_boxes(svg_text: str) -> list[dict[str, Any]]:
     return boxes
 
 
+def dependency_svg_contract(svg_text: str) -> dict[str, Any]:
+    """Inspect the canonical and visual semantics of a dependency SVG."""
+
+    root = ET.fromstring(svg_text)
+    boxes = {box["id"]: box for box in _node_boxes(svg_text)}
+    edges: list[dict[str, str]] = []
+    for element in root.iter():
+        attrs = element.attrib
+        if not attrs.get("data-relation"):
+            continue
+        edges.append(
+            {
+                "source": attrs.get("data-source", ""),
+                "target": attrs.get("data-target", ""),
+                "relation": attrs.get("data-relation", ""),
+                "visual_source": attrs.get("data-visual-source", ""),
+                "visual_target": attrs.get("data-visual-target", ""),
+            }
+        )
+
+    dependency_edges = [edge for edge in edges if edge["relation"] == "depends_on"]
+    relations = sorted({edge["relation"] for edge in edges})
+    projection_preserves_contract = bool(dependency_edges) and all(
+        edge["visual_source"] == edge["target"]
+        and edge["visual_target"] == edge["source"]
+        for edge in dependency_edges
+    )
+    execution_order = bool(dependency_edges) and all(
+        edge["visual_source"] in boxes
+        and edge["visual_target"] in boxes
+        and boxes[edge["visual_source"]]["x"] < boxes[edge["visual_target"]]["x"]
+        for edge in dependency_edges
+    )
+    return {
+        "node_ids": sorted(boxes),
+        "rendered_relations": relations,
+        "dependency_edges": dependency_edges,
+        "only_depends_on": relations == ["depends_on"],
+        "projection_preserves_contract": projection_preserves_contract,
+        "execution_order": execution_order,
+    }
+
+
 def find_same_lane_overlaps(svg_text: str) -> list[tuple[str, str]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for box in _node_boxes(svg_text):
@@ -558,6 +601,8 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
 
     graph_path = dashboard_root / "data" / "graph.json"
     graph = json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {}
+    state_path = dashboard_root / "data" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     nodes = graph.get("nodes", []) if isinstance(graph, Mapping) else []
     edges = graph.get("edges", []) if isinstance(graph, Mapping) else []
     node_types = sorted(
@@ -585,6 +630,140 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
         str(relation)
         for relation in (graph.get("relation_types", []) if isinstance(graph, Mapping) else [])
     )
+    dependency_svg_paths = [dashboard_root / "assets" / "deliverable_dependency.svg"]
+    dependency_svg_paths.extend(sorted((dashboard_root / "phases").glob("*.svg")))
+    dependency_views = {
+        path.relative_to(dashboard_root).as_posix(): dependency_svg_contract(
+            path.read_text(encoding="utf-8")
+        )
+        for path in dependency_svg_paths
+        if path.exists()
+    }
+    dependency_edges = [
+        edge
+        for view in dependency_views.values()
+        for edge in view["dependency_edges"]
+    ]
+    rendered_dependency_relations = sorted(
+        {
+            relation
+            for view in dependency_views.values()
+            for relation in view["rendered_relations"]
+        }
+    )
+    dependency_contract = {
+        "rendered_relations": rendered_dependency_relations,
+        "dependency_edges": dependency_edges,
+        "only_depends_on": bool(dependency_edges)
+        and rendered_dependency_relations == ["depends_on"],
+        "projection_preserves_contract": bool(dependency_edges)
+        and all(
+            view["projection_preserves_contract"]
+            for view in dependency_views.values()
+            if view["dependency_edges"]
+        ),
+        "execution_order": bool(dependency_edges)
+        and all(
+            view["execution_order"]
+            for view in dependency_views.values()
+            if view["dependency_edges"]
+        ),
+        "views_checked": len(dependency_views),
+    }
+    canonical_edges = {
+        (
+            str(edge.get("source")),
+            str(edge.get("target")),
+            str(edge.get("relation") or edge.get("type")),
+        )
+        for edge in edges
+        if isinstance(edge, Mapping)
+    }
+    expected_dependency_edges = {
+        (str(deliverable.get("id")), str(prerequisite), "depends_on")
+        for deliverable in (
+            state.get("deliverables", []) if isinstance(state, Mapping) else []
+        )
+        if isinstance(deliverable, Mapping) and deliverable.get("id")
+        for prerequisite in deliverable.get("depends_on", [])
+        if prerequisite
+    }
+    graph_dependency_edges = {
+        edge for edge in canonical_edges if edge[2] == "depends_on"
+    }
+    rendered_dependency_edges = {
+        (edge["source"], edge["target"], edge["relation"])
+        for edge in dependency_edges
+    }
+    dependency_contract["canonical_endpoints_match_graph"] = bool(
+        dependency_contract["dependency_edges"]
+    ) and all(
+        (edge["source"], edge["target"], edge["relation"]) in canonical_edges
+        for edge in dependency_contract["dependency_edges"]
+    )
+    dependency_contract["graph_matches_state"] = (
+        graph_dependency_edges == expected_dependency_edges
+    )
+    dependency_contract["svg_covers_state"] = (
+        rendered_dependency_edges == expected_dependency_edges
+    )
+    dependency_contract["expected_edges"] = len(expected_dependency_edges)
+    dependency_contract["graph_edges"] = len(graph_dependency_edges)
+    dependency_contract["rendered_edges"] = len(rendered_dependency_edges)
+    deliverable_records = [
+        item
+        for item in (state.get("deliverables", []) if isinstance(state, Mapping) else [])
+        if isinstance(item, Mapping) and item.get("id")
+    ]
+    current_project = state.get("project", {}) if isinstance(state, Mapping) else {}
+    current_position = (
+        current_project.get("current", {})
+        if isinstance(current_project, Mapping)
+        else {}
+    )
+    current_phase = (
+        current_position.get("phase")
+        if isinstance(current_position, Mapping)
+        else None
+    )
+
+    def expected_view(phase: str | None) -> tuple[set[str], set[tuple[str, str, str]]]:
+        selected = {
+            str(item["id"])
+            for item in deliverable_records
+            if phase is None or item.get("phase") == phase
+        }
+        changed = True
+        while changed:
+            changed = False
+            for source, target, relation in expected_dependency_edges:
+                if relation == "depends_on" and source in selected and target not in selected:
+                    selected.add(target)
+                    changed = True
+        selected_edges = {
+            edge
+            for edge in expected_dependency_edges
+            if edge[0] in selected and edge[1] in selected
+        }
+        return selected, selected_edges
+
+    view_mismatches: list[str] = []
+    for relative_path, view in dependency_views.items():
+        phase = (
+            current_phase
+            if relative_path == "assets/deliverable_dependency.svg"
+            else Path(relative_path).stem
+        )
+        expected_nodes, expected_edges = expected_view(str(phase) if phase else None)
+        actual_nodes = set(view["node_ids"])
+        actual_edges = {
+            (edge["source"], edge["target"], edge["relation"])
+            for edge in view["dependency_edges"]
+        }
+        if actual_nodes != expected_nodes or actual_edges != expected_edges:
+            view_mismatches.append(relative_path)
+    dependency_contract["per_view_complete"] = not view_mismatches
+    dependency_contract["view_mismatches"] = view_mismatches
     index_path = dashboard_root / "index.html"
     index = index_path.read_text(encoding="utf-8") if index_path.exists() else ""
     index_lower = index.lower()
@@ -597,7 +776,11 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
     locale_markers_present = all(
         (
             translator.text("dashboard.current_phase") in index,
+            translator.text("dashboard.waiting_on_dependencies") in index,
+            translator.text("detail.actionability") in index,
+            translator.text("detail.unmet_dependencies") in index,
             translator.text("svg.legend") in svg_text,
+            translator.text("svg.dependency_direction") in svg_text,
             translator.text("matrix.back_to_dashboard") in matrix_text,
         )
     )
@@ -651,6 +834,7 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
         "statuses": statuses,
         "relations": relations,
         "declared_relations": declared_relations,
+        "dependency_contract": dependency_contract,
         "interactions": interactions,
     }
 
@@ -667,6 +851,7 @@ def evaluate(
     current: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     results = []
+    dependency_contract = current.get("dependency_contract", {})
     results.append(
         _result(
             "Legacy artifact inventory",
@@ -739,6 +924,42 @@ def evaluate(
                 == {"depends_on", "supports", "verifies", "supersedes"},
                 "declared=" + str(current.get("declared_relations", []))
                 + "; observed=" + str(current.get("relations", [])),
+            ),
+            _result(
+                "Dependency view isolates dependency facts",
+                dependency_contract.get("only_depends_on") is True
+                and dependency_contract.get("svg_covers_state") is True
+                and dependency_contract.get("per_view_complete") is True,
+                "relations="
+                + str(dependency_contract.get("rendered_relations", []))
+                + f", expected={dependency_contract.get('expected_edges', 0)}"
+                + f", rendered={dependency_contract.get('rendered_edges', 0)}"
+                + f", mismatches={dependency_contract.get('view_mismatches', [])}",
+            ),
+            _result(
+                "Dependency projection is prerequisite to dependent",
+                all(
+                    dependency_contract.get(key) is True
+                    for key in (
+                        "canonical_endpoints_match_graph",
+                        "graph_matches_state",
+                        "projection_preserves_contract",
+                        "execution_order",
+                    )
+                ),
+                ", ".join(
+                    (
+                        f"edges={len(dependency_contract.get('dependency_edges', []))}",
+                        f"views={dependency_contract.get('views_checked', 0)}",
+                        "canonical="
+                        + str(dependency_contract.get("canonical_endpoints_match_graph")),
+                        "state_graph="
+                        + str(dependency_contract.get("graph_matches_state")),
+                        "projection="
+                        + str(dependency_contract.get("projection_preserves_contract")),
+                        "order=" + str(dependency_contract.get("execution_order")),
+                    )
+                ),
             ),
             _result("State is displayed", bool(current.get("statuses")), str(current.get("statuses", []))),
         ]

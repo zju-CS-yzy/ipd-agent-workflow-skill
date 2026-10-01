@@ -182,7 +182,7 @@ h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); line-height: 1.14; letter-s
 .top-meta strong { color: #F2F4F7; font-weight: 600; }
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  grid-template-columns: repeat(8, minmax(110px, 1fr));
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 0;
@@ -338,6 +338,11 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Progress": _t(translator, "dashboard.progress", "Progress"),
         "Accepted": _t(translator, "dashboard.accepted", "Accepted"),
         "Review queue": _t(translator, "dashboard.review_queue", "Review queue"),
+        "Waiting on prerequisites": _t(
+            translator,
+            "dashboard.waiting_on_dependencies",
+            "Waiting on prerequisites",
+        ),
         "Open blockers": _t(translator, "dashboard.open_blockers", "Open blockers"),
         "Next available task": _t(translator, "dashboard.next_task", "Next available task"),
         "Open details": _t(translator, "dashboard.open_details", "Open details"),
@@ -415,6 +420,12 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Output deliverables": _t(translator, "detail.output_deliverables", "Output deliverables"),
         "Review history": _t(translator, "detail.review_history", "Review history"),
         "Blocker": _t(translator, "detail.blocker", "Blocker"),
+        "Actionability": _t(translator, "detail.actionability", "Actionability"),
+        "Unmet prerequisites": _t(
+            translator,
+            "detail.unmet_dependencies",
+            "Unmet prerequisites",
+        ),
         "No evidence recorded.": _t(translator, "detail.no_evidence", "No evidence recorded."),
         "No review history recorded.": _t(translator, "detail.no_review_history", "No review history recorded."),
         "No input evidence recorded.": _t(translator, "detail.no_input_evidence", "No input evidence recorded."),
@@ -574,7 +585,17 @@ def render_index(
     checkpoints = _items(state_data.get("checkpoints"))
     deliverables = _items(state_data.get("deliverables"))
     available = _items(state_data.get("available_tasks"))
-    blocked = _items(state_data.get("blocked_items"))
+    waiting_count = summary.get("waiting_on_dependencies", 0)
+    explicit_blockers = summary.get("explicitly_blocked")
+    if explicit_blockers is None:
+        explicit_blockers = sum(
+            item.get("status") == "blocked"
+            and (
+                not current.get("phase")
+                or item.get("phase") in {None, current.get("phase")}
+            )
+            for item in deliverables
+        )
     progress = summary.get("progress_percent", 0)
     try:
         progress_number = max(0.0, min(100.0, float(progress)))
@@ -659,6 +680,7 @@ def render_index(
     <div class="metric"><span class="metric-label">Progress</span><strong class="metric-value">__PROGRESS__%</strong><div class="progress" aria-hidden="true"><span style="width:__PROGRESS__%"></span></div></div>
     <div class="metric"><span class="metric-label">Accepted</span><strong class="metric-value">__ACCEPTED__ / __TOTAL__</strong></div>
     <div class="metric"><span class="metric-label">Review queue</span><strong class="metric-value">__REVIEW_QUEUE__</strong></div>
+    <div class="metric"><span class="metric-label">Waiting on prerequisites</span><strong class="metric-value">__WAITING__</strong></div>
     <div class="metric"><span class="metric-label">Open blockers</span><strong class="metric-value__BLOCKER_ALERT__">__BLOCKERS__</strong></div>
   </section>
 
@@ -738,6 +760,11 @@ def render_index(
       body += section('ID', `<p>${esc(item.id)}</p>`);
       body += section('Owner', `<p>${esc(item.owner || 'Unassigned')}</p>`);
       body += section('Dependencies', list(item.depends_on));
+      if (item.actionability && item.actionability.state) {
+        const actionabilityKey = String(item.actionability.state).toLowerCase();
+        body += section('Actionability', `<p>${esc(label('actionability', actionabilityKey, actionabilityKey.replaceAll('_', ' ')))}</p>`);
+        body += section('Unmet prerequisites', list(item.actionability.unmet_dependencies));
+      }
       body += section('Evidence', list(item.evidence, 'No evidence recorded.'));
       const history = values(item.reviews).map(review => typeof review === 'object' ? [review.decision || review.result || review.status || 'Recorded', review.reviewer || review.actor || 'Unknown reviewer', review.evidence || review.comment || review.notes || ''].filter(Boolean).join(' · ') : review);
       body += section('Review history', list(history, 'No review history recorded.'));
@@ -853,8 +880,9 @@ def render_index(
         "__ACCEPTED__": _count(summary.get("accepted_deliverables", 0)),
         "__TOTAL__": _count(summary.get("total_deliverables", len(deliverables))),
         "__REVIEW_QUEUE__": _count(summary.get("review_queue", 0)),
-        "__BLOCKERS__": _count(summary.get("blocked_items", len(blocked))),
-        "__BLOCKER_ALERT__": " alert" if blocked or summary.get("blocked_items") else "",
+        "__WAITING__": _count(waiting_count),
+        "__BLOCKERS__": _count(explicit_blockers),
+        "__BLOCKER_ALERT__": " alert" if explicit_blockers else "",
         "__TASK_ID__": _h(task_id),
         "__TASK_TITLE__": _h(task_title),
         "__TASK_META__": _h(task_meta),
@@ -889,6 +917,19 @@ def render_index(
                 "nodeTypes": {
                     item: _t(translator, f"node_type.{item}", item.upper() if item in {"tr", "dcp"} else item.title())
                     for item in ("tr", "dcp", "gate", "deliverable")
+                },
+                "actionability": {
+                    item: _t(
+                        translator,
+                        f"actionability.{item}",
+                        item.replace("_", " ").title(),
+                    )
+                    for item in (
+                        "actionable",
+                        "waiting_on_dependencies",
+                        "claimed",
+                        "inactive",
+                    )
                 },
                 "common": {
                     "untitled": _t(translator, "common.unknown", "Untitled")

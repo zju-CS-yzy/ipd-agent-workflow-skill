@@ -41,7 +41,7 @@ not release artifacts.
 
 Complete [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) before creating a tag. The source commit must be clean, CI must pass, package version and changelog must agree, and the release hygiene check must find no cache, build output, generated runtime data, credential-like files, or high-confidence secret patterns.
 
-The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.3.0-beta` (Python package version `0.3.0b1`).
+The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.3.1-beta` (Python package version `0.3.1b1`).
 
 Do not publish until the simulated end-to-end project lifecycle in
 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) completes with no missing

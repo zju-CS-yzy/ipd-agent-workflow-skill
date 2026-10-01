@@ -59,7 +59,7 @@ from .runtime import (
 from .state import StateError, load_state, resolve_state_path, revised_copy, write_state
 from .validation import validate_state
 
-VERSION = "0.3.0-beta"
+VERSION = "0.3.1-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):

@@ -403,7 +403,12 @@ class DashboardTests(unittest.TestCase):
                 label = translator.text(f"node_type.{node_type.lower()}")
                 self.assertIn(f">{label}<", overview)
             for relation in RELATIONS:
-                self.assertIn(translator.text(f"relation.{relation}"), overview)
+                expected = (
+                    translator.text("svg.dependency_direction")
+                    if relation == "depends_on"
+                    else translator.text(f"relation.{relation}")
+                )
+                self.assertIn(expected, overview)
             for status in STATUSES:
                 self.assertIn(translator.text(f"status.{status}"), overview)
 

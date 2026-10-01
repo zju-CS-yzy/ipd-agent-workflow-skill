@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - "v0.3.0-beta"
+      - "v0.3.1-beta"
 
 permissions:
   contents: write
@@ -30,24 +30,30 @@ jobs:
           git archive \
             --format=zip \
             --prefix=ipd-agent-workflow-skill/ \
-            --output=dist/ipd-agent-workflow-skill-v0.3.0-beta.zip \
+            --output=dist/ipd-agent-workflow-skill-v0.3.1-beta.zip \
             HEAD
           cd dist
           sha256sum \
-            ipd-agent-workflow-skill-v0.3.0-beta.zip \
-            ipd_agent_workflow_skill-0.3.0b1-py3-none-any.whl \
-            ipd_agent_workflow_skill-0.3.0b1.tar.gz \
+            ipd-agent-workflow-skill-v0.3.1-beta.zip \
+            ipd_agent_workflow_skill-0.3.1b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.3.1b1.tar.gz \
             > SHA256SUMS.txt
       - name: Inspect and smoke-test release artifacts
         shell: bash
         run: |
           wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.3.1-beta.zip"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
           cd "$RUNNER_TEMP"
+          python -m zipfile -e "$skill_zip" "$RUNNER_TEMP/skill-source"
+          skill_root="$RUNNER_TEMP/skill-source/ipd-agent-workflow-skill"
+          test -f "$skill_root/SKILL.md"
+          test -f "$skill_root/agents/openai.yaml"
+          test -f "$skill_root/ipdctl/messages.yaml"
           artifact_index=0
-          for artifact in "$wheel" "$sdist"; do
+          for artifact in "$wheel" "$sdist" "$skill_root"; do
             artifact_index=$((artifact_index + 1))
             environment="$RUNNER_TEMP/release-venv-$artifact_index"
             python -m venv "$environment"
@@ -65,12 +71,12 @@ jobs:
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v3
         with:
-          name: "IPD Agent Workflow Framework v0.3.0-beta"
-          body_path: .github/release-notes/v0.3.0-beta.md
+          name: "IPD Agent Workflow Framework v0.3.1-beta"
+          body_path: .github/release-notes/v0.3.1-beta.md
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            dist/ipd-agent-workflow-skill-v0.3.0-beta.zip
-            dist/ipd_agent_workflow_skill-0.3.0b1-py3-none-any.whl
-            dist/ipd_agent_workflow_skill-0.3.0b1.tar.gz
+            dist/ipd-agent-workflow-skill-v0.3.1-beta.zip
+            dist/ipd_agent_workflow_skill-0.3.1b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.3.1b1.tar.gz
             dist/SHA256SUMS.txt

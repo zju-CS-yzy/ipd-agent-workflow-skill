@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`v0.3.0-beta` 是一个统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
+`v0.3.1-beta` 是一个统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 

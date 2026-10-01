@@ -11,8 +11,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.3.0b1"
-PUBLIC_VERSION = "0.3.0-beta"
+PACKAGE_VERSION = "0.3.1b1"
+PUBLIC_VERSION = "0.3.1-beta"
+RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 
 REQUIRED_FILES = (
     "README.md",
@@ -28,7 +29,7 @@ REQUIRED_FILES = (
     "agents/openai.yaml",
     ".github/workflows/test.yml",
     ".github/workflows/release.yml",
-    ".github/release-notes/v0.3.0-beta.md",
+    RELEASE_NOTES_PATH,
     "ipdctl/messages.yaml",
     "docs/architecture.md",
     "docs/architecture.zh-CN.md",
@@ -190,19 +191,29 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             f"README must identify v{PUBLIC_VERSION}",
         ),
         (
-            ".github/release-notes/v0.3.0-beta.md",
+            RELEASE_NOTES_PATH,
             r"^### Compatibility\s*$.*?^### Approval boundary\s*$.*?^### Known limitations\s*$",
             "English release notes must document compatibility, approval boundaries, and known limitations",
         ),
         (
-            ".github/release-notes/v0.3.0-beta.md",
+            RELEASE_NOTES_PATH,
             r"^### 兼容性\s*$.*?^### 审批边界\s*$.*?^### 已知限制\s*$",
             "Chinese release notes must document compatibility, approval boundaries, and known limitations",
         ),
         (
             ".github/workflows/release.yml",
-            r"uses:\s*softprops/action-gh-release@v3.*?body_path:\s*\.github/release-notes/v0\.3\.0-beta\.md.*?prerelease:\s*true",
+            rf'uses:\s*softprops/action-gh-release@v3.*?body_path:\s*{re.escape(RELEASE_NOTES_PATH)}.*?prerelease:\s*true',
             "release workflow must use the supported action, curated notes, and prerelease status",
+        ),
+        (
+            ".github/workflows/release.yml",
+            rf'^\s*-\s*"v{escaped_public}"\s*$',
+            f"release workflow must trigger on tag v{PUBLIC_VERSION}",
+        ),
+        (
+            ".github/workflows/release.yml",
+            rf'ipd-agent-workflow-skill-v{escaped_public}\.zip.*?ipd_agent_workflow_skill-{escaped_package}-py3-none-any\.whl.*?ipd_agent_workflow_skill-{escaped_package}\.tar\.gz',
+            "release workflow asset names must match the public and package versions",
         ),
         (
             "SKILL.md",

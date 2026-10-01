@@ -1,8 +1,36 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.0-beta` maps to package version `0.3.0b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.1-beta` maps to package version `0.3.1b1`.
 
 ## [Unreleased]
+
+## [0.3.1b1] - 2026-10-01
+
+### Fixed
+
+- Render `depends_on` edges in execution order from prerequisite to dependent
+  while preserving the canonical machine contract where the dependent is the
+  edge source and the prerequisite is the edge target.
+- Restrict the Deliverable dependency view and its topology calculation to
+  `depends_on`; traceability relations such as `supports`, `verifies`, and
+  `supersedes` no longer distort execution order.
+- Separate explicit lifecycle `blocked` state from dependency readiness so a
+  planned Deliverable waiting on prerequisites is no longer presented as a
+  red blocked item.
+
+### Changed
+
+- Added explicit SVG relation direction metadata, localized dependency-reading
+  guidance, and regression coverage for dependency direction, filtering,
+  readiness, and deterministic layout.
+- Added clean bilingual smoke testing of the Skill source ZIP to the automated
+  GitHub prerelease pipeline in addition to wheel and sdist verification.
+
+### Compatibility
+
+- Workflow facts, schemas, IDs, lifecycle state, and canonical graph edge
+  semantics are unchanged from `0.3.0b1`. Existing projects do not need to be
+  re-tailored; run `ipdctl refresh` followed by `ipdctl verify` after upgrading.
 
 ## [0.3.0b1] - 2026-09-30
 

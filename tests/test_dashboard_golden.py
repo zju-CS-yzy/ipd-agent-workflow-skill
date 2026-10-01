@@ -105,14 +105,51 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
                 path = dashboard / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 if path.suffix == ".svg":
-                    path.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+                    if relative in {
+                        "assets/deliverable_dependency.svg",
+                        "phases/concept.svg",
+                    }:
+                        path.write_text(
+                            '''<svg xmlns="http://www.w3.org/2000/svg">
+                              <g data-node-id="D-0" data-phase="concept" data-x="100" data-y="0" data-width="80" data-height="40" />
+                              <g data-node-id="D-1" data-phase="plan" data-x="0" data-y="0" data-width="80" data-height="40" />
+                              <path data-source="D-0" data-target="D-1" data-relation="depends_on" data-visual-source="D-1" data-visual-target="D-0" />
+                              <text>Legend</text><text>Prerequisite → Dependent</text>
+                            </svg>''',
+                            encoding="utf-8",
+                        )
+                    elif relative == "phases/plan.svg":
+                        path.write_text(
+                            '''<svg xmlns="http://www.w3.org/2000/svg">
+                              <g data-node-id="D-1" data-phase="plan" data-x="0" data-y="0" data-width="80" data-height="40" />
+                            </svg>''',
+                            encoding="utf-8",
+                        )
+                    else:
+                        path.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
                 elif relative == "data/graph.json":
                     path.write_text(
                         json.dumps(
                             {
                                 "relation_types": ["depends_on", "supports", "verifies", "supersedes"],
-                                "nodes": [{"id": "D-1", "type": "Deliverable", "status": "planned"}],
+                                "nodes": [
+                                    {"id": "D-0", "type": "Deliverable", "phase": "concept", "status": "planned"},
+                                    {"id": "D-1", "type": "Deliverable", "phase": "plan", "status": "planned"},
+                                ],
                                 "edges": [{"source": "D-0", "target": "D-1", "relation": "depends_on"}],
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                elif relative == "data/state.json":
+                    path.write_text(
+                        json.dumps(
+                            {
+                                "project": {"current": {"phase": "concept"}},
+                                "deliverables": [
+                                    {"id": "D-0", "phase": "concept", "depends_on": ["D-1"]},
+                                    {"id": "D-1", "phase": "plan", "depends_on": []},
+                                ]
                             }
                         ),
                         encoding="utf-8",
@@ -122,12 +159,13 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
                 elif relative == "index.html":
                     path.write_text(
                         "<html><script>location.hash; addEventListener('hashchange', openDetail);</script>"
-                        "<a href='#node=Deliverable:D-1'>Detail</a> Dependencies Evidence Review History"
+                        "<a href='#node=Deliverable:D-1'>Detail</a> Dependencies Evidence Review History "
+                        "Current Phase Waiting on Prerequisites Actionability Unmet Prerequisites"
                         "<aside id=\"details\"><div id=\"detail-body\"></div></aside></html>",
                         encoding="utf-8",
                     )
                 else:
-                    path.write_text("<html>Matrix</html>", encoding="utf-8")
+                    path.write_text("<html>Back to dashboard Matrix</html>", encoding="utf-8")
 
             inspected = golden.inspect_dashboard(dashboard)
             self.assertTrue(inspected["required_files_present"])
@@ -140,10 +178,22 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
                 ["depends_on", "supersedes", "supports", "verifies"],
             )
             self.assertTrue(all(inspected["interactions"].values()))
+            self.assertTrue(inspected["locale_markers_present"])
+            self.assertTrue(inspected["dependency_contract"]["only_depends_on"])
+            self.assertTrue(
+                inspected["dependency_contract"]["canonical_endpoints_match_graph"]
+            )
+            self.assertTrue(
+                inspected["dependency_contract"]["projection_preserves_contract"]
+            )
+            self.assertTrue(inspected["dependency_contract"]["execution_order"])
+            self.assertTrue(inspected["dependency_contract"]["graph_matches_state"])
+            self.assertTrue(inspected["dependency_contract"]["svg_covers_state"])
+            self.assertTrue(inspected["dependency_contract"]["per_view_complete"])
 
             results = [
                 {"name": f"Synthetic check {index:02d}", "passed": True, "evidence": "complete"}
-                for index in range(1, 26)
+                for index in range(1, 28)
             ]
             locale_run = {
                 "golden_render": {},
@@ -166,10 +216,39 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             self.assertIn("same-source end-to-end reproduction", report)
             self.assertIn("Dependency graph SHA-256: `" + "a" * 64 + "`", report)
             self.assertIn("Generated inventory SHA-256: `" + "b" * 64 + "`", report)
-            self.assertIn("en: 25/25; zh-CN: 25/25", report)
-            self.assertEqual(report.count("**PASS — 25 of 25 checks passed.**"), 2)
-            self.assertEqual(report.count("| PASS | Synthetic check"), 50)
+            self.assertIn("en: 27/27; zh-CN: 27/27", report)
+            self.assertEqual(report.count("**PASS — 27 of 27 checks passed.**"), 2)
+            self.assertEqual(report.count("| PASS | Synthetic check"), 54)
             self.assertIsNone(golden._CJK_RE.search(report))
+
+            graph_path = dashboard / "data" / "graph.json"
+            graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
+            graph_payload["edges"] = [
+                {"source": "D-1", "target": "D-0", "relation": "depends_on"}
+            ]
+            graph_path.write_text(json.dumps(graph_payload), encoding="utf-8")
+            reversed_graph = golden.inspect_dashboard(dashboard)
+            self.assertFalse(
+                reversed_graph["dependency_contract"]["graph_matches_state"]
+            )
+
+            graph_payload["edges"] = [
+                {"source": "D-0", "target": "D-1", "relation": "depends_on"}
+            ]
+            graph_path.write_text(json.dumps(graph_payload), encoding="utf-8")
+            dependency_svg = dashboard / "phases" / "concept.svg"
+            dependency_svg.write_text(
+                '''<svg xmlns="http://www.w3.org/2000/svg">
+                  <g data-node-id="D-0" data-phase="concept" data-x="100" data-y="0" data-width="80" data-height="40" />
+                  <text>Legend</text><text>Prerequisite → Dependent</text>
+                </svg>''',
+                encoding="utf-8",
+            )
+            missing_svg_edge = golden.inspect_dashboard(dashboard)
+            self.assertTrue(missing_svg_edge["dependency_contract"]["svg_covers_state"])
+            self.assertFalse(
+                missing_svg_edge["dependency_contract"]["per_view_complete"]
+            )
 
     def test_fixture_fingerprints_identify_graph_and_full_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -199,7 +278,7 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             )
             self.assertNotEqual(changed_inventory["inventory_sha256"], first["inventory_sha256"])
 
-    def test_default_run_is_bilingual_and_aggregates_25_checks_per_locale(self) -> None:
+    def test_default_run_is_bilingual_and_aggregates_27_checks_per_locale(self) -> None:
         self.assertEqual(
             golden.parse_args(["--legacy-root", "legacy"]).locale,
             "both",
@@ -225,7 +304,7 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             def checks(*_args, **_kwargs):
                 return [
                     {"name": f"Check {index:02d}", "passed": True, "evidence": "ok"}
-                    for index in range(1, 26)
+                    for index in range(1, 28)
                 ]
 
             with (
@@ -247,10 +326,10 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             self.assertTrue(passed)
             self.assertEqual([call.kwargs["locale"] for call in render.call_args_list], ["en", "zh-CN"])
             self.assertEqual([call.kwargs["locale"] for call in profiles.call_args_list], ["en", "zh-CN"])
-            self.assertIn("en: 25/25; zh-CN: 25/25", report)
+            self.assertIn("en: 27/27; zh-CN: 27/27", report)
             self.assertEqual(report_path.read_text(encoding="utf-8"), report)
 
-    def test_evaluate_contract_is_25_checks_including_all_task_types(self) -> None:
+    def test_evaluate_contract_is_27_checks_including_all_task_types(self) -> None:
         profiles = {
             task_type: {"passed": True, "commands": []}
             for task_type in golden.TASK_TYPES
@@ -279,6 +358,26 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             "node_types": ["Phase", "TR", "DCP", "Gate", "Activity", "Deliverable"],
             "declared_relations": ["depends_on", "supports", "verifies", "supersedes"],
             "relations": ["depends_on"],
+            "dependency_contract": {
+                "rendered_relations": ["depends_on"],
+                "dependency_edges": [
+                    {
+                        "source": "D-1",
+                        "target": "D-0",
+                        "relation": "depends_on",
+                        "visual_source": "D-0",
+                        "visual_target": "D-1",
+                    }
+                ],
+                "only_depends_on": True,
+                "canonical_endpoints_match_graph": True,
+                "graph_matches_state": True,
+                "svg_covers_state": True,
+                "per_view_complete": True,
+                "view_mismatches": [],
+                "projection_preserves_contract": True,
+                "execution_order": True,
+            },
             "statuses": ["planned"],
         }
         results = golden.evaluate(
@@ -293,11 +392,56 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             profiles,
             current,
         )
-        self.assertEqual(len(results), 25)
+        self.assertEqual(len(results), 27)
         self.assertTrue(all(result["passed"] for result in results))
         self.assertEqual(
             [result["name"] for result in results if result["name"].startswith("CLI lifecycle:")],
             [f"CLI lifecycle: {task_type}" for task_type in golden.TASK_TYPES],
+        )
+
+        reversed_graph = json.loads(json.dumps(current))
+        reversed_graph["dependency_contract"]["graph_matches_state"] = False
+        reversed_results = golden.evaluate(
+            {"files": 6, "html": 1, "json": 1, "markdown": 1, "svg": 3, "png": 0},
+            {"nodes": 286, "internal_edges": 144, "external_prerequisites": 31},
+            {
+                "xml_valid": True,
+                "graphviz_signature": False,
+                "bbox_nodes": 286,
+                "same_lane_overlaps": [],
+            },
+            profiles,
+            reversed_graph,
+        )
+        self.assertFalse(
+            next(
+                result["passed"]
+                for result in reversed_results
+                if result["name"]
+                == "Dependency projection is prerequisite to dependent"
+            )
+        )
+
+        missing_svg_edge = json.loads(json.dumps(current))
+        missing_svg_edge["dependency_contract"]["svg_covers_state"] = False
+        missing_results = golden.evaluate(
+            {"files": 6, "html": 1, "json": 1, "markdown": 1, "svg": 3, "png": 0},
+            {"nodes": 286, "internal_edges": 144, "external_prerequisites": 31},
+            {
+                "xml_valid": True,
+                "graphviz_signature": False,
+                "bbox_nodes": 286,
+                "same_lane_overlaps": [],
+            },
+            profiles,
+            missing_svg_edge,
+        )
+        self.assertFalse(
+            next(
+                result["passed"]
+                for result in missing_results
+                if result["name"] == "Dependency view isolates dependency facts"
+            )
         )
 
 
