@@ -45,17 +45,17 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 
 - [x] Freeze the release commit and confirm `pyproject.toml`, `ipdctl.__version__`, CLI version, changelog, tag, and GitHub Release title use `0.3.1b1` / `v0.3.1-beta` consistently.
 - [x] Write release notes that call out beta compatibility, human approval requirements, supported Python versions, and known limitations.
-- [ ] Create the annotated tag from the reviewed clean commit; never reuse or silently move a published tag.
-- [ ] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums. Do not publish separate locale packages or commit build/generated output.
-- [ ] Test the published Skill ZIP, wheel, and sdist in clean temporary locations.
+- [x] Create the annotated tag from the reviewed clean commit; never reuse or silently move a published tag.
+- [x] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums. Do not publish separate locale packages or commit build/generated output.
+- [x] Test the published Skill ZIP, wheel, and sdist in clean temporary locations; all three SHA256 values matched, six bilingual smoke runs passed, and the published dependency/readiness regressions passed 11/11 on 2026-10-01.
 
 ## GitHub and publication
 
 - [x] Use `zju-CS-yzy/ipd-agent-workflow-skill` as the canonical GitHub repository and include its URLs in project metadata and documentation.
 - [x] Confirm the canonical remote repository exists and is reachable.
-- [ ] Push the reviewed default branch and tag.
+- [x] Push the reviewed default branch and tag.
 - [ ] Require CI and review on the default branch; restrict force pushes and tag mutation.
 - [ ] Enable private vulnerability reporting and set a real private maintainer contact or security advisory process.
 - [ ] Set repository description, topics, license display, Actions permissions, and release visibility.
-- [ ] Confirm GitHub Actions passes for the pushed commit and tag, and verify the published README, Skill files, license, workflow, and source archive.
-- [ ] After publication, install the public Skill ZIP, wheel, and sdist and run the `init` → `tailor` → `context` → `refresh` → `verify` smoke test in both locales; each run produces 15 Dashboard files and a passed verification report.
+- [x] Confirm GitHub Actions passes for the pushed commit and tag, and verify the published README, Skill files, license, workflow, and source archive.
+- [x] After publication, install the public Skill ZIP, wheel, and sdist and run the `init` → `tailor` → `context` → `refresh` → `verify` smoke test in both locales; each run produces 15 Dashboard files and a passed verification report.
