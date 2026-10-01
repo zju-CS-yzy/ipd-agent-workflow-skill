@@ -67,19 +67,28 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 
 ## Version and release content
 
-- [x] Source version references are prepared for `0.3.2b1` / `v0.3.2-beta`; the release Tag does not yet exist.
+- [x] Source version references were prepared for `0.3.2b1` / `v0.3.2-beta`, and no conflicting release Tag existed at freeze time.
 - [x] Release notes document upgrade behavior, beta compatibility, approval boundaries, Python support, transaction behavior, and known limitations.
-- [ ] Freeze the reviewed release commit and create a new annotated `v0.3.2-beta` Tag; never reuse or move a published Tag.
-- [ ] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
-- [ ] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
+- [x] Freeze the reviewed release commit and create a new annotated `v0.3.2-beta` Tag; never reuse or move a published Tag.
+- [x] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
+- [x] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
 
 ## GitHub and publication
 
 - [x] Use `zju-CS-yzy/ipd-agent-workflow-skill` as the canonical GitHub repository and include its URLs in project metadata and documentation.
 - [x] Confirm the canonical remote repository exists and is reachable.
-- [ ] Push the reviewed default branch and `v0.3.2-beta` Tag.
+- [x] Push the reviewed default branch and `v0.3.2-beta` Tag.
 - [ ] Require CI and review on the default branch; restrict force pushes and tag mutation.
 - [ ] Enable private vulnerability reporting and set a real private maintainer contact or security advisory process.
 - [ ] Set repository description, topics, license display, Actions permissions, and release visibility.
-- [ ] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
-- [ ] After publication, install the public Skill ZIP, wheel, and sdist and run the `init` → `tailor` → `context` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+- [x] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
+- [x] After publication, install the public Skill ZIP, wheel, and sdist and run the `init` → `tailor` → `context` → `validate` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+
+## v0.3.2-beta publication record
+
+- Release commit: `1d02261314ac005d8d138b9ea9de86046838c2f1`.
+- Annotated Tag object: `6b15f4caf978abe84641e5ea086eedc3f5e3bb56`; the Tag resolves to the release commit above.
+- GitHub Actions: default-branch test run `36939492008`, Tag test run `36939906301`, and Tag release run `36939906420` all completed successfully on 2026-10-02.
+- The public prerelease exposes exactly the bilingual Skill ZIP, wheel, sdist, and `SHA256SUMS.txt` described above. All three payload checksums match the published checksum file.
+- Public-download qualification passed all six artifact/locale combinations (`skill-zip`, wheel, and sdist × `en` and `zh-CN`); every run reported `ipdctl 0.3.2-beta`, generated 15 Dashboard files, and wrote `verify_report.json` with status `passed`.
+- Both prepublication and public-download temporary roots were removed after verification; the repository contains no generated project or build output.
