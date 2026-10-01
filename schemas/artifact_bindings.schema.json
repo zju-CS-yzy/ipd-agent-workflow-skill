@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/schemas/artifact_bindings.schema.json",
+  "title": "IPD Artifact Bindings",
+  "description": "Explicit repository-relative artifact-to-Deliverable bindings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "oneOf": [
+    { "required": ["bindings"], "not": { "required": ["artifact_bindings"] } },
+    { "required": ["artifact_bindings"], "not": { "required": ["bindings"] } }
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "description": { "type": "string" },
+    "ignore": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/globPattern" }
+    },
+    "critical_roots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/globPattern" }
+    },
+    "bindings": { "$ref": "#/$defs/rules" },
+    "artifact_bindings": {
+      "description": "Legacy alias for bindings.",
+      "$ref": "#/$defs/rules"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "globPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))\\S(?:.*\\S)?$"
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "glob": { "$ref": "#/$defs/globPattern" },
+        "globs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/globPattern" }
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/globPattern" }
+        },
+        "deliverable": { "type": "string", "minLength": 1 },
+        "deliverables": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "critical": { "type": "boolean", "default": true },
+        "review_required": { "type": "boolean" },
+        "description": { "type": "string" },
+        "managed_by": { "type": "string" },
+        "managed_kind": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            { "required": ["glob"], "not": { "anyOf": [{ "required": ["globs"] }, { "required": ["paths"] }] } },
+            { "required": ["globs"], "not": { "anyOf": [{ "required": ["glob"] }, { "required": ["paths"] }] } },
+            { "required": ["paths"], "not": { "anyOf": [{ "required": ["glob"] }, { "required": ["globs"] }] } }
+          ]
+        },
+        {
+          "oneOf": [
+            { "required": ["deliverable"], "not": { "required": ["deliverables"] } },
+            { "required": ["deliverables"], "not": { "required": ["deliverable"] } }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "critical": { "const": false } },
+            "required": ["critical"]
+          },
+          "else": {
+            "properties": { "deliverables": { "maxItems": 1 } }
+          }
+        }
+      ]
+    }
+  }
+}

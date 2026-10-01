@@ -21,11 +21,9 @@ checks. VCS metadata directories are also ignored.
 ## Binding project paths before work
 
 Before a real Agent changes a path under `critical_roots`, the project must
-contain an explicit rule that binds that path to the Deliverable already held
-by the Agent's active claim. Do not infer ownership from a directory name. For
-example, the Agent first runs
-`ipdctl claim develop.runtime --actor runtime-agent`, then the project can add
-this user-owned rule:
+contain an explicit rule that binds that path to the Deliverable the Agent will
+claim. Configure and validate ownership before Claim; do not infer ownership
+from a directory name. For example:
 
 ```yaml
 critical_roots:
@@ -39,19 +37,43 @@ bindings:
     review_required: true
 ```
 
-Only after both the claim and binding exist may the Agent modify
+Only after the binding validates and the matching Claim exists may the Agent modify
 `src/runtime/**`. A different critical path needs its own explicit binding;
 the framework never guesses that `docs/**`, `src/**`, or `tests/**` belongs to
 a particular Deliverable.
 
 Reconciliation normally runs after `close`, when the active lease has already
-ended. It therefore validates each mapped changed path against the auditable
-`claim` events retained in `.ipd/agent_runtime.yaml`. A binding to a known
-Deliverable that has no Claim provenance fails with
-`BINDING_UNCLAIMED_DELIVERABLE`; merely naming another Deliverable in the YAML
-does not establish ownership. A provenance event is valid only when it records
-the Deliverable, Actor, timezone-aware timestamp, and a non-negative project
-state revision no newer than the current state.
+ended. It therefore validates each mapped changed path against the current
+iteration's auditable Claim binding window retained in
+`.ipd/agent_runtime.yaml`. A binding to a known Deliverable that has no current
+Claim provenance fails with `BINDING_UNCLAIMED_DELIVERABLE`; merely naming a
+Deliverable in YAML or having claimed it in an older iteration does not
+establish ownership. Actual overlap between critical rules is allowed only
+when all matching rules resolve to the same owner.
+
+## Adopting an existing working-tree baseline
+
+Do not create a fake Claim for files that were already modified before the IPD
+runtime was installed. First add explicit single-owner bindings and inspect the
+read-only preview:
+
+```bash
+ipdctl adopt-baseline . --preview --json
+```
+
+After a human verifies the files and ownership, record the migration decision:
+
+```bash
+ipdctl adopt-baseline . --actor HUMAN --actor-type human --authorized \
+  --reason "Adopt the reviewed pre-v0.3.2 working tree"
+```
+
+The authoritative record is an append-only `artifact_baseline_adopted` Agent
+Runtime event containing exact path hashes and repository identity. The same
+snapshot is idempotent. A changed path, changed Binding digest, or changed
+repository identity is not covered by an older adoption. This command creates
+no Claim, does not change Deliverable state, and never stages, commits, updates,
+or otherwise writes Git/SVN.
 
 `ipdctl tailor` manages one deterministic rule per current Deliverable for
 `evidence/<deliverable-id>/**`. Re-tailoring updates those framework-managed

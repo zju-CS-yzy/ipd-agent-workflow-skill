@@ -20,13 +20,15 @@ The JSON Schema performs structural validation. `ipdctl validate` additionally e
 zero `active_claims`, append-only command events, `last_refresh`, and
 `last_verification`. A successful verification records `status`,
 `state_revision`, and `input_fingerprint`; these fields do not replace the
-project state or Dashboard manifest. Every `claim` event must contain a
-non-empty Deliverable, Actor, timezone-aware timestamp, and non-negative
-`state_revision` that does not exceed the current project revision.
+project state or Dashboard manifest. Every new `claim` event contains a
+non-empty Deliverable, Actor, timezone-aware timestamp, non-negative
+`state_revision`, and an exact `binding_window`. Legacy events remain readable
+history but cannot prove ownership for new path changes. Authorized migration
+baselines are append-only `artifact_baseline_adopted` events.
 
 ## Safe persistence
 
-The runtime writes state through a same-directory temporary file and atomically replaces the destination. A failed validation or transition returns an error and does not write a partial state. Do not hand-edit `revision` to conceal a change.
+The runtime writes each file through a same-directory temporary file and atomically replaces the destination. A crash-released operating-system mutex keyed by the resolved project path serializes recovery and all project command access; its hashed lock file stays outside the project in the system temporary directory. Mutating CLI commands also hold a project-local recovery journal across their complete read/preflight/compute/write cycle. The canonical journal name is acquired before its snapshot; the transaction restores its state, runtime, report, and Dashboard scope after an exception or terminated process, then retires the active journal name before cleaning a committed backup. Concurrent commands fail explicitly instead of applying stale computed state. Recovery fails closed if the journal owner's liveness cannot be established. A failed validation or transition therefore does not publish a partial project bundle. Do not hand-edit `revision` to conceal a change.
 
 `.ipd/project_state.yaml` is source state and can be reviewed in version control. `.ipd/dashboard/`, reconciliation reports, and verification reports are generated views. The v0.1 `.ipd/project-state.json` path is discovered for read/validation compatibility but is never dual-written.
 
@@ -37,6 +39,7 @@ ipdctl init [TARGET] [--name NAME] [--task-type TYPE ...] [--locale en|zh-CN] [-
 ipdctl tailor [TARGET] [--profile PATH] [--output PATH]
 ipdctl context [TARGET] [--json]
 ipdctl status [TARGET] [--json]
+ipdctl adopt-baseline [TARGET] [--preview] [--json] [--actor HUMAN --actor-type human --authorized --reason TEXT]
 ipdctl claim DELIVERABLE [--project-root TARGET] [--actor NAME] [--lease-minutes N] [--recover]
 ipdctl close DELIVERABLE --evidence PATH [--evidence PATH ...] [--project-root TARGET] [--actor NAME] [--status ready_for_review|blocked] [--note TEXT]
 ipdctl review SUBJECT --reviewer NAME [--project-root TARGET] [--actor-type agent|human] [--authorized] [--decision approve|reject] [--evidence PATH]
@@ -95,10 +98,12 @@ work continues.
 infers ownership for real source, test, documentation, configuration, tool,
 firmware, or hardware paths; add explicit rules for those paths in
 `.ipd/artifact_bindings.yaml`. Unbound changes under critical roots fail
-reconciliation and verification. A mapped changed path also fails when its
-Deliverable has no auditable `claim` event in Agent Runtime.
-An incomplete, malformed, or future-revision Claim event does not satisfy this
-provenance check.
+reconciliation and verification, and an actually changed critical path cannot
+resolve to multiple Deliverable owners. A mapped changed path also fails when
+it is outside the current iteration's valid Claim binding window. A reviewed
+dirty project that predates this protocol uses one explicitly authorized
+`adopt-baseline` migration decision instead of a fabricated Claim. Successful
+verification stores the exact artifact baseline for the next iteration.
 
 When `verify` passes in the final `lifecycle` Phase and every Gate in that Phase
 is approved, `.ipd/agent_runtime.yaml` receives one `lifecycle_complete` event.

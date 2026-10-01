@@ -1,6 +1,52 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IPD Agent Runtime",
+  "$defs": {
+    "artifactBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "bindings_sha256",
+        "repository",
+        "paths",
+        "snapshot_sha256",
+        "baseline_id"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "bindings_sha256": { "type": "string", "minLength": 1 },
+        "repository": { "type": "object" },
+        "paths": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        },
+        "snapshot_sha256": { "type": "string", "minLength": 1 },
+        "baseline_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "bindingWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "bindings_sha256",
+        "baseline_id",
+        "opened_paths",
+        "snapshot_sha256"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "bindings_sha256": { "type": "string", "minLength": 1 },
+        "baseline_id": { "type": ["string", "null"] },
+        "opened_paths": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "null"] }
+        },
+        "snapshot_sha256": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -40,7 +86,15 @@
           "actor": { "type": "string", "minLength": 1 },
           "from_phase": { "type": "string", "minLength": 1 },
           "to_phase": { "type": "string", "minLength": 1 },
-          "state_revision": { "type": "integer", "minimum": 0 }
+          "state_revision": { "type": "integer", "minimum": 0 },
+          "binding_window": { "$ref": "#/$defs/bindingWindow" },
+          "actor_type": { "type": "string", "enum": ["agent", "human"] },
+          "authorized": { "type": "boolean" },
+          "reason": { "type": "string", "minLength": 1 },
+          "baseline_id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["passed", "failed"] },
+          "input_fingerprint": { "type": "string", "minLength": 1 },
+          "artifact_baseline": { "$ref": "#/$defs/artifactBaseline" }
         },
         "allOf": [
           {
@@ -59,6 +113,29 @@
             },
             "then": {
               "required": ["from_phase", "to_phase", "state_revision"]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": { "const": "artifact_baseline_adopted" }
+              },
+              "required": ["action"]
+            },
+            "then": {
+              "required": [
+                "actor",
+                "actor_type",
+                "authorized",
+                "reason",
+                "state_revision",
+                "baseline_id",
+                "artifact_baseline"
+              ],
+              "properties": {
+                "actor_type": { "const": "human" },
+                "authorized": { "const": true }
+              }
             }
           }
         ]

@@ -1,8 +1,56 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.1-beta` maps to package version `0.3.1b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.2-beta` maps to package version `0.3.2b1`.
 
 ## [Unreleased]
+
+## [0.3.2b1] - 2026-10-02
+
+### Added
+
+- Added a portable artifact-binding schema plus semantic validation for unique
+  rules, safe project-relative patterns, known Deliverable owners, and actual
+  critical-path ownership conflicts.
+- Added one shared binding-eligibility projection for context, Claim preflight,
+  reconciliation, Dashboard actionability, refresh, and verification.
+- Added an explicitly human-authorized, append-only `adopt-baseline` migration
+  path for already-dirty files in existing projects.
+- Added Claim binding windows and exact post-verification artifact baselines so
+  path ownership is limited to the current iteration without requiring the
+  framework to create commits.
+- Added a project-local recovery transaction spanning each mutating command's
+  complete read, preflight, compute, and write cycle, including bootstrap and
+  force initialization.
+
+### Changed
+
+- Legacy Claim events remain readable audit history but no longer permanently
+  authorize future repository changes.
+- Binding blockers now remove affected work from `available_tasks` and appear
+  consistently in CLI context, Dashboard data, reconciliation, and verification.
+- Dashboard manifest freshness now covers binding and eligibility projections.
+- Dashboard verification now rejects altered Manifest 2.1 identity, source,
+  file-list, output-directory, and view-routing fields before regenerating it.
+- Expired v0.3.1 windowless Claims may be recovered only after an exact,
+  authorized-human baseline adoption. The resulting immutable migration window
+  is retained across later lease recovery instead of reopening on a dirty tree.
+- Concurrent mutations fail explicitly instead of applying stale computed
+  state. A crash-released cross-process mutex serializes recovery and command
+  execution; the canonical journal lock is acquired before snapshots are
+  taken, interrupted multi-file writes recover on the next command, and an
+  owner whose liveness cannot be proven is treated as active rather than rolled
+  back.
+- Legacy windowless Claim recovery skips stale baseline-adoption records and
+  accepts only a later authorized adoption that exactly matches the current
+  revision, bindings, repository revision, and governed path snapshot.
+
+### Compatibility
+
+- v0.3.1 projects upgrade in place without reinitialization or re-tailoring.
+  Projects with pre-existing dirty critical files need one reviewed baseline
+  adoption after their explicit single-owner bindings validate.
+- This maintenance release retains the single-Claim lifecycle and does not add
+  capability patterns, process overlays, compound Claims, or domain policies.
 
 ## [0.3.1b1] - 2026-10-01
 

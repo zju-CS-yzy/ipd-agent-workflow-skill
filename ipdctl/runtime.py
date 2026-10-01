@@ -51,8 +51,51 @@ def runtime_path(project_root: str | Path) -> Path:
     return Path(project_root) / RUNTIME_RELATIVE_PATH
 
 
+def _binding_window_issues(value: Any) -> list[str]:
+    """Validate the portable binding facts captured when a Claim opens."""
+
+    if not isinstance(value, dict):
+        return ["field 'binding_window' must be an object"]
+    issues: list[str] = []
+    if value.get("schema_version") != "1.0":
+        issues.append("field 'binding_window.schema_version' must be '1.0'")
+    for field in ("bindings_sha256", "snapshot_sha256"):
+        if not isinstance(value.get(field), str) or not value[field].strip():
+            issues.append(
+                f"field 'binding_window.{field}' must be a non-empty string"
+            )
+    baseline_id = value.get("baseline_id")
+    if baseline_id is not None and (
+        not isinstance(baseline_id, str) or not baseline_id.strip()
+    ):
+        issues.append(
+            "field 'binding_window.baseline_id' must be a non-empty string or null"
+        )
+    opened_paths = value.get("opened_paths")
+    if not isinstance(opened_paths, dict):
+        issues.append("field 'binding_window.opened_paths' must be an object")
+    else:
+        for path, digest in opened_paths.items():
+            if not isinstance(path, str) or not path.strip():
+                issues.append(
+                    "field 'binding_window.opened_paths' contains an invalid path"
+                )
+                continue
+            if digest is not None and (
+                not isinstance(digest, str) or not digest.strip()
+            ):
+                issues.append(
+                    f"field 'binding_window.opened_paths[{path!r}]' "
+                    "must be a non-empty string or null"
+                )
+    return issues
+
+
 def claim_event_issues(
-    event: Any, *, current_state_revision: int | None = None
+    event: Any,
+    *,
+    current_state_revision: int | None = None,
+    require_binding_window: bool = False,
 ) -> list[str]:
     """Validate the fields that make a Claim event usable as provenance."""
 
@@ -78,6 +121,10 @@ def claim_event_issues(
         issues.append(
             "field 'state_revision' exceeds the current project revision"
         )
+    if "binding_window" in event:
+        issues.extend(_binding_window_issues(event.get("binding_window")))
+    elif require_binding_window:
+        issues.append("field 'binding_window' is required for binding provenance")
     return issues
 
 
@@ -99,6 +146,42 @@ def advance_phase_event_issues(event: Any) -> list[str]:
     state_revision = event.get("state_revision")
     if type(state_revision) is not int or state_revision < 0:
         issues.append("field 'state_revision' must be a non-negative integer")
+    return issues
+
+
+def artifact_baseline_event_issues(event: Any) -> list[str]:
+    """Validate an explicitly authorized artifact-baseline adoption event."""
+
+    if not isinstance(event, dict) or event.get("action") != "artifact_baseline_adopted":
+        return ["must be an artifact_baseline_adopted event object"]
+    issues: list[str] = []
+    for field in ("actor", "reason", "at", "baseline_id"):
+        if not isinstance(event.get(field), str) or not event[field].strip():
+            issues.append(f"field {field!r} must be a non-empty string")
+    if event.get("actor_type") != "human":
+        issues.append("field 'actor_type' must be 'human'")
+    if event.get("authorized") is not True:
+        issues.append("field 'authorized' must be true")
+    state_revision = event.get("state_revision")
+    if type(state_revision) is not int or state_revision < 0:
+        issues.append("field 'state_revision' must be a non-negative integer")
+    event_at = event.get("at")
+    if isinstance(event_at, str) and event_at.strip():
+        try:
+            _parse_time(event_at)
+        except RuntimeError as exc:
+            issues.append(str(exc))
+    snapshot = event.get("artifact_baseline")
+    if not isinstance(snapshot, dict):
+        issues.append("field 'artifact_baseline' must be an object")
+    else:
+        snapshot_id = snapshot.get("snapshot_sha256")
+        if not isinstance(snapshot_id, str) or not snapshot_id.strip():
+            issues.append(
+                "field 'artifact_baseline.snapshot_sha256' must be a non-empty string"
+            )
+        if snapshot.get("baseline_id") != event.get("baseline_id"):
+            issues.append("field 'baseline_id' must match the artifact baseline")
     return issues
 
 
@@ -194,6 +277,11 @@ def validate_runtime(runtime: Any) -> list[str]:
                 issues.extend(
                     f"runtime event {index} {issue}"
                     for issue in advance_phase_event_issues(event)
+                )
+            elif event.get("action") == "artifact_baseline_adopted":
+                issues.extend(
+                    f"runtime event {index} {issue}"
+                    for issue in artifact_baseline_event_issues(event)
                 )
             else:
                 event_at = event.get("at")
@@ -296,6 +384,8 @@ def claim(
     actor: str,
     lease_minutes: int = 240,
     state_revision: int,
+    binding_window: dict[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     if not actor.strip():
         raise RuntimeError("claim actor must not be empty")
@@ -303,9 +393,13 @@ def claim(
         raise RuntimeError("lease_minutes must be positive")
     if type(state_revision) is not int or state_revision < 0:
         raise RuntimeError("claim state_revision must be a non-negative integer")
-    now = utc_now()
+    if binding_window is not None:
+        window_issues = _binding_window_issues(binding_window)
+        if window_issues:
+            raise RuntimeError(window_issues[0])
+    instant = now or utc_now()
     updated = _revised(runtime)
-    _expire_claims(updated, now)
+    _expire_claims(updated, instant)
     existing = updated["active_claims"].get(deliverable_id)
     if existing and existing.get("actor") != actor:
         raise RuntimeError(
@@ -314,8 +408,8 @@ def claim(
     claim_record = {
         "deliverable": deliverable_id,
         "actor": actor,
-        "started_at": format_time(now),
-        "expires_at": format_time(now + timedelta(minutes=lease_minutes)),
+        "started_at": format_time(instant),
+        "expires_at": format_time(instant + timedelta(minutes=lease_minutes)),
     }
     updated["active_claims"][deliverable_id] = claim_record
     event = {
@@ -325,6 +419,8 @@ def claim(
         "at": claim_record["started_at"],
     }
     event["state_revision"] = state_revision
+    if binding_window is not None:
+        event["binding_window"] = deepcopy(binding_window)
     updated["events"].append(event)
     return updated
 
@@ -336,10 +432,11 @@ def close_claim(
     actor: str,
     action: str,
     details: dict[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     updated = _revised(runtime)
-    now = utc_now()
-    _expire_claims(updated, now)
+    instant = now or utc_now()
+    _expire_claims(updated, instant)
     claim_record = updated["active_claims"].get(deliverable_id)
     if claim_record is None:
         raise RuntimeError(
@@ -354,7 +451,7 @@ def close_claim(
         "action": action,
         "deliverable": deliverable_id,
         "actor": actor,
-        "at": format_time(now),
+        "at": format_time(instant),
     }
     if details:
         for key, value in details.items():
@@ -373,3 +470,40 @@ def record_event(
         event.update(details)
     updated["events"].append(event)
     return updated
+
+
+def record_artifact_baseline_adoption(
+    runtime: dict[str, Any], event: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
+    """Append one adoption event, or return the exact runtime for a no-op.
+
+    Snapshot equality, not actor metadata or timestamp, defines idempotency.
+    The latest successful verification is also a baseline authority, so
+    adopting that exact snapshot does not manufacture a redundant event.
+    """
+
+    issues = validate_runtime(runtime)
+    if issues:
+        raise RuntimeError(issues[0])
+    event_issues = artifact_baseline_event_issues(event)
+    if event_issues:
+        raise RuntimeError(event_issues[0])
+    snapshot = event["artifact_baseline"]
+    known_snapshots: list[dict[str, Any]] = []
+    verification = runtime.get("last_verification")
+    if isinstance(verification, dict) and isinstance(
+        verification.get("artifact_baseline"), dict
+    ):
+        known_snapshots.append(verification["artifact_baseline"])
+    known_snapshots.extend(
+        item["artifact_baseline"]
+        for item in runtime.get("events", [])
+        if isinstance(item, dict)
+        and item.get("action") == "artifact_baseline_adopted"
+        and isinstance(item.get("artifact_baseline"), dict)
+    )
+    if any(candidate == snapshot for candidate in known_snapshots):
+        return runtime, False
+    updated = _revised(runtime)
+    updated["events"].append(deepcopy(event))
+    return updated, True

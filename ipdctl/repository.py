@@ -16,6 +16,9 @@ from typing import Any, Iterable
 from urllib.parse import urlsplit, urlunsplit
 
 
+_TRANSACTION_PATH_MARKER = ".ipd/.ipdctl-transaction"
+
+
 @dataclass(frozen=True)
 class RepositoryInfo:
     """Locally observable repository metadata.
@@ -101,6 +104,16 @@ def _successful_text(
     return value
 
 
+def _status_has_user_changes(text: str) -> bool:
+    """Ignore only ipdctl's transient recovery journal in VCS status."""
+
+    return any(
+        _TRANSACTION_PATH_MARKER not in line.replace("\\", "/")
+        for line in text.splitlines()
+        if line.strip()
+    )
+
+
 def inspect_repository(start: str | Path = ".") -> RepositoryInfo:
     """Inspect the enclosing Git or SVN working copy without changing it."""
 
@@ -120,11 +133,11 @@ def inspect_repository(start: str | Path = ".") -> RepositoryInfo:
                 [git, "symbolic-ref", "--quiet", "--short", "HEAD"], root_path
             )
             status = _run(
-                [git, "status", "--porcelain=v1", "--untracked-files=normal"],
+                [git, "status", "--porcelain=v1", "--untracked-files=all"],
                 root_path,
             )
             dirty = (
-                bool(status.stdout.strip())
+                _status_has_user_changes(status.stdout)
                 if status is not None and status.returncode == 0
                 else None
             )
@@ -196,7 +209,7 @@ def inspect_repository(start: str | Path = ".") -> RepositoryInfo:
                 [svn, "status", "--non-interactive", str(root_path)], root_path
             )
             dirty = (
-                bool(status.stdout.strip())
+                _status_has_user_changes(status.stdout)
                 if status is not None and status.returncode == 0
                 else None
             )
@@ -237,7 +250,7 @@ def _scope_paths(
         except ValueError:
             continue
         normalized = _normalize_path(relative)
-        if normalized:
+        if normalized and _TRANSACTION_PATH_MARKER not in normalized:
             scoped.add(normalized)
     return sorted(scoped)
 

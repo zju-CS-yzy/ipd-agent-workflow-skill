@@ -15,6 +15,7 @@ The repository has two coordinated surfaces: `SKILL.md` guides Agent decisions, 
 | `ipdctl.process_model` / `tailoring` | Compile generic task profiles into stable IPD process facts | Embed project-instance data |
 | `ipdctl.dependencies` | Find cycles and unmet deliverable dependencies | Infer missing dependencies |
 | `ipdctl.runtime` | Record Agent claims, leases, and command events | Authenticate human identities or provide distributed locking |
+| `ipdctl.transaction` | Serialize one project's CLI mutations and recover interrupted multi-file writes | Coordinate different clones or replace VCS locking |
 | `ipdctl.i18n` / `messages.yaml` | Resolve `en` or `zh-CN` presentation text from an immutable per-call translator | Translate machine contracts, mutate project facts, or keep process-global locale state |
 | `ipdctl.dashboard` | Orchestrate and atomically publish the generated Dashboard tree and hashes | Become a writable source of truth |
 | `ipdctl.dashboard_model` | Normalize process/state/runtime facts into canonical state and typed graph projections | Invent facts or mutate source state |
@@ -23,14 +24,15 @@ The repository has two coordinated surfaces: `SKILL.md` guides Agent decisions, 
 | `ipdctl.traceability` | Resolve global entity IDs and dangling links | Treat free text as a valid entity reference |
 | `ipdctl.policy` | Load and validate safe tailoring policy | Permit non-negotiable controls to be disabled |
 | `ipdctl.repository` | Read Git/SVN root, revision, and dirty state | Commit, update, tag, push, or modify VCS state |
-| `ipdctl.reconcile` | Map changed paths to deliverables through explicit bindings | Guess authoritative ownership from filenames |
+| `ipdctl.reconcile` | Validate bindings, capture exact path snapshots, and reconcile changed paths to one Deliverable owner | Guess authoritative ownership from filenames |
+| `ipdctl.eligibility` | Project lifecycle and binding readiness into one shared context/Claim/Dashboard decision | Mutate state or authorize a human baseline decision |
 | `ipdctl.cli_v2` | Expose the full tailoring and execution lifecycle | Hide validation errors or overwrite state implicitly |
 
 ## Data flow
 
-An Agent initializes a project, tailors a process from the task profile, reads context, claims eligible work, attaches evidence, and submits it for review. Deliverables and Gates are explicit review subjects. Authorized human decisions are appended rather than replaced; the latest authorized human decision governs the current outcome while the full history remains auditable. `advance-phase` succeeds only after the current phase's required Gate subjects satisfy their controls. Refresh derives dashboards from process/state facts. Verify checks process, state, evidence paths, output hashes, and repository reconciliation. Final deliverable and TR/DCP approval never comes from an Agent identity.
+An Agent initializes a project, tailors a process from the task profile, reads context, claims eligible work, attaches evidence, and submits it for review. Claim preflight and every read surface consume one binding-eligibility projection. Each new Claim records an exact binding window; successful verification carries an exact artifact baseline into the next iteration. Existing dirty projects use an append-only, explicitly human-authorized baseline-adoption event rather than a fabricated Claim or VCS mutation. Deliverables and Gates are explicit review subjects. Authorized human decisions are appended rather than replaced; the latest authorized human decision governs the current outcome while the full history remains auditable. `advance-phase` succeeds only after the current phase's required Gate subjects satisfy their controls. Refresh derives dashboards from process/state facts. Verify checks process, state, evidence paths, output hashes, binding eligibility, and repository reconciliation. Final deliverable and TR/DCP approval never comes from an Agent identity.
 
-State writes use a temporary file in the destination directory followed by an atomic replacement. A successful engine operation increments `revision` exactly once and returns a new object, leaving the input unchanged.
+State writes use a temporary file in the destination directory followed by an atomic replacement. A successful engine operation increments `revision` exactly once and returns a new object, leaving the input unchanged. A crash-released operating-system mutex keyed by the resolved project path covers recovery and the complete command; its hashed lock file lives in the current user's system temporary directory and is not a project artifact. Mutating CLI commands then hold a project-local journal across their complete read, preflight, compute, and write cycle. The journal first acquires its canonical name, then snapshots authority files and generated outputs before mutation, restores them after an exception or terminated process, and atomically retires its active name before post-commit cleanup. A concurrent project command in the same local user environment fails explicitly and may be retried after the active command finishes. Different operating-system accounts or temporary-directory namespaces must not operate the same checkout concurrently. If the operating system cannot establish whether a journal owner is still running, recovery fails closed and leaves the journal untouched.
 
 Dashboard refresh builds a complete staging tree before replacing the previous
 generated tree. `data/state.json` and `data/graph.json` are sanitized read-only
@@ -46,7 +48,7 @@ change state, evidence, reviews, claims, graph IDs, or topology.
 
 ## Contract boundaries
 
-[schemas/project_state.schema.json](../schemas/project_state.schema.json) is the portable structural contract. Python validation adds global constraints that JSON Schema does not conveniently express, including dependency cycles, global entity-ID uniqueness, referential integrity, ordered authorized-human decision resolution, and phase-advance readiness.
+[schemas/project_state.schema.json](../schemas/project_state.schema.json) and [schemas/artifact_bindings.schema.json](../schemas/artifact_bindings.schema.json) are portable structural contracts. Python validation adds global constraints that JSON Schema does not conveniently express, including dependency cycles, global entity-ID uniqueness, referential integrity, ordered authorized-human decision resolution, actual changed-path owner conflicts, Claim-window provenance, and phase-advance readiness.
 
 [policies/default/tailoring_rules.yaml](../policies/default/tailoring_rules.yaml) preserves non-negotiable governance invariants. Generic task-type extensions live under `policies/task-types/`; PyYAML is used with safe loading and deterministic atomic writes.
 

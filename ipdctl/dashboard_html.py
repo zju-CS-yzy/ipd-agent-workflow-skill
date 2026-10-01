@@ -119,6 +119,23 @@ def _phase_label(value: Any, translator: Any) -> str:
     return _t(translator, f"phase.{phase}", fallback)
 
 
+def _binding_text(translator: Any, key: str) -> str:
+    """Return local display copy while binding machine codes stay English."""
+
+    copy = {
+        "readiness": ("Binding readiness", "产物绑定就绪度"),
+        "blockers": ("Binding blockers", "产物绑定阻塞项"),
+        "ready": ("Ready", "已就绪"),
+        "not_ready": ("Not ready", "未就绪"),
+        "no_blockers": ("No binding blockers", "无产物绑定阻塞项"),
+        "waiting_on_bindings": ("Waiting on bindings", "等待产物绑定"),
+    }
+    english, chinese = copy[key]
+    locale = _text(getattr(translator, "locale", "en"), "en").lower()
+    fallback = chinese if locale.startswith("zh") else english
+    return _t(translator, f"dashboard.binding_{key}", fallback)
+
+
 def _count(value: Any) -> str:
     if isinstance(value, bool):
         return "1" if value else "0"
@@ -421,6 +438,8 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Review history": _t(translator, "detail.review_history", "Review history"),
         "Blocker": _t(translator, "detail.blocker", "Blocker"),
         "Actionability": _t(translator, "detail.actionability", "Actionability"),
+        "Binding readiness": _binding_text(translator, "readiness"),
+        "Binding blockers": _binding_text(translator, "blockers"),
         "Unmet prerequisites": _t(
             translator,
             "detail.unmet_dependencies",
@@ -547,20 +566,39 @@ def _deliverable_rows(
         dependencies = _strings(item.get("depends_on"))
         evidence = _strings(item.get("evidence"))
         reviews = _items(item.get("reviews"))
+        actionability = (
+            item.get("actionability")
+            if isinstance(item.get("actionability"), Mapping)
+            else {}
+        )
+        binding_ready = actionability.get("binding_ready")
+        binding_badge = (
+            '<span class="badge status-{}">{}</span>'.format(
+                "ready" if binding_ready is True else "blocked",
+                escape(
+                    _binding_text(
+                        translator,
+                        "ready" if binding_ready is True else "not_ready",
+                    )
+                ),
+            )
+            if isinstance(binding_ready, bool)
+            else '<span class="muted">—</span>'
+        )
         href = f'{link_prefix}#node=deliverable:{item_id}'
         rows.append(
             '<tr data-node="deliverable:{}" data-phase="{}" data-status="{}" tabindex="0">'
             '<td><a class="row-link" href="{}">{}</a><div class="muted">{}</div></td>'
-            '<td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+            '<td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
                 escape(item_id, quote=True), escape(_text(item.get("phase"), "unknown"), quote=True),
                 escape(_status_class(status), quote=True), escape(href, quote=True), _h(item_id),
                 _h(item.get("display_label") or item.get("title"), _t(translator, "dashboard.untitled_deliverable", "Untitled deliverable")), _h(_phase_label(item.get("phase"), translator)),
-                _h(item.get("owner"), _t(translator, "common.unassigned", "Unassigned")), _badge(status, translator),
+                _h(item.get("owner"), _t(translator, "common.unassigned", "Unassigned")), _badge(status, translator), binding_badge,
                 _h(", ".join(dependencies), _t(translator, "common.none", "None")), str(len(evidence)), str(len(reviews)),
             )
         )
     return "".join(rows) or (
-        '<tr><td colspan="7" class="empty">'
+        '<tr><td colspan="8" class="empty">'
         + escape(_t(translator, "dashboard.no_deliverables", "No deliverables are available."))
         + "</td></tr>"
     )
@@ -715,7 +753,7 @@ def render_index(
 
       <section class="panel" id="deliverable-matrix">
         <div class="panel-head"><div><h2>Deliverable matrix</h2><p>Ownership, lifecycle status, dependencies, evidence, and review history.</p></div><div class="filters"><a class="btn" href="matrices/deliverable_matrix.html">Open full matrix</a><label class="sr-only" for="deliverable-search">Search deliverables</label><input class="search" id="deliverable-search" type="search" placeholder="Search deliverables"><label class="sr-only" for="deliverable-status">Deliverable status</label><select class="select" id="deliverable-status"><option value="">All statuses</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="ready_for_review">Ready for review</option><option value="in_review">In review</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="blocked">Blocked</option><option value="superseded">Superseded</option></select></div></div>
-        <div class="table-scroll"><table><thead><tr><th>ID / Deliverable</th><th>Phase</th><th>Owner</th><th>Status</th><th>Dependencies</th><th>Evidence</th><th>Reviews</th></tr></thead><tbody id="deliverable-rows">__DELIVERABLE_ROWS__</tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>ID / Deliverable</th><th>Phase</th><th>Owner</th><th>Status</th><th>Binding readiness</th><th>Dependencies</th><th>Evidence</th><th>Reviews</th></tr></thead><tbody id="deliverable-rows">__DELIVERABLE_ROWS__</tbody></table></div>
       </section>
     </main>
 
@@ -764,6 +802,11 @@ def render_index(
         const actionabilityKey = String(item.actionability.state).toLowerCase();
         body += section('Actionability', `<p>${esc(label('actionability', actionabilityKey, actionabilityKey.replaceAll('_', ' ')))}</p>`);
         body += section('Unmet prerequisites', list(item.actionability.unmet_dependencies));
+        if (typeof item.actionability.binding_ready === 'boolean') {
+          const readinessKey = item.actionability.binding_ready ? 'ready' : 'not_ready';
+          body += section(label('binding', 'readiness', 'Binding readiness'), `<p>${esc(label('binding', readinessKey, readinessKey.replaceAll('_', ' ')))}</p>`);
+          body += section(label('binding', 'blockers', 'Binding blockers'), list(item.actionability.binding_blockers, label('binding', 'no_blockers', 'No binding blockers')));
+        }
       }
       body += section('Evidence', list(item.evidence, 'No evidence recorded.'));
       const history = values(item.reviews).map(review => typeof review === 'object' ? [review.decision || review.result || review.status || 'Recorded', review.reviewer || review.actor || 'Unknown reviewer', review.evidence || review.comment || review.notes || ''].filter(Boolean).join(' · ') : review);
@@ -922,13 +965,29 @@ def render_index(
                     item: _t(
                         translator,
                         f"actionability.{item}",
-                        item.replace("_", " ").title(),
+                        (
+                            _binding_text(translator, "waiting_on_bindings")
+                            if item == "waiting_on_bindings"
+                            else item.replace("_", " ").title()
+                        ),
                     )
                     for item in (
                         "actionable",
                         "waiting_on_dependencies",
+                        "waiting_on_bindings",
+                        "waiting_on_protocol",
                         "claimed",
                         "inactive",
+                    )
+                },
+                "binding": {
+                    item: _binding_text(translator, item)
+                    for item in (
+                        "readiness",
+                        "blockers",
+                        "ready",
+                        "not_ready",
+                        "no_blockers",
                     )
                 },
                 "common": {
@@ -980,7 +1039,7 @@ def render_deliverable_matrix(
         f'<option value="{escape(item, quote=True)}">{escape(phase_by_id.get(item) or item)}</option>'
         for item in phases
     )
-    body = '''<div class="matrix-tools"><a class="btn" href="../index.html#deliverable-matrix">Back to dashboard</a><label class="sr-only" for="search">Search deliverables</label><input class="search" id="search" type="search" placeholder="Search ID, title, owner, or dependency"><label class="sr-only" for="phase">Phase</label><select class="select" id="phase"><option value="">All phases</option>{}</select><label class="sr-only" for="status">Status</label><select class="select" id="status"><option value="">All statuses</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="ready_for_review">Ready for review</option><option value="in_review">In review</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="blocked">Blocked</option><option value="superseded">Superseded</option></select></div><section class="matrix-panel"><div class="table-scroll"><table><thead><tr><th>ID / Deliverable</th><th>Phase</th><th>Owner</th><th>Status</th><th>Dependencies</th><th>Evidence</th><th>Reviews</th></tr></thead><tbody id="rows">{}</tbody></table></div></section>'''.format(phase_options, _deliverable_rows(deliverables, translator, link_prefix="../index.html"))
+    body = '''<div class="matrix-tools"><a class="btn" href="../index.html#deliverable-matrix">Back to dashboard</a><label class="sr-only" for="search">Search deliverables</label><input class="search" id="search" type="search" placeholder="Search ID, title, owner, or dependency"><label class="sr-only" for="phase">Phase</label><select class="select" id="phase"><option value="">All phases</option>{}</select><label class="sr-only" for="status">Status</label><select class="select" id="status"><option value="">All statuses</option><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="ready_for_review">Ready for review</option><option value="in_review">In review</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="blocked">Blocked</option><option value="superseded">Superseded</option></select></div><section class="matrix-panel"><div class="table-scroll"><table><thead><tr><th>ID / Deliverable</th><th>Phase</th><th>Owner</th><th>Status</th><th>Binding readiness</th><th>Dependencies</th><th>Evidence</th><th>Reviews</th></tr></thead><tbody id="rows">{}</tbody></table></div></section>'''.format(phase_options, _deliverable_rows(deliverables, translator, link_prefix="../index.html"))
     script = r'''(() => {'use strict'; const q=document.getElementById('search'),p=document.getElementById('phase'),s=document.getElementById('status'); function filter(){const text=q.value.trim().toLowerCase();document.querySelectorAll('#rows tr[data-node]').forEach(row=>{row.hidden=!((!text||row.textContent.toLowerCase().includes(text))&&(!p.value||row.dataset.phase===p.value)&&(!s.value||row.dataset.status===s.value));});}q.addEventListener('input',filter);p.addEventListener('change',filter);s.addEventListener('change',filter);})();'''
     body = _localize_static_html(body, translator)
     return _matrix_shell(

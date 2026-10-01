@@ -16,9 +16,11 @@ from ipdctl.i18n import (
     catalog_keys,
     get_translator,
     load_project_locale,
+    localized_exception_message,
     locale_from_profile,
     normalize_locale,
 )
+from ipdctl.transaction import ProjectTransactionError
 from ipdctl.state import load_state, write_state
 
 
@@ -80,6 +82,38 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(chinese.text("unknown.message.key"), "unknown.message.key")
         with self.assertRaises(MessageFormatError):
             chinese.text("cli.context.project")
+
+    def test_transaction_errors_are_localized_without_changing_technical_values(self) -> None:
+        chinese = get_translator("zh-CN")
+        active = ProjectTransactionError(
+            "project transaction is still active in process 4312"
+        )
+        concurrent = ProjectTransactionError(
+            "another project transaction started concurrently"
+        )
+        rollback = ProjectTransactionError(
+            "project rollback failed after RuntimeError: injected failure"
+        )
+        unknown_owner = ProjectTransactionError(
+            "cannot determine whether project transaction owner process 4312 is active"
+        )
+
+        self.assertEqual(
+            localized_exception_message(active, chinese),
+            "项目事务仍由进程 4312 执行",
+        )
+        self.assertEqual(
+            localized_exception_message(concurrent, chinese),
+            "另一个项目事务已并发启动；请重试该命令",
+        )
+        self.assertEqual(
+            localized_exception_message(rollback, chinese),
+            "项目事务在 RuntimeError 后回滚失败：injected failure",
+        )
+        self.assertEqual(
+            localized_exception_message(unknown_owner, chinese),
+            "无法确定项目事务所属进程 4312 是否仍在运行；请确认没有 ipdctl 命令在执行后重试",
+        )
 
     def test_init_writes_locale_and_localizes_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

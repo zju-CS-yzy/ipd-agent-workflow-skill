@@ -9,18 +9,32 @@ Only one claim may be active. The next claim cannot begin until the previous
 iteration has reached `verify` and its latest passed verification still matches
 the current state revision and verification-input fingerprint.
 
+Every mutating `ipdctl` command serializes its complete read, preflight,
+compute, and write cycle with a project-local recovery transaction. A second
+concurrent mutation fails explicitly and should be retried after the active
+command finishes. If a process terminates during a multi-file write, the next
+command restores the pre-command bundle; a process loss after commit retirement
+does not roll the committed facts back.
+
 ## Command contract
 
 1. `ipdctl context` reads the current Phase, TR, DCP, Gate, available work,
-   blockers, active claims, and repository facts.
+   blockers, active claims, repository facts, and binding eligibility. A
+   binding-blocked Deliverable is not available work even when its lifecycle
+   dependencies are otherwise ready.
 2. `ipdctl claim <deliverable>` checks the current Phase and predecessor
    closure, records an Agent lease, and moves eligible work to `in_progress`.
    Its append-only Claim event records the Deliverable, Actor, UTC timestamp,
-   and project state revision; incomplete or future-revision events are not
-   valid provenance.
+   project state revision, and an exact binding window. Incomplete,
+   future-revision, legacy windowless, or stale-window events are not valid
+   provenance for new path changes.
    An unexpired claim owned by another actor cannot be taken over. Use
    `claim <deliverable> --recover` only when `context` reports an orphaned
    `in_progress` deliverable; an expired lease is recovered auditably.
+   An expired v0.3.1 Claim without a binding window remains fail-closed until
+   an authorized human adopts the exact current migration baseline. Its first
+   recovery derives one immutable window from that adoption; later lease
+   recovery reuses the same window rather than reopening it on the dirty tree.
 3. **work** is the authorized engineering activity performed outside the
    controller. The Agent must preserve the deliverable ID and produce durable
    evidence.
@@ -66,15 +80,26 @@ new claim until `refresh` and `verify` complete.
 managed `evidence/<deliverable-id>/**` rule for every current deliverable. It
 does not guess which deliverable owns real source, test, documentation,
 configuration, tool, firmware, or hardware paths; those require explicit
-user-authored bindings. Reconciliation runs after the lease may have closed, so
-it verifies changed-path ownership against retained `claim` events. A binding
-without Claim provenance fails verification. Claim provenance is valid only
-when its Deliverable, Actor, UTC timestamp, and non-future state revision pass
-the runtime contract.
+user-authored bindings. Every actually changed critical path must resolve to
+one known Deliverable owner. Reconciliation runs after the lease may have
+closed, so it verifies changed-path ownership against the current iteration's
+retained Claim binding window, not any Claim ever recorded for that
+Deliverable. A binding without current Claim provenance fails verification.
+
+An existing project may contain reviewed work that predates the runtime. In
+that migration case, `ipdctl adopt-baseline` can record the exact changed-path
+snapshot as an append-only `artifact_baseline_adopted` event. The operation
+requires an explicitly authorized human Actor and reason, is idempotent for an
+identical snapshot, creates no Claim, changes no Deliverable status, and never
+mutates Git/SVN. A successful `verify` stores the exact verified artifact
+baseline for the next iteration, so an intentionally dirty working tree does
+not require a fabricated commit or historical Claim.
 
 ## Authority boundaries
 
 - A claim is a local working-tree lease, not a distributed lock across clones.
+- Baseline adoption is a human migration decision, not Agent self-approval,
+  VCS history, or enterprise identity proof.
 - `accepted` requires evidence and an authorized human approval review.
 - A rejected deliverable remains auditable and may be reclaimed into
   `in_progress` for rework.

@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 from ipdctl.reconcile import (
-    ReconcileError,
     default_artifact_bindings,
     load_artifact_bindings,
     reconcile_project,
@@ -83,6 +82,23 @@ class GitRepositoryRuntimeTests(unittest.TestCase):
             self.assertEqual(paths, ["README.md", "staged.txt", "untracked.txt"])
             _, staged_paths = changed_paths(root, staged=True)
             self.assertEqual(staged_paths, ["staged.txt"])
+
+    def test_transaction_journal_does_not_make_repository_dirty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.initialize_repository(root)
+            journal = root / ".ipd" / ".ipdctl-transaction" / "files"
+            journal.mkdir(parents=True)
+            (journal / "0.bin").write_text("snapshot\n", encoding="utf-8")
+
+            self.assertFalse(inspect_repository(root).dirty)
+            self.assertEqual(changed_paths(root)[1], [])
+
+            (root / "engineering-change.txt").write_text(
+                "real change\n", encoding="utf-8"
+            )
+            self.assertTrue(inspect_repository(root).dirty)
+            self.assertEqual(changed_paths(root)[1], ["engineering-change.txt"])
 
     def test_reconcile_maps_paths_and_classifies_unbound_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -160,8 +176,7 @@ ignore:
             )
             self.assertTrue(
                 any(
-                    issue["code"] == "BINDING_UNCLAIMED_DELIVERABLE"
-                    and issue["deliverable_id"] == "D-COMPONENT"
+                    issue["code"] == "BINDING_BASELINE_MISSING"
                     for issue in without_claim["issues"]
                 )
             )
@@ -182,13 +197,13 @@ ignore:
                 },
                 write=False,
             )
-            self.assertFalse(
+            self.assertTrue(
                 any(
-                    issue["code"] == "BINDING_UNCLAIMED_DELIVERABLE"
+                    issue["code"] == "BINDING_BASELINE_MISSING"
                     for issue in with_claim["issues"]
                 )
             )
-            self.assertEqual(with_claim["claim_provenance"], ["D-COMPONENT"])
+            self.assertEqual(with_claim["claim_provenance"], [])
 
             for label, bad_event in (
                 (
@@ -230,13 +245,14 @@ ignore:
                     },
                 ),
             ):
-                with self.subTest(label=label), self.assertRaises(ReconcileError):
-                    reconcile_project(
+                with self.subTest(label=label):
+                    invalid = reconcile_project(
                         root,
                         state,
                         runtime={"events": [bad_event], "active_claims": {}},
                         write=False,
                     )
+                    self.assertEqual(invalid["status"], "failed")
 
     def test_runtime_validator_rejects_claim_without_provenance_fields(self) -> None:
         runtime = create_runtime_state()

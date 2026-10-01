@@ -8,6 +8,7 @@ Agent runtime facts while giving every renderer the same typed graph.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from typing import Any
 
 
@@ -17,10 +18,17 @@ DISPLAY_STATUSES = {"planned": "not_started", "accepted": "approved"}
 ACTIONABILITY_STATES = (
     "actionable",
     "waiting_on_dependencies",
+    "waiting_on_bindings",
+    "waiting_on_protocol",
     "claimed",
     "inactive",
 )
-ATTENTION_STATES = ("explicitly_blocked", "rework_required", "orphan_claim")
+ATTENTION_STATES = (
+    "explicitly_blocked",
+    "rework_required",
+    "orphan_claim",
+    "binding_blocked",
+)
 
 
 def _string(value: Any, default: str = "") -> str:
@@ -53,6 +61,90 @@ def _records(value: Any) -> list[dict[str, Any]]:
             records.append(record)
         return records
     return []
+
+
+def _machine_copy(value: Any) -> Any:
+    """Return a deterministic JSON-compatible copy of machine data."""
+
+    if isinstance(value, Mapping):
+        return {
+            _string(key): _machine_copy(value[key])
+            for key in sorted(value, key=lambda item: _string(item))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_machine_copy(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return [
+            _machine_copy(item)
+            for item in sorted(value, key=lambda item: _string(item))
+        ]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return _string(value)
+
+
+def _normalize_eligibility(value: Any) -> dict[str, Any]:
+    """Normalize the shared eligibility projection without inventing facts."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    document = _machine_copy(value)
+    raw_deliverables = document.get("deliverables")
+    if isinstance(raw_deliverables, Mapping):
+        document["deliverables"] = {
+            _string(identifier): dict(record) if isinstance(record, Mapping) else {}
+            for identifier, record in sorted(
+                raw_deliverables.items(), key=lambda item: _string(item[0])
+            )
+        }
+    elif isinstance(raw_deliverables, list):
+        normalized: dict[str, dict[str, Any]] = {}
+        for raw in raw_deliverables:
+            if not isinstance(raw, Mapping):
+                continue
+            identifier = _identifier(raw, "deliverable_id")
+            if identifier:
+                normalized[identifier] = dict(raw)
+        document["deliverables"] = {
+            identifier: normalized[identifier] for identifier in sorted(normalized)
+        }
+    elif "deliverables" in document:
+        document["deliverables"] = {}
+    return document
+
+
+def _eligibility_fields(value: Any) -> dict[str, Any] | None:
+    """Extract per-deliverable readiness fields from shared eligibility."""
+
+    if not isinstance(value, Mapping):
+        return None
+    eligible = value.get("eligible") if isinstance(value.get("eligible"), bool) else None
+    binding_ready = (
+        value.get("binding_ready")
+        if isinstance(value.get("binding_ready"), bool)
+        else None
+    )
+    issue_codes = sorted(set(_string_list(value.get("issue_codes"))))
+    raw_blockers = value.get("blockers")
+    if raw_blockers is None:
+        blockers: list[Any] = []
+    elif isinstance(raw_blockers, (set, frozenset)):
+        blockers = [
+            _machine_copy(item)
+            for item in sorted(raw_blockers, key=lambda item: _string(item))
+        ]
+    elif isinstance(raw_blockers, (list, tuple)):
+        blockers = [_machine_copy(item) for item in raw_blockers]
+    else:
+        blockers = [_machine_copy(raw_blockers)]
+    binding_blocked = binding_ready is False or eligible is False or bool(blockers)
+    return {
+        "eligible": eligible,
+        "binding_ready": binding_ready,
+        "issue_codes": issue_codes,
+        "binding_blockers": blockers,
+        "binding_blocked": binding_blocked,
+    }
 
 
 def _identifier(record: Mapping[str, Any], *fallback_keys: str) -> str:
@@ -353,6 +445,8 @@ def build_dashboard_model(
     state: Mapping[str, Any],
     runtime: Mapping[str, Any] | None = None,
     *,
+    eligibility: Mapping[str, Any] | None = None,
+    claim_readiness: Mapping[str, Any] | None = None,
     translator: Any | None = None,
     locale: str = "en",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -368,6 +462,24 @@ def build_dashboard_model(
         translator = get_translator(locale)
     locale = _string(getattr(translator, "locale", locale), locale)
     runtime = runtime if isinstance(runtime, Mapping) else {}
+    eligibility_document = _normalize_eligibility(eligibility)
+    eligibility_deliverables = (
+        eligibility_document.get("deliverables")
+        if isinstance(eligibility_document.get("deliverables"), Mapping)
+        else {}
+    )
+    claim_readiness_document = (
+        deepcopy(dict(claim_readiness))
+        if isinstance(claim_readiness, Mapping)
+        else {
+            "schema_version": "1.0",
+            "eligible": True,
+            "workflow_step": None,
+            "reason_code": None,
+            "required_action": None,
+        }
+    )
+    claim_ready = bool(claim_readiness_document.get("eligible"))
     project_state = state.get("project") if isinstance(state.get("project"), Mapping) else {}
     project_name = _display_text(
         project_state.get("name") or (process.get("profile") or {}).get("name"),
@@ -451,6 +563,14 @@ def build_dashboard_model(
     available_tasks: list[dict[str, Any]] = []
     blocked_items: list[dict[str, Any]] = []
     for item in deliverables:
+        eligibility_fields = _eligibility_fields(eligibility_deliverables.get(item["id"]))
+        binding_blocked = bool(
+            eligibility_fields and eligibility_fields["binding_blocked"]
+        )
+        binding_actionability_blocked = binding_blocked and (
+            item["status"] in {"planned", "blocked", "rejected"}
+            or bool(item.get("recoverable_claim"))
+        )
         unmet = [
             dependency
             for dependency in item["depends_on"]
@@ -466,6 +586,10 @@ def build_dashboard_model(
             actionability_state = "inactive"
         elif unmet:
             actionability_state = "waiting_on_dependencies"
+        elif binding_actionability_blocked:
+            actionability_state = "waiting_on_bindings"
+        elif item["status"] in {"planned", "blocked", "rejected"} and not claim_ready:
+            actionability_state = "waiting_on_protocol"
         elif item["status"] in {"planned", "blocked", "rejected"}:
             actionability_state = "actionable"
         else:
@@ -477,6 +601,8 @@ def build_dashboard_model(
             attention = "explicitly_blocked"
         elif item["status"] == "rejected":
             attention = "rework_required"
+        elif binding_actionability_blocked:
+            attention = "binding_blocked"
         else:
             attention = None
 
@@ -486,6 +612,13 @@ def build_dashboard_model(
             "in_current_scope": in_current_scope,
             "unmet_dependencies": unmet,
         }
+        if not claim_ready:
+            item["actionability"]["claim_ready"] = False
+            item["actionability"]["claim_blocker"] = (
+                claim_readiness_document.get("reason_code")
+            )
+        if eligibility_fields is not None:
+            item["actionability"].update(eligibility_fields)
         item["attention"] = attention
 
         if item["actionability"]["actionable"]:
@@ -504,6 +637,7 @@ def build_dashboard_model(
         if in_current_scope and (
             item["status"] == "blocked"
             or actionability_state == "waiting_on_dependencies"
+            or binding_actionability_blocked
             or item.get("recoverable_claim")
         ):
             blocked_items.append(
@@ -517,6 +651,11 @@ def build_dashboard_model(
                     "recoverable": bool(item.get("recoverable_claim")),
                     "actionability": dict(item["actionability"]),
                     "attention": attention,
+                    "binding_blockers": (
+                        list(eligibility_fields["binding_blockers"])
+                        if eligibility_fields is not None
+                        else []
+                    ),
                 }
             )
 
@@ -790,6 +929,7 @@ def build_dashboard_model(
     state_document = {
         "schema_version": "2.0",
         "locale": locale,
+        "eligibility": eligibility_document,
         "project": {
             "name": project_name,
             "state_revision": state.get("revision"),
@@ -831,6 +971,15 @@ def build_dashboard_model(
                 and item["actionability"]["in_current_scope"]
                 for item in deliverables
             ),
+            "binding_blocked": sum(
+                item["actionability"].get("binding_blocked") is True
+                and (
+                    item["status"] in {"planned", "blocked", "rejected"}
+                    or bool(item.get("recoverable_claim"))
+                )
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
         },
         "phases": phases,
         "activities": activities,
@@ -838,6 +987,7 @@ def build_dashboard_model(
         "deliverables": deliverables,
         "available_tasks": available_tasks,
         "blocked_items": blocked_items,
+        "claim_readiness": claim_readiness_document,
     }
     graph_document = {
         "schema_version": "2.0",

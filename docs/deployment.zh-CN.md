@@ -35,7 +35,13 @@ ipdctl --help
 
 创建 Tag 前完成 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)。源 Commit 必须干净，CI 必须通过，包版本与 Changelog 必须一致，发布卫生检查必须确认不存在缓存、构建输出、运行时生成数据、凭据类文件或高置信度 Secret。
 
-规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.3.1-beta`（Python 包版本 `0.3.1b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
+规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.3.2-beta`（Python 包版本 `0.3.2b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
+
+发布验证必须包含一次 v0.3.1 项目原地升级：项目已有 Dirty Critical 文件，
+验证单一 Owner Binding，预览并记录获得授权的 Baseline Adoption，使一个真实
+v0.3.1 无 Window Active Claim 过期并完成恢复，再完成两轮完整 Claim 迭代，
+并证明 Context、Dashboard、Reconcile 与 Verify 给出的
+Eligibility 一致。Adoption 不得创建 Claim 或修改 Git/SVN。
 
 只有在模拟完整项目生命周期通过，且没有缺失产物或一级流程阻塞问题后，才能发布。发布资产限定为一个 Skill ZIP、一个 wheel、一个 sdist 和校验和；构建产物不得提交进仓库。
 

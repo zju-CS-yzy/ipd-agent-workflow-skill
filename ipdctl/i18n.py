@@ -137,6 +137,70 @@ _EXCEPTION_MESSAGE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"final lifecycle phase is already complete: (?P<phase>.+)"),
         "error.final_phase_complete",
     ),
+    (
+        re.compile(r"transaction path leaves project root: (?P<path>.+)"),
+        "error.transaction_path_outside_project",
+    ),
+    (
+        re.compile(r"cannot read pending project transaction: (?P<detail>.+)"),
+        "error.transaction_unreadable",
+    ),
+    (
+        re.compile(r"pending project transaction has an invalid schema"),
+        "error.transaction_schema_invalid",
+    ),
+    (
+        re.compile(r"pending project transaction has invalid files"),
+        "error.transaction_files_invalid",
+    ),
+    (
+        re.compile(r"pending transaction file record is invalid"),
+        "error.transaction_file_record_invalid",
+    ),
+    (
+        re.compile(r"pending transaction backup is missing"),
+        "error.transaction_backup_missing",
+    ),
+    (
+        re.compile(r"pending transaction backup leaves its directory"),
+        "error.transaction_backup_outside_directory",
+    ),
+    (
+        re.compile(r"pending transaction Dashboard backup is missing"),
+        "error.transaction_dashboard_backup_missing",
+    ),
+    (
+        re.compile(r"project transaction is still active in process (?P<pid>\d+)"),
+        "error.transaction_active",
+    ),
+    (
+        re.compile(
+            r"cannot determine whether project transaction owner process "
+            r"(?P<pid>.+?) is active"
+        ),
+        "error.transaction_owner_unknown",
+    ),
+    (
+        re.compile(r"another project transaction started concurrently"),
+        "error.transaction_concurrent",
+    ),
+    (
+        re.compile(
+            r"nested project transaction exceeds the outer transaction scope: "
+            r"(?P<paths>.+)"
+        ),
+        "error.transaction_nested_scope_paths",
+    ),
+    (
+        re.compile(r"nested project transaction exceeds the outer transaction scope"),
+        "error.transaction_nested_scope",
+    ),
+    (
+        re.compile(
+            r"project rollback failed after (?P<kind>[^:]+): (?P<detail>.+)"
+        ),
+        "error.transaction_rollback_failed",
+    ),
 )
 
 

@@ -76,6 +76,9 @@ def render_dashboard(
     state: Mapping[str, Any],
     *,
     runtime: Mapping[str, Any] | None = None,
+    bindings: Mapping[str, Any] | None = None,
+    eligibility: Mapping[str, Any] | None = None,
+    claim_readiness: Mapping[str, Any] | None = None,
     locale: str = "en",
 ) -> dict[str, Any]:
     """Render and atomically publish the complete interactive Dashboard tree.
@@ -88,6 +91,12 @@ def render_dashboard(
         raise TypeError("process must be a mapping")
     if not isinstance(state, Mapping):
         raise TypeError("state must be a mapping")
+    if bindings is not None and not isinstance(bindings, Mapping):
+        raise TypeError("bindings must be a mapping")
+    if eligibility is not None and not isinstance(eligibility, Mapping):
+        raise TypeError("eligibility must be a mapping")
+    if claim_readiness is not None and not isinstance(claim_readiness, Mapping):
+        raise TypeError("claim_readiness must be a mapping")
 
     from .dashboard_html import (
         render_deliverable_matrix,
@@ -100,13 +109,33 @@ def render_dashboard(
         render_dependency_svg,
         render_process_svg,
     )
+    from .eligibility import claim_protocol_readiness, eligibility_fingerprint
     from .i18n import get_translator
 
     translator = get_translator(locale)
+    eligibility_input = dict(eligibility) if isinstance(eligibility, Mapping) else {}
+    if "bindings_sha256" in eligibility_input:
+        bindings_sha256 = eligibility_input.get("bindings_sha256")
+    elif isinstance(bindings, Mapping):
+        bindings_sha256 = _value_sha256(bindings)
+        eligibility_input["bindings_sha256"] = bindings_sha256
+    else:
+        bindings_sha256 = None
+    claim_readiness_input = (
+        dict(claim_readiness)
+        if isinstance(claim_readiness, Mapping)
+        else claim_protocol_readiness(
+            Path(project_root),
+            state,
+            runtime if isinstance(runtime, Mapping) else {},
+        )
+    )
     state_data, graph_data = build_dashboard_model(
         process,
         state,
         runtime,
+        eligibility=eligibility_input or None,
+        claim_readiness=claim_readiness_input,
         translator=translator,
         locale=locale,
     )
@@ -226,7 +255,7 @@ def render_dashboard(
             for filename in filenames
         ]
         manifest = {
-            "schema_version": "2.0",
+            "schema_version": "2.1",
             "locale": translator.locale,
             "output_directory": DASHBOARD_RELATIVE_PATH.as_posix(),
             "project": state_data["project"]["name"],
@@ -237,6 +266,10 @@ def render_dashboard(
             "state_sha256": _value_sha256(state),
             "runtime_claims_sha256": _value_sha256(
                 runtime.get("active_claims", {}) if isinstance(runtime, Mapping) else {}
+            ),
+            "bindings_sha256": bindings_sha256,
+            "eligibility_sha256": eligibility_fingerprint(
+                state_data.get("eligibility", {})
             ),
             "files": [*filenames, "manifest.json"],
             "outputs": outputs,

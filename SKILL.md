@@ -51,6 +51,7 @@ The project fact sources are `.ipd/task_profile.yaml`, `.ipd/tailored_process.ya
 python -m ipdctl init . --name PROJECT_NAME --task-type software --locale en
 python -m ipdctl tailor .
 python -m ipdctl context .
+python -m ipdctl adopt-baseline . --preview --json
 python -m ipdctl claim DELIVERABLE --project-root .
 python -m ipdctl close DELIVERABLE --project-root . --evidence evidence/DELIVERABLE/result.md
 python -m ipdctl review DELIVERABLE --project-root . --reviewer REVIEWER
@@ -63,7 +64,7 @@ python -m ipdctl reconcile .
 python -m ipdctl validate .
 ```
 
-The full command surface is `init`, `tailor`, `context`, `claim`, `close`,
+The full command surface is `init`, `tailor`, `context`, `adopt-baseline`, `claim`, `close`,
 `review`, `approve`, `reject`, `advance-phase`, `refresh`, `verify`,
 `repository`, `reconcile`, `validate`, and the `status` alias for `context`.
 Use `init` only when no state exists. Do not use `--force` unless replacement
@@ -77,9 +78,17 @@ while impersonating a human.
 not infer ownership for real source, firmware, hardware, test, documentation,
 configuration, or tool paths. Add explicit user-authored rules in
 `.ipd/artifact_bindings.yaml` for those paths before relying on reconciliation.
-Reconciliation also requires every mapped changed Deliverable to have an
-auditable `claim` event in Agent Runtime; a binding without Claim provenance is
-not ownership evidence.
+Every actually changed critical path must resolve to one Deliverable owner.
+New Claim events capture a binding window, so a historical Claim cannot
+authorize unrelated later changes.
+
+For an existing project whose governed paths were already dirty before this
+protocol was installed, first validate explicit bindings, then let an
+authorized human run `adopt-baseline` with an Actor and reason. An Agent may
+preview the snapshot but must not self-authorize adoption. Adoption records
+exact hashes in append-only runtime history; it creates no Claim and never
+mutates Git or SVN. After any binding or source change, run `refresh` and
+`verify` before relying on the Dashboard or beginning the next iteration.
 
 Use `advance-phase` only after every current-phase Gate is approved and the
 latest passed verification matches both the current state revision and the

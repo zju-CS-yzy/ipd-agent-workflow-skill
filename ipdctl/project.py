@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from .dependencies import unmet_dependencies
+from .eligibility import (
+    binding_eligibility,
+    claim_protocol_readiness,
+    deliverable_binding_status,
+    eligibility_fingerprint,
+)
 from .governance import apply_phase_pointers, phase_history_issues, phase_pointers
 from .i18n import get_translator, load_project_locale, normalize_locale
 from .repository import changed_paths, inspect_repository
@@ -17,6 +23,7 @@ from .runtime import (
     create_runtime_state,
     expire_claims,
     load_runtime,
+    record_artifact_baseline_adoption,
     record_event,
     save_runtime,
 )
@@ -290,11 +297,38 @@ def verification_input_snapshot(
         "claim_history": [
             {
                 key: event.get(key)
-                for key in ("action", "deliverable", "actor", "at", "state_revision")
+                for key in (
+                    "action",
+                    "deliverable",
+                    "actor",
+                    "at",
+                    "state_revision",
+                    "binding_window",
+                )
                 if key in event
             }
             for event in runtime.get("events", [])
             if isinstance(event, dict) and event.get("action") == "claim"
+        ],
+        "artifact_baseline_history": [
+            {
+                key: event.get(key)
+                for key in (
+                    "action",
+                    "actor",
+                    "actor_type",
+                    "authorized",
+                    "reason",
+                    "at",
+                    "state_revision",
+                    "artifact_baseline",
+                    "snapshot",
+                )
+                if key in event
+            }
+            for event in runtime.get("events", [])
+            if isinstance(event, dict)
+            and event.get("action") == "artifact_baseline_adopted"
         ],
         "phase_history": [
             {
@@ -543,6 +577,93 @@ def load_project(project_root: str | Path) -> tuple[dict[str, Any], dict[str, An
     return state, process
 
 
+def artifact_baseline_preview(project_root: str | Path) -> dict[str, Any]:
+    """Return a no-write baseline preview using the shared readiness contract."""
+
+    paths = project_paths(project_root)
+    state = load_state(paths["state"])
+    issues = validate_state(state)
+    if issues:
+        raise ProjectError(f"invalid project state: {issues[0]}")
+    from .reconcile import preview_artifact_baseline
+
+    preview = preview_artifact_baseline(
+        paths["root"], state, bindings_path=paths["bindings"]
+    )
+    if not isinstance(preview, dict):
+        raise ProjectError("artifact baseline preview must be an object")
+    from .eligibility import normalize_eligibility
+
+    return normalize_eligibility(preview, state)
+
+
+def adopt_artifact_baseline(
+    project_root: str | Path,
+    *,
+    actor: str,
+    actor_type: str,
+    authorized: bool,
+    reason: str,
+) -> dict[str, Any]:
+    """Append an authorized baseline event without changing project or VCS facts."""
+
+    if not isinstance(actor, str) or not actor.strip():
+        raise ProjectError("artifact baseline actor must not be empty")
+    if actor_type != "human":
+        raise ProjectError("artifact baseline adoption requires actor_type 'human'")
+    if authorized is not True:
+        raise ProjectError("artifact baseline adoption requires --authorized")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ProjectError("artifact baseline adoption reason must not be empty")
+
+    paths = project_paths(project_root)
+    state = load_state(paths["state"])
+    state_issues = validate_state(state)
+    if state_issues:
+        raise ProjectError(f"invalid project state: {state_issues[0]}")
+    runtime = load_runtime(paths["root"])
+    preview = artifact_baseline_preview(paths["root"])
+    if not preview["eligible"]:
+        first = next(
+            (
+                item.get("code") or item.get("reason_code") or item.get("message")
+                for item in preview["issues"]
+                if isinstance(item, dict)
+            ),
+            "ARTIFACT_BASELINE_INELIGIBLE",
+        )
+        raise ProjectError(f"artifact baseline adoption preflight failed: {first}")
+
+    from .reconcile import build_artifact_baseline_adoption
+
+    event = build_artifact_baseline_adoption(
+        paths["root"],
+        state,
+        actor=actor,
+        actor_type=actor_type,
+        authorized=authorized,
+        reason=reason,
+        bindings_path=paths["bindings"],
+        preview=preview,
+    )
+    updated_runtime, appended = record_artifact_baseline_adoption(runtime, event)
+    if appended:
+        save_runtime(paths["root"], updated_runtime)
+    snapshot = event["artifact_baseline"]
+    return {
+        "schema_version": "1.0",
+        "status": "passed",
+        "eligible": True,
+        "preview": False,
+        "adopted": appended,
+        "idempotent": not appended,
+        "baseline_id": snapshot.get("baseline_id"),
+        "artifact_baseline": deepcopy(snapshot),
+        "eligibility": preview,
+        "runtime_revision": updated_runtime.get("revision"),
+    }
+
+
 def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     paths = project_paths(project_root)
     state, process = load_project(project_root)
@@ -562,6 +683,10 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         if consistency:
             raise ProjectError(f"inconsistent project bundle: {consistency[0]}")
     current_phase = state["project"]["phase"]
+    eligibility = binding_eligibility(
+        paths["root"], state, runtime, bindings_path=paths["bindings"]
+    )
+    claim_readiness = claim_protocol_readiness(paths["root"], state, runtime)
     status_by_id = {item["id"]: item["status"] for item in state["deliverables"]}
     graph = {item["id"]: item.get("depends_on", []) for item in state["deliverables"]}
     available: list[dict[str, Any]] = []
@@ -571,10 +696,39 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
             continue
         unmet = list(unmet_dependencies(item["id"], graph, status_by_id))
         active_claim = runtime["active_claims"].get(item["id"])
-        if item["status"] in {"planned", "blocked", "rejected"} and not unmet and not active_claim:
+        binding_status = deliverable_binding_status(eligibility, item["id"])
+        binding_blocked = not binding_status["eligible"]
+        binding_relevant = item["status"] in {"planned", "blocked", "rejected"}
+        if (
+            item["status"] in {"planned", "blocked", "rejected"}
+            and not unmet
+            and not active_claim
+            and not binding_blocked
+            and claim_readiness["eligible"]
+        ):
             available.append({"id": item["id"], "title": item["title"], "status": item["status"]})
         orphaned_claim = item["status"] == "in_progress" and not active_claim
-        if item["status"] == "blocked" or unmet or orphaned_claim:
+        if (
+            item["status"] == "blocked"
+            or unmet
+            or orphaned_claim
+            or (binding_relevant and binding_blocked)
+        ):
+            binding_blockers = binding_status.get("blockers", [])
+            binding_reason = next(
+                (
+                    (
+                        blocker.get("reason_code")
+                        or blocker.get("message")
+                        or blocker.get("code")
+                    )
+                    if isinstance(blocker, dict)
+                    else str(blocker)
+                    for blocker in binding_blockers
+                    if isinstance(blocker, (dict, str))
+                ),
+                None,
+            )
             blocked.append(
                 {
                     "id": item["id"],
@@ -584,9 +738,19 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
                     "reason": (
                         "active claim lease is missing; recover this deliverable before work continues"
                         if orphaned_claim
-                        else item.get("blocked_reason")
+                        else item.get("blocked_reason") or binding_reason
+                    ),
+                    "code": (
+                        binding_status.get("issue_codes", [None])[0]
+                        if binding_relevant
+                        and binding_blocked
+                        and binding_status.get("issue_codes")
+                        else None
                     ),
                     "recoverable": orphaned_claim,
+                    "binding_ready": binding_status["binding_ready"],
+                    "issue_codes": binding_status["issue_codes"],
+                    "binding_blockers": binding_blockers,
                 }
             )
     repo = inspect_repository(paths["root"])
@@ -604,6 +768,8 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         "recoverable_claims": sorted(
             item["id"] for item in blocked if item.get("recoverable") is True
         ),
+        "claim_readiness": claim_readiness,
+        "eligibility": eligibility,
         "repository": repo.as_dict(),
     }
 
@@ -623,6 +789,19 @@ def refresh_project(project_root: str | Path) -> dict[str, Any]:
     )
     if consistency:
         raise ProjectError(f"inconsistent project bundle: {consistency[0]}")
+    eligibility = binding_eligibility(
+        paths["root"], state, current_runtime, bindings_path=paths["bindings"]
+    )
+    bindings = None
+    if paths["bindings"].is_file():
+        try:
+            from .reconcile import load_artifact_bindings
+
+            bindings = load_artifact_bindings(paths["bindings"])
+        except (OSError, ValueError):
+            # Eligibility already carries a stable diagnostic.  Refresh still
+            # publishes a Dashboard that can explain why work is blocked.
+            bindings = None
     repo = inspect_repository(paths["root"])
     updated = revised_copy(state)
     updated["project"]["repository"] = _portable_repository_record(repo)
@@ -633,7 +812,13 @@ def refresh_project(project_root: str | Path) -> dict[str, Any]:
 
     write_state(paths["state"], updated)
     manifest = render_dashboard(
-        paths["root"], process, updated, runtime=current_runtime, locale=locale
+        paths["root"],
+        process,
+        updated,
+        runtime=current_runtime,
+        bindings=bindings,
+        eligibility=eligibility,
+        locale=locale,
     )
     runtime = record_event(
         current_runtime,
@@ -657,6 +842,24 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
     issue_rows = [
         {"path": issue.path, "message": issue.message} for issue in validate_state(state)
     ]
+    eligibility = binding_eligibility(
+        paths["root"], state, runtime, bindings_path=paths["bindings"]
+    )
+    for issue in eligibility["issues"]:
+        if not isinstance(issue, dict) or issue.get("severity") != "error":
+            continue
+        issue_rows.append(
+            {
+                "path": issue.get("path") or "$.eligibility",
+                "code": issue.get("code") or "binding_ineligible",
+                "message": (
+                    issue.get("message")
+                    or issue.get("reason_code")
+                    or issue.get("code")
+                    or "artifact binding eligibility failed"
+                ),
+            }
+        )
     if process is None:
         issue_rows.append(
             {
@@ -681,6 +884,41 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                     "message": message,
                 }
             )
+    required_outputs = {
+        ".ipd/dashboard/index.html",
+        ".ipd/dashboard/assets/ipd_flow.svg",
+        ".ipd/dashboard/assets/current_status_flow.svg",
+        ".ipd/dashboard/assets/deliverable_dependency.svg",
+        ".ipd/dashboard/phases/concept.svg",
+        ".ipd/dashboard/phases/plan.svg",
+        ".ipd/dashboard/phases/develop.svg",
+        ".ipd/dashboard/phases/qualify.svg",
+        ".ipd/dashboard/phases/launch.svg",
+        ".ipd/dashboard/phases/lifecycle.svg",
+        ".ipd/dashboard/matrices/deliverable_matrix.html",
+        ".ipd/dashboard/matrices/gate_matrix.html",
+        ".ipd/dashboard/data/state.json",
+        ".ipd/dashboard/data/graph.json",
+    }
+    phase_views = {
+        phase: f"phases/{phase}.svg"
+        for phase in ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
+    }
+    expected_views = {
+        "dashboard": "index.html",
+        "process_flow": "assets/ipd_flow.svg",
+        "current_status": "assets/current_status_flow.svg",
+        "deliverable_dependency": "assets/deliverable_dependency.svg",
+        "deliverable_matrix": "matrices/deliverable_matrix.html",
+        "gate_matrix": "matrices/gate_matrix.html",
+        "state": "data/state.json",
+        "graph": "data/graph.json",
+        "phases": phase_views,
+    }
+    expected_files = sorted(
+        Path(relative).relative_to(".ipd/dashboard").as_posix()
+        for relative in required_outputs
+    ) + ["manifest.json"]
     manifest_path = paths["dashboard"] / "manifest.json"
     if not manifest_path.exists():
         issue_rows.append(
@@ -693,12 +931,48 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
     else:
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("schema_version") != "2.0":
+            if not isinstance(manifest, dict):
+                raise ValueError("manifest root must be an object")
+            if manifest.get("schema_version") != "2.1":
                 issue_rows.append(
                     {
                         "path": "$.dashboard.schema_version",
                         "code": "dashboard_schema_unsupported",
                         "message": translator.text("report.dashboard.schema_unsupported"),
+                    }
+                )
+            expected_contract = {
+                "project": state.get("project", {}).get("name"),
+                "source_revision": state.get("revision"),
+                "process_schema_version": (
+                    process.get("schema_version") if process is not None else None
+                ),
+                "output_directory": ".ipd/dashboard",
+            }
+            for field, expected in expected_contract.items():
+                if manifest.get(field) != expected:
+                    issue_rows.append(
+                        {
+                            "path": f"$.dashboard.{field}",
+                            "code": "dashboard_manifest_contract_mismatch",
+                            "message": f"dashboard manifest {field} does not match its source facts",
+                        }
+                    )
+            files = manifest.get("files")
+            if files != expected_files:
+                issue_rows.append(
+                    {
+                        "path": "$.dashboard.files",
+                        "code": "dashboard_manifest_contract_mismatch",
+                        "message": "dashboard manifest files do not match the managed output contract",
+                    }
+                )
+            if manifest.get("views") != expected_views:
+                issue_rows.append(
+                    {
+                        "path": "$.dashboard.views",
+                        "code": "dashboard_manifest_contract_mismatch",
+                        "message": "dashboard manifest views do not match the managed view contract",
                     }
                 )
             if manifest.get("state_revision") != state.get("revision"):
@@ -741,6 +1015,30 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                         "path": "$.dashboard.runtime_claims_sha256",
                         "code": "dashboard_runtime_stale",
                         "message": translator.text("report.dashboard.runtime_stale"),
+                    }
+                )
+            if manifest.get("bindings_sha256") != eligibility.get(
+                "bindings_sha256"
+            ):
+                issue_rows.append(
+                    {
+                        "path": "$.dashboard.bindings_sha256",
+                        "code": "dashboard_bindings_stale",
+                        "message": translator.text(
+                            "report.dashboard.bindings_stale"
+                        ),
+                    }
+                )
+            if manifest.get("eligibility_sha256") != eligibility_fingerprint(
+                eligibility
+            ):
+                issue_rows.append(
+                    {
+                        "path": "$.dashboard.eligibility_sha256",
+                        "code": "dashboard_eligibility_stale",
+                        "message": translator.text(
+                            "report.dashboard.eligibility_stale"
+                        ),
                     }
                 )
             outputs = manifest.get("outputs", [])
@@ -793,22 +1091,6 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                     issue_rows.append(
                         {"path": f"$.dashboard.outputs[{index}]", "message": f"output hash mismatch: {relative}"}
                     )
-            required_outputs = {
-                ".ipd/dashboard/index.html",
-                ".ipd/dashboard/assets/ipd_flow.svg",
-                ".ipd/dashboard/assets/current_status_flow.svg",
-                ".ipd/dashboard/assets/deliverable_dependency.svg",
-                ".ipd/dashboard/phases/concept.svg",
-                ".ipd/dashboard/phases/plan.svg",
-                ".ipd/dashboard/phases/develop.svg",
-                ".ipd/dashboard/phases/qualify.svg",
-                ".ipd/dashboard/phases/launch.svg",
-                ".ipd/dashboard/phases/lifecycle.svg",
-                ".ipd/dashboard/matrices/deliverable_matrix.html",
-                ".ipd/dashboard/matrices/gate_matrix.html",
-                ".ipd/dashboard/data/state.json",
-                ".ipd/dashboard/data/graph.json",
-            }
             for missing in sorted(required_outputs - output_records):
                 issue_rows.append(
                     {"path": "$.dashboard.outputs", "message": f"required output is missing: {missing}"}
@@ -820,20 +1102,20 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                         "message": f"unexpected managed output: {unexpected}",
                     }
                 )
-            expected_files = required_outputs | {".ipd/dashboard/manifest.json"}
+            expected_project_files = required_outputs | {".ipd/dashboard/manifest.json"}
             actual_files = {
                 candidate.relative_to(paths["root"]).as_posix()
                 for candidate in dashboard_root.rglob("*")
                 if candidate.is_file()
             }
-            for unexpected in sorted(actual_files - expected_files):
+            for unexpected in sorted(actual_files - expected_project_files):
                 issue_rows.append(
                     {
                         "path": "$.dashboard",
                         "message": f"unexpected dashboard file: {unexpected}",
                     }
                 )
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
             issue_rows.append({"path": "$.dashboard", "message": f"invalid manifest: {exc}"})
 
     def check_evidence(value: Any, path: str) -> None:
@@ -884,6 +1166,116 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                 )
     except (ImportError, OSError, ValueError) as exc:
         issue_rows.append({"path": "$.reconciliation", "message": str(exc)})
+    artifact_baseline = None
+    if not issue_rows:
+        try:
+            from .reconcile import artifact_baseline_snapshot
+
+            artifact_baseline = artifact_baseline_snapshot(
+                paths["root"], state, bindings_path=paths["bindings"]
+            )
+        except (ImportError, OSError, ValueError) as exc:
+            issue_rows.append(
+                {
+                    "path": "$.artifact_baseline",
+                    "code": "artifact_baseline_snapshot_failed",
+                    "message": str(exc),
+                }
+            )
+    if process is not None:
+        from .dashboard import render_dashboard
+        from .reconcile import load_artifact_bindings
+
+        def prospective_runtime_for(status: str) -> dict[str, Any]:
+            details: dict[str, Any] = {
+                "status": status,
+                "state_revision": state.get("revision"),
+                "input_fingerprint": "pending-dashboard-render",
+            }
+            if status == "passed" and artifact_baseline is not None:
+                details["artifact_baseline"] = deepcopy(artifact_baseline)
+                details["baseline_id"] = artifact_baseline.get("baseline_id")
+            candidate = record_event(runtime, "verify", details=details)
+            candidate["last_verification"] = {
+                "status": status,
+                "state_revision": state.get("revision"),
+                "input_fingerprint": "pending-dashboard-render",
+            }
+            previous = runtime.get("last_verification")
+            if status == "passed" and artifact_baseline is not None:
+                candidate["last_verification"]["artifact_baseline"] = deepcopy(
+                    artifact_baseline
+                )
+            elif isinstance(previous, dict) and isinstance(
+                previous.get("artifact_baseline"), dict
+            ):
+                candidate["last_verification"]["artifact_baseline"] = deepcopy(
+                    previous["artifact_baseline"]
+                )
+            return candidate
+
+        prospective_status = "passed" if not issue_rows else "failed"
+        prospective_runtime = prospective_runtime_for(prospective_status)
+        prospective_eligibility = binding_eligibility(
+            paths["root"],
+            state,
+            prospective_runtime,
+            bindings_path=paths["bindings"],
+        )
+        if prospective_status == "passed" and not prospective_eligibility.get(
+            "eligible"
+        ):
+            first = next(
+                (
+                    item.get("code")
+                    or item.get("reason_code")
+                    or item.get("message")
+                    for item in prospective_eligibility.get("issues", [])
+                    if isinstance(item, dict)
+                ),
+                "post-verification eligibility failed",
+            )
+            issue_rows.append(
+                {
+                    "path": "$.eligibility",
+                    "code": "post_verification_eligibility_failed",
+                    "message": str(first),
+                }
+            )
+            prospective_status = "failed"
+            prospective_runtime = prospective_runtime_for(prospective_status)
+            prospective_eligibility = binding_eligibility(
+                paths["root"],
+                state,
+                prospective_runtime,
+                bindings_path=paths["bindings"],
+            )
+        eligibility = prospective_eligibility
+        try:
+            bindings = load_artifact_bindings(paths["bindings"])
+        except (OSError, ValueError):
+            bindings = None
+        try:
+            render_dashboard(
+                paths["root"],
+                process,
+                state,
+                runtime=prospective_runtime,
+                bindings=bindings,
+                eligibility=eligibility,
+                claim_readiness=claim_protocol_readiness(
+                    paths["root"],
+                    state,
+                    prospective_runtime,
+                    verification_succeeded=prospective_status == "passed",
+                ),
+                locale=locale,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise ProjectError(
+                f"post-verification Dashboard render failed: {exc}"
+            ) from exc
+
     input_fingerprint = verification_input_fingerprint(
         paths["root"], state=state, runtime=runtime
     )
@@ -896,13 +1288,18 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
         "issues": issue_rows,
         "repository": _portable_repository_record(inspect_repository(paths["root"])),
         "reconciliation": reconciliation,
+        "eligibility": eligibility,
     }
     write_state(paths["verify_report"], report)
-    runtime = record_event(
-        runtime,
-        "verify",
-        details={"status": report["status"], "state_revision": state.get("revision")},
-    )
+    verify_details: dict[str, Any] = {
+        "status": report["status"],
+        "state_revision": state.get("revision"),
+        "input_fingerprint": input_fingerprint,
+    }
+    if report["status"] == "passed" and artifact_baseline is not None:
+        verify_details["artifact_baseline"] = deepcopy(artifact_baseline)
+        verify_details["baseline_id"] = artifact_baseline.get("baseline_id")
+    runtime = record_event(runtime, "verify", details=verify_details)
     if report["status"] == "passed" and process is not None:
         from .lifecycle import phase_completion
 
@@ -930,10 +1327,21 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                     "state_revision": state.get("revision"),
                 },
             )
+    previous_verification = runtime.get("last_verification")
     runtime["last_verification"] = {
         "status": report["status"],
         "state_revision": state.get("revision"),
         "input_fingerprint": input_fingerprint,
     }
+    if report["status"] == "passed" and artifact_baseline is not None:
+        runtime["last_verification"]["artifact_baseline"] = artifact_baseline
+    elif isinstance(previous_verification, dict) and isinstance(
+        previous_verification.get("artifact_baseline"), dict
+    ):
+        # A failed attempt must not erase the exact baseline established by
+        # the most recent successful verification.
+        runtime["last_verification"]["artifact_baseline"] = deepcopy(
+            previous_verification["artifact_baseline"]
+        )
     save_runtime(paths["root"], runtime)
     return report

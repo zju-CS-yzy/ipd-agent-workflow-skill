@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.3.1b1"
-PUBLIC_VERSION = "0.3.1-beta"
+PACKAGE_VERSION = "0.3.2b1"
+PUBLIC_VERSION = "0.3.2-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 
 REQUIRED_FILES = (
@@ -25,6 +25,7 @@ REQUIRED_FILES = (
     "CHANGELOG.md",
     "RELEASE_CHECKLIST.md",
     "AGENT_RUNTIME_PROTOCOL.md",
+    "scripts/verify_v031_upgrade.py",
     "pyproject.toml",
     "agents/openai.yaml",
     ".github/workflows/test.yml",
@@ -40,6 +41,7 @@ REQUIRED_FILES = (
     "schemas/task_profile.schema.json",
     "schemas/tailored_process.schema.json",
     "schemas/agent_runtime.schema.json",
+    "schemas/artifact_bindings.schema.json",
     "policies/default/tailoring_rules.yaml",
     "policies/task-types/software.yaml",
     "policies/task-types/hardware.yaml",
@@ -191,6 +193,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             f"README must identify v{PUBLIC_VERSION}",
         ),
         (
+            "RELEASE_CHECKLIST.md",
+            rf'target for this cycle is Python package `{escaped_package}` and public label `v{escaped_public}`',
+            "release checklist must identify the current package and public versions",
+        ),
+        (
             RELEASE_NOTES_PATH,
             r"^### Compatibility\s*$.*?^### Approval boundary\s*$.*?^### Known limitations\s*$",
             "English release notes must document compatibility, approval boundaries, and known limitations",
@@ -214,6 +221,16 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             ".github/workflows/release.yml",
             rf'ipd-agent-workflow-skill-v{escaped_public}\.zip.*?ipd_agent_workflow_skill-{escaped_package}-py3-none-any\.whl.*?ipd_agent_workflow_skill-{escaped_package}\.tar\.gz',
             "release workflow asset names must match the public and package versions",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"python -B scripts/verify_v031_upgrade\.py",
+            "release workflow must qualify the published v0.3.1 in-place upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"fetch-depth:\s*0.*?python -B scripts/verify_v031_upgrade\.py",
+            "CI must fetch release history and qualify the v0.3.1 in-place upgrade",
         ),
         (
             "SKILL.md",

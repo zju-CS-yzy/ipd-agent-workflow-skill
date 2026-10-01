@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ipdctl.dashboard import render_dashboard
 from ipdctl.dashboard_svg import _display_width, _wrap_text
+from ipdctl.eligibility import eligibility_fingerprint
 from ipdctl.i18n import get_translator
 from ipdctl.project import sync_state_with_process
 from ipdctl.state import create_initial_state
@@ -204,7 +205,7 @@ def state_fixture() -> dict:
         "project": {
             "name": "Demo <unsafe>",
             "phase": "concept",
-            "workflow_step": "work",
+            "workflow_step": "context",
             "current_tr": "tr-design",
             "current_dcp": "dcp-concept",
             "current_gate": "gate-release",
@@ -268,6 +269,13 @@ def generated_files(dashboard: Path) -> dict[str, bytes]:
     }
 
 
+def value_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def node_boxes(svg_path: Path) -> list[tuple[str, float, float, float, float]]:
     root = ET.parse(svg_path).getroot()
     return [
@@ -283,6 +291,22 @@ def node_boxes(svg_path: Path) -> list[tuple[str, float, float, float, float]]:
 
 
 class DashboardTests(unittest.TestCase):
+    def test_eligibility_fingerprint_ignores_derived_summary_counts(self) -> None:
+        first = {
+            "status": "passed",
+            "eligible": True,
+            "issues": [],
+            "paths": {},
+            "deliverables": {"concept.problem_definition": {"eligible": True}},
+            "summary": {"changed_paths": 4, "ignored_paths": 4},
+        }
+        second = deepcopy(first)
+        second["summary"] = {"changed_paths": 20, "ignored_paths": 20}
+
+        self.assertEqual(
+            eligibility_fingerprint(first), eligibility_fingerprint(second)
+        )
+
     def assert_no_node_overlap(self, svg_path: Path) -> None:
         boxes = node_boxes(svg_path)
         self.assertTrue(boxes, svg_path)
@@ -329,9 +353,14 @@ class DashboardTests(unittest.TestCase):
             expected = required | {"phases/lifecycle.svg"}
             self.assertEqual(set(generated_files(dashboard)), expected)
             self.assertEqual(set(manifest["files"]), expected)
-            self.assertEqual(manifest["schema_version"], "2.0")
+            self.assertEqual(len(expected), 15)
+            self.assertEqual(manifest["schema_version"], "2.1")
             self.assertEqual(manifest["locale"], "en")
             self.assertEqual(manifest["state_revision"], state["revision"])
+            self.assertIsNone(manifest["bindings_sha256"])
+            self.assertEqual(
+                manifest["eligibility_sha256"], eligibility_fingerprint({})
+            )
             self.assertEqual(len(manifest["outputs"]), len(expected) - 1)
 
             for output in manifest["outputs"]:
@@ -736,6 +765,173 @@ class DashboardTests(unittest.TestCase):
             )
         )
         self.assertNotIn("future", {item["id"] for item in data["available_tasks"]})
+
+    def test_binding_readiness_blocks_actionability_without_changing_lifecycle(self) -> None:
+        process = process_fixture()
+        state = state_fixture()
+        binding_hash = "a" * 64
+        eligibility = {
+            "schema_version": "1.0",
+            "status": "failed",
+            "eligible": False,
+            "bindings_sha256": binding_hash,
+            "baseline_id": "baseline-7",
+            "issues": [
+                {
+                    "code": "MISSING_BINDING",
+                    "severity": "error",
+                    "deliverable_id": "planned",
+                    "reason_code": "no_matching_rule",
+                    "rule_ids": [],
+                }
+            ],
+            "paths": {},
+            "deliverables": {
+                "planned": {
+                    "eligible": False,
+                    "binding_ready": False,
+                    "issue_codes": ["MISSING_BINDING"],
+                    "blockers": [
+                        {
+                            "code": "MISSING_BINDING",
+                            "reason_code": "no_matching_rule",
+                        }
+                    ],
+                },
+                "accepted": {
+                    "eligible": False,
+                    "binding_ready": False,
+                    "issue_codes": ["MISSING_BINDING"],
+                    "blockers": [{"code": "MISSING_BINDING"}],
+                },
+            },
+            "summary": {"errors": 1, "warnings": 0},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = render_dashboard(
+                root,
+                process,
+                state,
+                eligibility=eligibility,
+            )
+            dashboard = root / ".ipd" / "dashboard"
+            projected = json.loads(
+                (dashboard / "data" / "state.json").read_text(encoding="utf-8")
+            )
+            graph = json.loads(
+                (dashboard / "data" / "graph.json").read_text(encoding="utf-8")
+            )
+            index = (dashboard / "index.html").read_text(encoding="utf-8")
+
+            zh_root = root / "zh"
+            render_dashboard(
+                zh_root,
+                process,
+                state,
+                eligibility=eligibility,
+                locale="zh-CN",
+            )
+            zh_index = (
+                zh_root / ".ipd" / "dashboard" / "index.html"
+            ).read_text(encoding="utf-8")
+
+        deliverable = next(
+            item for item in projected["deliverables"] if item["id"] == "planned"
+        )
+        accepted = next(
+            item for item in projected["deliverables"] if item["id"] == "accepted"
+        )
+        node = next(
+            item
+            for item in graph["nodes"]
+            if item["type"] == "Deliverable" and item["id"] == "planned"
+        )
+        self.assertEqual(deliverable["status"], "planned")
+        self.assertEqual(deliverable["display_status"], "not_started")
+        self.assertEqual(deliverable["actionability"]["state"], "waiting_on_bindings")
+        self.assertFalse(deliverable["actionability"]["actionable"])
+        self.assertFalse(deliverable["actionability"]["binding_ready"])
+        self.assertEqual(deliverable["attention"], "binding_blocked")
+        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(accepted["actionability"]["state"], "inactive")
+        self.assertTrue(accepted["actionability"]["binding_blocked"])
+        self.assertIsNone(accepted["attention"])
+        self.assertNotIn("planned", {item["id"] for item in projected["available_tasks"]})
+        self.assertIn("planned", {item["id"] for item in projected["blocked_items"]})
+        self.assertNotIn("accepted", {item["id"] for item in projected["blocked_items"]})
+        self.assertEqual(projected["summary"]["binding_blocked"], 1)
+        self.assertEqual(projected["eligibility"]["deliverables"], eligibility["deliverables"])
+        self.assertEqual(node["status"], "planned")
+        self.assertFalse(node["blocked"])
+        self.assertEqual(node["attention"], "binding_blocked")
+        self.assertEqual(manifest["bindings_sha256"], binding_hash)
+        self.assertEqual(
+            manifest["eligibility_sha256"],
+            eligibility_fingerprint(projected["eligibility"]),
+        )
+        self.assertIn("Binding readiness", index)
+        self.assertIn("Waiting on bindings", index)
+        self.assertIn("产物绑定就绪度", zh_index)
+        self.assertIn("\\u7b49\\u5f85\\u4ea7\\u7269\\u7ed1\\u5b9a", zh_index)
+
+    def test_binding_and_eligibility_changes_update_manifest_fingerprints(self) -> None:
+        process, state = canonical_fixture()
+        bindings = {"schema_version": "1.0", "bindings": []}
+        eligibility = {
+            "schema_version": "1.0",
+            "status": "passed",
+            "eligible": True,
+            "bindings_sha256": value_sha256(bindings),
+            "deliverables": {},
+            "issues": [],
+            "paths": {},
+            "summary": {"errors": 0},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = render_dashboard(
+                root,
+                process,
+                state,
+                bindings=bindings,
+                eligibility=eligibility,
+            )
+            changed_eligibility = deepcopy(eligibility)
+            changed_eligibility["status"] = "warning"
+            changed_eligibility["issues"] = [
+                {"code": "TEST_WARNING", "severity": "warning"}
+            ]
+            changed_eligibility["summary"]["warnings"] = 1
+            second = render_dashboard(
+                root,
+                process,
+                state,
+                bindings=bindings,
+                eligibility=changed_eligibility,
+            )
+            changed_bindings = deepcopy(bindings)
+            changed_bindings["bindings"].append(
+                {"id": "source", "glob": "src/**", "deliverable": "concept.charter"}
+            )
+            changed_binding_eligibility = deepcopy(changed_eligibility)
+            changed_binding_eligibility["bindings_sha256"] = value_sha256(
+                changed_bindings
+            )
+            third = render_dashboard(
+                root,
+                process,
+                state,
+                bindings=changed_bindings,
+                eligibility=changed_binding_eligibility,
+            )
+            files = generated_files(root / ".ipd" / "dashboard")
+
+        self.assertEqual(first["bindings_sha256"], second["bindings_sha256"])
+        self.assertNotEqual(first["eligibility_sha256"], second["eligibility_sha256"])
+        self.assertNotEqual(second["bindings_sha256"], third["bindings_sha256"])
+        self.assertNotEqual(second["eligibility_sha256"], third["eligibility_sha256"])
+        self.assertEqual(len(files), 15)
 
     def test_phase_acceptance_requires_all_phase_gates_approved(self) -> None:
         process = process_fixture()

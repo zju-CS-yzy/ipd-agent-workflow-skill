@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`v0.3.1-beta` combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
+`v0.3.2-beta` combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 
@@ -19,6 +19,7 @@ The runtime enforces a hard boundary: an AI agent can prepare and validate a gat
   Matrix, and canonical JSON projections under `.ipd/dashboard/`.
 - Present CLI and Dashboard text in `en` or `zh-CN` without changing YAML/JSON keys, IDs, statuses, relations, or graph topology.
 - Inspect Git or SVN branch/revision/dirty/remote metadata and reconcile changed paths without mutating the repository.
+- Enforce single-owner critical artifact bindings, per-iteration Claim windows, and explicitly authorized migration baselines for existing dirty projects.
 - Persist YAML fact sources atomically and keep generated dashboards separate from source state.
 
 This beta does not provide a hosted service, authenticated enterprise approval, or a writable web UI. It never commits, tags, pushes, pulls, fetches, updates, or otherwise mutates Git/SVN state.
@@ -63,7 +64,9 @@ final decision. `close --status blocked` is the explicit aborted-work path; it
 still requires `refresh` and `verify` before another claim. `context --json`
 reports an orphaned `in_progress` deliverable in `recoverable_claims`; resume it
 with `claim DELIVERABLE --recover`. An unexpired lease owned by another actor
-cannot be taken over.
+cannot be taken over. For an expired v0.3.1 Claim that has no binding window,
+record the exact authorized-human migration baseline first; its first recovery
+creates an immutable migration window that later recoveries reuse.
 
 `advance-phase` requires all current-Phase Gates to be approved and the latest
 passed verification to match both the current state revision and the freshly
@@ -76,7 +79,7 @@ hand-edited Gate pointers are rejected. The current Phase must also match its
 ordered `advance_phase` event history, so editing all Phase pointers together
 cannot skip governance.
 
-The full CLI command surface is `init`, `tailor`, `context`, `status`, `claim`,
+The full CLI command surface is `init`, `tailor`, `context`, `status`, `adopt-baseline`, `claim`,
 `close`, `review`, `approve`, `reject`, `refresh`, `verify`, `advance-phase`,
 `repository`, `reconcile`, and `validate`. Run `ipdctl COMMAND --help` for the
 exact options; the normative summary is in
@@ -106,16 +109,31 @@ framework-managed `evidence/<deliverable-id>/**` binding per tailored
 deliverable. This binds durable evidence, not the implementation itself. Add
 explicit user-authored bindings for real `src/**`, `tests/**`, documentation,
 configuration, firmware, hardware, and tool paths; ownership is never inferred,
-and unbound changes under critical roots fail verification. A mapped changed
-path must also point to a Deliverable with an auditable `claim` event; a binding
-alone cannot manufacture Agent ownership. The event must include its
-Deliverable, Actor, UTC timestamp, and a non-future state revision.
+and unbound changes under critical roots fail verification. An actually changed
+critical path may resolve to only one Deliverable owner. New Claim events record
+an exact binding window; an old historical Claim is not permanent ownership
+evidence for later changes.
+
+When upgrading an existing project whose governed files are already dirty,
+first validate explicit single-owner rules, then preview and record an
+authorized-human migration baseline with `ipdctl adopt-baseline`. The baseline
+stores exact path hashes in append-only runtime history; it creates no Claim and
+does not modify Git/SVN. If governed files change before a legacy Claim is
+recovered, an authorized human may adopt the newly reviewed exact baseline;
+stale adoptions remain history but do not block the later matching record. A
+successful verification carries the exact artifact baseline into the next
+iteration.
+
+Mutating CLI commands serialize the complete read, preflight, compute, and
+write cycle with a project-local recovery journal. Concurrent mutations fail
+explicitly and may be retried; an interrupted multi-file command is restored
+before the next command reads project facts.
 
 The Dashboard entry point is `.ipd/dashboard/index.html`. Its standalone assets
 live under `assets/`, phase views under `phases/`, matrices under `matrices/`,
 and machine-readable projections under `data/`. `manifest.json` records the
-locale and hashes every managed output so `ipdctl verify` can detect stale or
-modified views.
+locale, binding/eligibility hashes, and hashes every managed output so
+`ipdctl verify` can detect stale or modified views.
 
 The structural contracts live in [schemas/](schemas/). Runtime validation additionally enforces dependency cycles, referential integrity, legal transitions, review authority, evidence presence, dashboard freshness, and repository reconciliation.
 

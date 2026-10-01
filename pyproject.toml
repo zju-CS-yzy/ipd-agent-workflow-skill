@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipd-agent-workflow-skill"
-version = "0.3.1b1"
+version = "0.3.2b1"
 description = "Bilingual IPD Agent Workflow Framework with tailoring, execution state, dashboards, and repository reconciliation"
 readme = "README.md"
 requires-python = ">=3.10"

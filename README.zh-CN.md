@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-`v0.3.1-beta` 是一个统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
+`v0.3.2-beta` 是一个统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 
@@ -19,6 +19,7 @@
 - 在 `.ipd/dashboard/` 生成离线交互式 Dashboard，包含阶段泳道、类型化 SVG、节点详情、Deliverable Matrix、Gate Matrix 和标准 JSON 投影。
 - 在不改变 YAML/JSON 字段、ID、状态、关系和图拓扑的前提下，以 `en` 或 `zh-CN` 展示 CLI 与 Dashboard 文案。
 - 只读检查 Git/SVN 的 branch、revision、dirty 和 remote 信息，并根据显式绑定核对变更。
+- 对 Critical Artifact 执行单一 Owner、逐轮 Claim Window 与已有 Dirty 项目的人工授权迁移基线约束。
 - 原子化持久化 YAML 事实文件，使生成视图与事实来源保持分离。
 
 此 Beta 版本不提供托管服务、企业身份认证或可写 Web UI，也不会自动执行 Git/SVN 的提交、打标签、推送、拉取、抓取或更新操作。
@@ -64,6 +65,9 @@ ipdctl verify /path/to/project
 仍须完成 `refresh` 和 `verify` 才能开始新 Claim。`context --json` 会把失去
 活动 Lease 的 `in_progress` 交付件列入 `recoverable_claims`；使用
 `claim DELIVERABLE --recover` 恢复。其他 Actor 尚未过期的 Lease 不能被接管。
+如果过期的是没有 Binding Window 的 v0.3.1 Claim，必须先记录精确且由人类
+授权的迁移基线；首次恢复会生成不可变的 Migration Window，后续恢复继续
+复用该 Window。
 
 `advance-phase` 要求当前 Phase 的全部 Gate 已批准，而且最近一次通过的验证
 同时匹配当前 State Revision 与重新计算的验证输入指纹。该命令只推进一个
@@ -74,7 +78,7 @@ Phase，并把 Workflow 留在 `refresh`；继续 Claim 或 Gate 评审前必须
 指针会被拒绝。当前 Phase 还必须与有序 `advance_phase` 事件历史一致，因此
 同时修改整组 Phase 指针也不能跳过治理流程。
 
-完整 CLI 命令面是 `init`、`tailor`、`context`、`status`、`claim`、
+完整 CLI 命令面是 `init`、`tailor`、`context`、`status`、`adopt-baseline`、`claim`、
 `close`、`review`、`approve`、`reject`、`refresh`、`verify`、
 `advance-phase`、`repository`、`reconcile` 和 `validate`。精确参数请运行
 `ipdctl COMMAND --help`，规范摘要见
@@ -111,12 +115,22 @@ Deliverable 重新生成一条框架托管的 `evidence/<deliverable-id>/**` 绑
 该规则绑定的是持久证据，不是实现源码。真实的 `src/**`、`tests/**`、文档、
 配置、Firmware、Hardware 和工具路径必须由用户在
 `.ipd/artifact_bindings.yaml` 中显式绑定；框架不会推断归属，Critical Root
-下存在未绑定变更会使验证失败。变更所映射的 Deliverable 还必须在 Agent
-Runtime 中存在可审计的 `claim` 事件；仅写一条绑定规则不能伪造领取关系。
-有效 Claim 事件必须包含 Deliverable、Actor、UTC 时间和不晚于当前状态的
-Revision。
+下存在未绑定变更会使验证失败。实际发生变化的 Critical Path 只能解析到一个
+Deliverable Owner。新 Claim 事件会记录精确 Binding Window；旧的历史 Claim
+不能永久证明后续变更的归属。
 
-Dashboard 入口是 `.ipd/dashboard/index.html`。独立资源位于 `assets/`，阶段视图位于 `phases/`，矩阵位于 `matrices/`，机器可读投影位于 `data/`。`manifest.json` 记录 locale 并保存全部受管理输出的哈希，使 `ipdctl verify` 能够识别过期或被修改的视图。
+升级已有项目时，如果受治理文件已经处于 Dirty 状态，应先验证显式单一 Owner
+规则，再使用 `ipdctl adopt-baseline` 预览并记录由人类授权的迁移基线。
+基线只把精确路径哈希写入只追加的 Runtime 历史，不创建 Claim，也不修改
+Git/SVN。如果旧 Claim 恢复前受治理文件再次变化，授权人员可以重新采纳经审核
+的当前精确基线；失效采纳仍保留为历史，但不会遮蔽后续匹配记录。成功 Verify
+后，精确 Artifact Baseline 会带入下一轮迭代。
+
+修改类 CLI 命令使用项目本地恢复日志，串行执行完整的读取、预检、计算和写入
+周期。并发修改会明确失败并可重试；多文件命令中断后，下一个命令读取事实前
+会先恢复原有项目 Bundle。
+
+Dashboard 入口是 `.ipd/dashboard/index.html`。独立资源位于 `assets/`，阶段视图位于 `phases/`，矩阵位于 `matrices/`，机器可读投影位于 `data/`。`manifest.json` 记录 locale、Binding/Eligibility 哈希以及全部受管理输出的哈希，使 `ipdctl verify` 能够识别过期或被修改的视图。
 
 结构契约位于 [schemas/](schemas/)。运行时还会验证依赖环、引用完整性、合法状态迁移、评审权限、证据存在性、Dashboard 新鲜度和版本库核对结果。不可裁剪的规则位于 [policies/default/tailoring_rules.yaml](policies/default/tailoring_rules.yaml)，通用任务类型规则位于 [policies/task-types/](policies/task-types/)。
 

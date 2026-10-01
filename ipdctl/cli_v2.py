@@ -22,6 +22,11 @@ from .engine import (
     set_gate_ready,
     start_deliverable_review,
 )
+from .eligibility import (
+    binding_eligibility,
+    claim_protocol_readiness,
+    deliverable_binding_status,
+)
 from .i18n import (
     DEFAULT_LOCALE,
     LocaleError,
@@ -37,13 +42,14 @@ from .governance import apply_phase_pointers, phase_history_issues, phase_pointe
 from .policy import PolicyError, load_policy
 from .project import (
     ProjectError,
+    adopt_artifact_baseline,
+    artifact_baseline_preview,
     context_snapshot,
     initialize_project,
     load_project,
     project_paths,
     refresh_project,
     sync_state_with_process,
-    verification_input_fingerprint,
     verify_project,
 )
 from .repository import inspect_repository
@@ -55,11 +61,13 @@ from .runtime import (
     load_runtime,
     record_event,
     save_runtime,
+    utc_now,
 )
 from .state import StateError, load_state, resolve_state_path, revised_copy, write_state
+from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
 
-VERSION = "0.3.1-beta"
+VERSION = "0.3.2-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -156,6 +164,39 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
         "--json", action="store_true", help=translator.text("cli.argument.json.help")
     )
     context.set_defaults(handler=_cmd_context)
+
+    adopt_baseline = commands.add_parser(
+        "adopt-baseline",
+        help=translator.text("cli.command.adopt_baseline.help"),
+        description=translator.text("cli.command.adopt_baseline.help"),
+        translator=translator,
+    )
+    _add_target(adopt_baseline, translator)
+    adopt_baseline.add_argument(
+        "--actor", help=translator.text("cli.argument.baseline_actor.help")
+    )
+    adopt_baseline.add_argument(
+        "--actor-type",
+        choices=["human"],
+        help=translator.text("cli.argument.baseline_actor_type.help"),
+    )
+    adopt_baseline.add_argument(
+        "--authorized",
+        action="store_true",
+        help=translator.text("cli.argument.baseline_authorized.help"),
+    )
+    adopt_baseline.add_argument(
+        "--reason", help=translator.text("cli.argument.reason.help")
+    )
+    adopt_baseline.add_argument(
+        "--preview",
+        action="store_true",
+        help=translator.text("cli.argument.preview.help"),
+    )
+    adopt_baseline.add_argument(
+        "--json", action="store_true", help=translator.text("cli.argument.json.help")
+    )
+    adopt_baseline.set_defaults(handler=_cmd_adopt_baseline)
 
     for name, handler in (
         ("claim", _cmd_claim),
@@ -319,6 +360,7 @@ _COMMAND_NAMES = {
     "init",
     "tailor",
     "context",
+    "adopt-baseline",
     "claim",
     "close",
     "review",
@@ -333,6 +375,22 @@ _COMMAND_NAMES = {
     "status",
 }
 _PROJECT_ROOT_COMMANDS = {"claim", "close", "review", "approve", "reject"}
+_TRANSACTIONAL_COMMANDS = {
+    "init",
+    "tailor",
+    "context",
+    "adopt-baseline",
+    "claim",
+    "close",
+    "review",
+    "approve",
+    "reject",
+    "advance-phase",
+    "refresh",
+    "verify",
+    "reconcile",
+    "status",
+}
 _OPTIONS_WITH_VALUES = {
     "--name",
     "--task-type",
@@ -350,6 +408,7 @@ _OPTIONS_WITH_VALUES = {
     "--decision",
     "--bindings",
     "--policy",
+    "--reason",
 }
 
 
@@ -435,6 +494,36 @@ def _json(data: Any) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True)
 
 
+def _transaction_options(
+    args: argparse.Namespace, root: Path
+) -> tuple[tuple[Path, ...], bool] | None:
+    """Return the complete write scope for one serialized CLI command."""
+
+    if args.command not in _TRANSACTIONAL_COMMANDS:
+        return None
+    if args.command == "adopt-baseline" and args.preview:
+        return None
+    paths = project_paths(root)
+    extras: tuple[Path, ...] = ()
+    include_dashboard = False
+    if args.command == "init":
+        extras = (
+            paths["profile"],
+            paths["bindings"],
+            paths["ipd"] / "project_state.yaml",
+        )
+    elif args.command == "tailor":
+        extras = (paths["process"], paths["bindings"])
+    elif args.command == "refresh":
+        include_dashboard = True
+    elif args.command == "verify":
+        extras = (paths["verify_report"],)
+        include_dashboard = True
+    elif args.command == "reconcile":
+        extras = (paths["reconcile_report"],)
+    return extras, include_dashboard
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     translator = _translator(args)
     root = Path(args.target).resolve()
@@ -478,9 +567,12 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
     bindings = sync_evidence_bindings(
         load_artifact_bindings(paths["bindings"]), process
     )
-    write_state(paths["process"], process)
-    write_state(paths["state"], state)
-    write_state(paths["bindings"], bindings)
+    with project_mutation_guard(
+        root, extra_files=(paths["process"], paths["bindings"])
+    ):
+        write_state(paths["process"], process)
+        write_state(paths["state"], state)
+        write_state(paths["bindings"], bindings)
     print(translator.text("cli.tailor.process", path=output))
     print(
         translator.text(
@@ -516,6 +608,83 @@ def _cmd_context(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _cmd_adopt_baseline(args: argparse.Namespace) -> int:
+    translator = _translator(args)
+    root = Path(args.target).resolve()
+    if args.preview:
+        eligibility = artifact_baseline_preview(root)
+        snapshot = None
+        if eligibility["eligible"]:
+            from .reconcile import artifact_baseline_snapshot
+
+            state = load_state(project_paths(root)["state"])
+            snapshot = artifact_baseline_snapshot(
+                root,
+                state,
+                bindings_path=project_paths(root)["bindings"],
+            )
+        result = {
+            "schema_version": "1.0",
+            "status": eligibility["status"],
+            "eligible": eligibility["eligible"],
+            "preview": True,
+            "adopted": False,
+            "idempotent": False,
+            "baseline_id": (
+                snapshot.get("baseline_id") if isinstance(snapshot, dict) else None
+            ),
+            "artifact_baseline": snapshot,
+            "eligibility": eligibility,
+        }
+    else:
+        if not isinstance(args.actor, str) or not args.actor.strip():
+            raise ProjectError(
+                translator.text("error.adopt_baseline_actor_required")
+            )
+        if args.actor_type != "human":
+            raise ProjectError(
+                translator.text("error.adopt_baseline_actor_type")
+            )
+        if args.authorized is not True:
+            raise ProjectError(
+                translator.text("error.adopt_baseline_authorized")
+            )
+        if not isinstance(args.reason, str) or not args.reason.strip():
+            raise ProjectError(
+                translator.text("error.adopt_baseline_reason_required")
+            )
+        result = adopt_artifact_baseline(
+            root,
+            actor=args.actor,
+            actor_type=args.actor_type,
+            authorized=args.authorized,
+            reason=args.reason,
+        )
+    if args.json:
+        print(_json(result))
+    elif result.get("preview"):
+        print(
+            translator.text(
+                "cli.adopt_baseline.preview_eligible"
+                if result.get("eligible")
+                else "cli.adopt_baseline.preview_blocked"
+            )
+        )
+    elif result.get("adopted"):
+        print(
+            translator.text(
+                "cli.adopt_baseline.adopted", baseline_id=result.get("baseline_id")
+            )
+        )
+    else:
+        print(
+            translator.text(
+                "cli.adopt_baseline.unchanged", baseline_id=result.get("baseline_id")
+            )
+        )
+    return 0 if result.get("eligible") else 1
 
 
 def _set_workflow_step(state: dict[str, Any], target: str) -> dict[str, Any]:
@@ -560,23 +729,25 @@ def _require_current_verification(
     action: str,
     translator: Translator,
 ) -> None:
-    verification = runtime.get("last_verification")
-    if not isinstance(verification, dict) or verification.get("status") != "passed" or (
-        verification.get("state_revision") != state.get("revision")
-    ):
-        raise TransitionError(
-            translator.text("error.verification_required", action=action)
-        )
-    expected_fingerprint = verification.get("input_fingerprint")
-    actual_fingerprint = verification_input_fingerprint(
-        project_root, state=state, runtime=runtime
-    )
-    if not isinstance(expected_fingerprint, str) or (
-        expected_fingerprint != actual_fingerprint
-    ):
+    readiness = claim_protocol_readiness(project_root, state, runtime)
+    if readiness["eligible"]:
+        return
+    if readiness.get("reason_code") == "CLAIM_VERIFICATION_INPUTS_CHANGED":
         raise TransitionError(
             translator.text("error.verification_inputs_changed", action=action)
         )
+    if readiness.get("reason_code") == "CLAIM_VERIFICATION_REQUIRED":
+        raise TransitionError(
+            translator.text("error.verification_required", action=action)
+        )
+    raise TransitionError(
+        translator.text(
+            "error.workflow_stage",
+            action=action,
+            current=state.get("project", {}).get("workflow_step"),
+            expected="context, verify",
+        )
+    )
 
 
 def _require_phase_history(
@@ -599,7 +770,8 @@ def _cmd_claim(args: argparse.Namespace) -> int:
     root = Path(args.project_root).resolve()
     paths = project_paths(root)
     state, process = load_project(root)
-    runtime, expired = expire_claims(load_runtime(root))
+    instant = utc_now()
+    runtime, expired = expire_claims(load_runtime(root), now=instant)
     _require_phase_history(state, process, runtime, translator)
     deliverable = next(
         (item for item in state.get("deliverables", []) if item.get("id") == args.deliverable),
@@ -610,13 +782,24 @@ def _cmd_claim(args: argparse.Namespace) -> int:
             translator.text("error.unknown_subject", subject=args.deliverable)
         )
     active = runtime.get("active_claims", {}).get(args.deliverable)
+    recovering = False
     if deliverable.get("status") == "in_progress":
         _require_workflow_step(
             state, {"work"}, action="claim", translator=translator
         )
+        if active is not None and active.get("actor") == args.actor:
+            print(
+                translator.text(
+                    "cli.claim.already_active",
+                    deliverable=args.deliverable,
+                    actor=args.actor,
+                )
+            )
+            return 0
         if active is not None:
             updated_state = state
         elif args.deliverable in expired or args.recover:
+            recovering = True
             reason = translator.text(
                 "state.claim.expired"
                 if args.deliverable in expired
@@ -649,15 +832,60 @@ def _cmd_claim(args: argparse.Namespace) -> int:
             )
         updated_state = claim_deliverable(state, args.deliverable)
     updated_state = _set_workflow_step(updated_state, "work")
+    eligibility = binding_eligibility(
+        root,
+        state,
+        runtime,
+        bindings_path=paths["bindings"],
+        target_deliverable=args.deliverable,
+    )
+    binding_status = deliverable_binding_status(eligibility, args.deliverable)
+    if not binding_status["eligible"]:
+        issue_codes = binding_status.get("issue_codes", [])
+        reason = issue_codes[0] if issue_codes else "BINDING_READINESS_UNAVAILABLE"
+        raise TransitionError(
+            f"claim preflight failed for {args.deliverable!r}: {reason}"
+        )
+    from .reconcile import (
+        create_claim_binding_window,
+        recover_claim_binding_window,
+    )
+
+    if recovering:
+        binding_window = recover_claim_binding_window(
+            runtime,
+            args.deliverable,
+            project_root=root,
+            state=state,
+            bindings_path=paths["bindings"],
+        )
+        if binding_window is None:
+            raise TransitionError(
+                translator.text(
+                    "error.claim_recovery_window_missing",
+                    deliverable=args.deliverable,
+                )
+            )
+    else:
+        binding_window = create_claim_binding_window(
+            root,
+            state,
+            runtime,
+            args.deliverable,
+            bindings_path=paths["bindings"],
+        )
     updated_runtime = claim_runtime(
         runtime,
         args.deliverable,
         actor=args.actor,
         lease_minutes=args.lease_minutes,
         state_revision=updated_state["revision"],
+        binding_window=binding_window,
+        now=instant,
     )
-    write_state(paths["state"], updated_state)
-    save_runtime(root, updated_runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], updated_state)
+        save_runtime(root, updated_runtime)
     print(
         translator.text(
             "cli.claim.completed", deliverable=args.deliverable, actor=args.actor
@@ -671,7 +899,8 @@ def _cmd_close(args: argparse.Namespace) -> int:
     root = Path(args.project_root).resolve()
     paths = project_paths(root)
     state, process = load_project(root)
-    runtime, expired = expire_claims(load_runtime(root))
+    instant = utc_now()
+    runtime, expired = expire_claims(load_runtime(root), now=instant)
     _require_phase_history(state, process, runtime, translator)
     if expired:
         # Persist the time-driven lease expiry even though close will now fail
@@ -703,9 +932,11 @@ def _cmd_close(args: argparse.Namespace) -> int:
             "evidence": list(args.evidence),
             "state_revision": state["revision"],
         },
+        now=instant,
     )
-    write_state(paths["state"], state)
-    save_runtime(root, runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], state)
+        save_runtime(root, runtime)
     print(
         translator.text(
             "cli.close.completed",
@@ -864,8 +1095,9 @@ def _cmd_review(args: argparse.Namespace) -> int:
         "review",
         details=details,
     )
-    write_state(paths["state"], state)
-    save_runtime(root, runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], state)
+        save_runtime(root, runtime)
     print(translator.text("cli.review.started", subject=args.subject))
     return 0
 
@@ -928,8 +1160,9 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         "approve",
         details=details,
     )
-    write_state(paths["state"], state)
-    save_runtime(root, runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], state)
+        save_runtime(root, runtime)
     key = "cli.approve.completed" if subject_type == "deliverable" else "cli.approve.gate"
     print(translator.text(key, subject=args.subject))
     return 0
@@ -984,8 +1217,9 @@ def _cmd_reject(args: argparse.Namespace) -> int:
         "reject",
         details=details,
     )
-    write_state(paths["state"], state)
-    save_runtime(root, runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], state)
+        save_runtime(root, runtime)
     print(translator.text("cli.reject.completed", subject=args.subject))
     return 0
 
@@ -1025,8 +1259,9 @@ def _cmd_advance_phase(args: argparse.Namespace) -> int:
             "state_revision": state["revision"],
         },
     )
-    write_state(paths["state"], state)
-    save_runtime(root, runtime)
+    with project_mutation_guard(root):
+        write_state(paths["state"], state)
+        save_runtime(root, runtime)
     print(
         translator.text(
             "cli.advance_phase.completed", current=current, next=next_phase
@@ -1041,10 +1276,11 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
     root = Path(args.target).resolve()
     paths = project_paths(root)
     state = load_state(paths["state"])
-    if state["project"].get("workflow_step") == "refresh":
-        state = _set_workflow_step(state, "verify")
-        write_state(paths["state"], state)
-    manifest = refresh_project(args.target)
+    with project_mutation_guard(root, include_dashboard=True):
+        if state["project"].get("workflow_step") == "refresh":
+            state = _set_workflow_step(state, "verify")
+            write_state(paths["state"], state)
+        manifest = refresh_project(args.target)
     outputs = manifest.get("outputs", []) if isinstance(manifest, dict) else []
     print(translator.text("cli.refresh.completed", count=len(outputs) + 1))
     return 0
@@ -1052,7 +1288,14 @@ def _cmd_refresh(args: argparse.Namespace) -> int:
 
 def _cmd_verify(args: argparse.Namespace) -> int:
     translator = _translator(args)
-    report = verify_project(args.target)
+    root = Path(args.target).resolve()
+    paths = project_paths(root)
+    with project_mutation_guard(
+        root,
+        extra_files=(paths["verify_report"],),
+        include_dashboard=True,
+    ):
+        report = verify_project(root)
     if args.json or report["status"] != "passed":
         print(_json(report))
     else:
@@ -1116,7 +1359,9 @@ def _cmd_reconcile(args: argparse.Namespace) -> int:
 
 def _cmd_validate(args: argparse.Namespace) -> int:
     translator = _translator(args)
-    path = resolve_state_path(args.target)
+    target = Path(args.target)
+    project_target = target.is_dir()
+    path = resolve_state_path(target)
     state = load_state(path)
     issues = validate_state(state)
     if issues:
@@ -1126,6 +1371,18 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         return 1
     if args.policy:
         load_policy(args.policy)
+    if project_target:
+        from .reconcile import load_artifact_bindings
+
+        deliverable_ids = {
+            item["id"]
+            for item in state.get("deliverables", [])
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        load_artifact_bindings(
+            project_paths(target)["bindings"],
+            known_deliverables=deliverable_ids,
+        )
     print(
         translator.text(
             "cli.validate.valid", revision=state["revision"], path=path
@@ -1145,6 +1402,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser(bootstrap_translator)
     args = parser.parse_args(arguments)
     try:
+        target = (
+            getattr(args, "project_root", None)
+            if args.command in _PROJECT_ROOT_COMMANDS
+            else getattr(args, "target", None)
+        )
+        if target is not None:
+            candidate = Path(target).resolve()
+            if candidate.is_file():
+                candidate = (
+                    candidate.parent.parent
+                    if candidate.parent.name == ".ipd"
+                    else candidate.parent
+                )
+            transaction_options = _transaction_options(args, candidate)
+            if (
+                transaction_options is not None
+                and (
+                    args.command == "init"
+                    or resolve_state_path(candidate).is_file()
+                )
+            ):
+                extra_files, include_dashboard = transaction_options
+                with project_mutation_guard(
+                    candidate,
+                    extra_files=extra_files,
+                    include_dashboard=include_dashboard,
+                ):
+                    args._translator = _translator_for_args(args)
+                    return args.handler(args)
+            with project_access_guard(candidate):
+                args._translator = _translator_for_args(args)
+                return args.handler(args)
         args._translator = _translator_for_args(args)
         return args.handler(args)
     except (

@@ -14,8 +14,8 @@ only one active claim and enforces this serialized reviewable iteration:
 `context` establishes the starting facts; the human-decision commands execute
 while the machine workflow step remains `review`:
 
-1. `context` — establish scope, authority, state, repository facts, and applicable policy.
-2. `claim` — define a falsifiable result and the evidence that would support it.
+1. `context` — establish scope, authority, state, repository facts, binding eligibility, and applicable policy.
+2. `claim` — define a falsifiable result and evidence, then atomically record the current binding window before work begins.
 3. `work` — produce or change the deliverable while maintaining dependencies and links.
 4. `close` — submit evidence as `ready_for_review`.
 5. `review` — record review facts; an Agent may recommend but not make a final decision.
@@ -34,7 +34,15 @@ If an `in_progress` deliverable has no active lease, `context --json` lists it
 under `recoverable_claims`; recover it explicitly with
 `claim <deliverable> --recover`. Expired leases are removed with an auditable
 `claim_expired` event and may be reclaimed. An unexpired claim owned by another
-actor cannot be taken over.
+actor cannot be taken over. A windowless v0.3.1 Claim requires an exact
+authorized-human baseline adoption before its first recovery; that recovery
+persists the migration window for every later lease recovery in the same
+unfinished iteration.
+
+Claim preflight consumes the same eligibility object shown by `context` and the
+Dashboard. Missing or invalid bindings, conflicting critical owners, and
+pre-existing changes without an accepted baseline remove affected work from
+`available_tasks`; a failed preflight writes neither state nor runtime.
 
 ## Deliverables and evidence
 
@@ -72,6 +80,18 @@ bindings:
     deliverable: develop.runtime
     critical: true
 ```
+
+Every actually changed critical path must resolve to exactly one Deliverable.
+For a reviewed dirty working tree that predates v0.3.2, use
+`adopt-baseline --preview` and then an explicitly authorized-human
+`adopt-baseline` decision instead of fabricating a historical Claim. Each
+successful verification stores the exact accepted artifact baseline for the
+next serialized iteration.
+
+If the project also contains an expired, windowless v0.3.1 active Claim, first
+record that reviewed adoption, then run `claim <deliverable> --recover`. The
+recovery fails if the adopted snapshot no longer exactly matches the current
+bindings, repository revision, and governed path hashes.
 
 Changed source or test paths under configured critical roots that have no
 explicit binding make reconciliation, and therefore verification, fail.

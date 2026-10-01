@@ -116,6 +116,7 @@ class LifecycleScenario:
         self.blocked_deliverable: str | None = None
         self.expired_claim_deliverable: str | None = None
         self.project_source_binding_exercised = False
+        self.project_source_binding_deliverable: str | None = None
 
     @property
     def state_path(self) -> Path:
@@ -279,7 +280,7 @@ class LifecycleScenario:
             "tailor did not create the public managed evidence-binding contract",
         )
 
-    def _bind_and_change_project_source(self, deliverable: str) -> None:
+    def _configure_project_source_binding(self, deliverable: str) -> None:
         bindings_path = self.root / ".ipd" / "artifact_bindings.yaml"
         bindings = load_state(bindings_path)
         bindings["bindings"].insert(
@@ -290,10 +291,13 @@ class LifecycleScenario:
                 "deliverable": deliverable,
                 "critical": True,
                 "review_required": True,
-                "description": "Explicit source ownership established after claim",
+                "description": "Explicit source ownership established before claim",
             },
         )
         write_state(bindings_path, bindings)
+        self.project_source_binding_deliverable = deliverable
+
+    def _change_project_source(self) -> None:
         source = self.root / "src" / "perception" / "fusion.py"
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(
@@ -494,8 +498,11 @@ class LifecycleScenario:
                 actor,
             )
         )
-        if not self.project_source_binding_exercised:
-            self._bind_and_change_project_source(identifier)
+        if (
+            not self.project_source_binding_exercised
+            and identifier == self.project_source_binding_deliverable
+        ):
+            self._change_project_source()
 
     def _close_ready(self, identifier: str, actor: str, attempt: str) -> None:
         work = self._evidence(
@@ -891,6 +898,13 @@ class LifecycleScenario:
         return (tr["id"], tr["gate_id"]), (dcp["id"], dcp["gate_id"])
 
     def run_lifecycle(self, process: dict[str, Any]) -> None:
+        first_deliverable = next(iter(process.get("deliverables", [])), None)
+        _require(
+            isinstance(first_deliverable, dict)
+            and isinstance(first_deliverable.get("id"), str),
+            "tailored process did not provide a first Deliverable",
+        )
+        self._configure_project_source_binding(first_deliverable["id"])
         self.refresh_and_verify("initial")
         blocked_used = False
         rejection_used = False

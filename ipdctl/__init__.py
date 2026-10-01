@@ -43,4 +43,4 @@ __all__ = [
     "write_state",
 ]
 
-__version__ = "0.3.1b1"
+__version__ = "0.3.2b1"
