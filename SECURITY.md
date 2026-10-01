@@ -6,7 +6,7 @@ Security fixes are provided for the latest published pre-release or stable relea
 
 ## Reporting a vulnerability
 
-Use GitHub private vulnerability reporting after it is enabled for the published repository. If that channel is unavailable, contact the maintainers through a private channel identified by the repository owner. Do not open a public issue containing exploit details, credentials, private project state, or review records.
+Use [GitHub private vulnerability reporting](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/security/advisories/new). This is the canonical private disclosure channel for this repository. Do not open a public issue containing exploit details, credentials, private project state, or review records. If GitHub does not show the private reporting form, do not disclose the details publicly; contact the repository owner only through a private channel listed on their GitHub profile.
 
 A useful report includes the affected version, impact, minimal reproduction, and whether the issue can expose credentials, bypass dependency/evidence rules, corrupt state, or permit non-human final gate approval. Maintainers should acknowledge the report privately before coordinating remediation and disclosure.
 

@@ -86,3 +86,24 @@ jobs:
         run: python -m pip install .
       - name: Qualify the published v0.3.1 project upgrade
         run: python -B scripts/verify_v031_upgrade.py
+
+  governance-gate:
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - package
+      - upgrade-v031
+    steps:
+      - name: Require every release-contract job
+        shell: bash
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+          UPGRADE_RESULT: ${{ needs.upgrade-v031.result }}
+        run: |
+          printf 'test=%s package=%s upgrade-v031=%s\n' \
+            "$TEST_RESULT" "$PACKAGE_RESULT" "$UPGRADE_RESULT"
+          test "$TEST_RESULT" = "success"
+          test "$PACKAGE_RESULT" = "success"
+          test "$UPGRADE_RESULT" = "success"
