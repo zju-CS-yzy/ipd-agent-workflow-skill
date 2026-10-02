@@ -14,6 +14,7 @@ from pathlib import Path
 PACKAGE_VERSION = "0.3.2b1"
 PUBLIC_VERSION = "0.3.2-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
+GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
 REQUIRED_FILES = (
     "README.md",
@@ -209,7 +210,7 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/release.yml",
-            rf'uses:\s*softprops/action-gh-release@v3.*?body_path:\s*{re.escape(RELEASE_NOTES_PATH)}.*?prerelease:\s*true',
+            rf'uses:\s*softprops/action-gh-release@{GH_RELEASE_ACTION_SHA}.*?body_path:\s*{re.escape(RELEASE_NOTES_PATH)}.*?prerelease:\s*true',
             "release workflow must use the supported action, curated notes, and prerelease status",
         ),
         (
@@ -233,6 +234,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "CI must fetch release history and qualify the v0.3.1 in-place upgrade",
         ),
         (
+            ".github/workflows/test.yml",
+            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$",
+            "CI must expose the stable governance-gate over all release-contract jobs",
+        ),
+        (
             "SKILL.md",
             r'presentation\.locale.*?zh-CN',
             "Skill language contract must route generated presentation by project locale",
@@ -250,6 +256,24 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
     )
     for relative, pattern, message in checks:
         _require_pattern(findings, root, relative, pattern, message)
+
+    action_pattern = re.compile(
+        r"^\s*(?:-\s*)?uses:\s*[^@\s]+@([^\s#]+)", re.MULTILINE
+    )
+    for relative in (".github/workflows/test.yml", ".github/workflows/release.yml"):
+        path = root / relative
+        text = _read_text(path) if path.is_file() else None
+        if text is None:
+            continue
+        for match in action_pattern.finditer(text):
+            if re.fullmatch(r"[0-9a-f]{40}", match.group(1)) is None:
+                findings.append(
+                    Finding(
+                        relative,
+                        "every GitHub Action must be pinned to a full commit SHA",
+                    )
+                )
+                break
 
 
 def audit_repository(root: Path) -> tuple[list[Finding], int]:
