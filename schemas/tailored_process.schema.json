@@ -115,6 +115,14 @@
       "type": "array",
       "items": { "$ref": "#/$defs/migration" }
     },
+    "gate_migrations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gateMigration" }
+    },
+    "dependency_corrections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependencyCorrection" }
+    },
     "refinements": {
       "type": "array",
       "items": { "$ref": "#/$defs/appliedRefinement" }
@@ -291,6 +299,37 @@
         "strategy": { "enum": ["replace", "split"] },
         "reason": { "type": "string", "minLength": 1 },
         "preserve_history": { "const": true }
+      }
+    },
+    "gateMigration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason", "preserve_history"],
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true }
+      }
+    },
+    "dependencyCorrection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliverable",
+        "before",
+        "after",
+        "reason",
+        "preserve_history",
+        "require_reapproval"
+      ],
+      "properties": {
+        "deliverable": { "$ref": "#/$defs/identifier" },
+        "before": { "$ref": "#/$defs/identifierList" },
+        "after": { "$ref": "#/$defs/identifierList" },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true },
+        "require_reapproval": { "const": true }
       }
     },
     "definitionState": {

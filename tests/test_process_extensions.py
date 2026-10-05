@@ -8,7 +8,7 @@ from ipdctl.process_extensions import (
     load_process_extension,
     preview_process_diff,
 )
-from ipdctl.tailoring import tailor_profile, validate_process
+from ipdctl.tailoring import TailoringError, tailor_profile, validate_process
 
 
 class ProcessExtensionTests(unittest.TestCase):
@@ -19,11 +19,178 @@ class ProcessExtensionTests(unittest.TestCase):
         for field in (
             "activities",
             "deliverables",
+            "gates",
             "dependencies",
             "checkpoint_criteria",
             "migrations",
+            "gate_migrations",
+            "dependency_corrections",
         ):
             self.assertEqual(extension[field], [])
+
+    def test_project_gate_and_explicit_gate_migration_compile_deterministically(
+        self,
+    ) -> None:
+        base = tailor_profile({"task_type": "software"})
+        concept_deliverables = [
+            item["id"]
+            for item in base["deliverables"]
+            if item["phase"] == "concept"
+        ]
+        migration = {
+            "from": "legacy.security_gate",
+            "to": "gate.concept.security",
+            "reason": "Adopt the canonical project security gate.",
+            "preserve_history": True,
+        }
+        process = tailor_profile(
+            {"task_type": "software"},
+            process_extension={
+                "schema_version": "1.0",
+                "extension_id": "project.security",
+                "gates": [
+                    {
+                        "id": "gate.concept.security",
+                        "title": "Concept Security Gate",
+                        "phase": "concept",
+                        "checkpoint_id": "tr.concept",
+                        "required_deliverables": concept_deliverables,
+                    }
+                ],
+                "gate_migrations": [migration],
+            },
+        )
+
+        self.assertEqual(
+            [
+                item["id"]
+                for item in process["gates"]
+                if item["phase"] == "concept"
+            ],
+            ["gate.tr.concept", "gate.dcp.concept", "gate.concept.security"],
+        )
+        gate = next(
+            item
+            for item in process["gates"]
+            if item["id"] == "gate.concept.security"
+        )
+        self.assertEqual(gate["kind"], "Gate")
+        self.assertTrue(gate["review_required"])
+        self.assertEqual(gate["final_approval"], "authorized_human")
+        self.assertEqual(
+            gate["provenance"],
+            {"layer": "project", "source_id": "project.security"},
+        )
+        self.assertEqual(process["gate_migrations"], [migration])
+        self.assertEqual(validate_process(process), [])
+
+    def test_dependency_correction_compiles_exact_after_contract(self) -> None:
+        correction = {
+            "deliverable": "concept.problem_definition",
+            "before": [],
+            "after": ["project.problem_input"],
+            "reason": "Restore the omitted project input dependency.",
+            "preserve_history": True,
+            "require_reapproval": True,
+        }
+        process = tailor_profile(
+            {"task_type": "software"},
+            process_extension={
+                "schema_version": "1.0",
+                "extension_id": "project.dependency_fix",
+                "deliverables": [
+                    {
+                        "id": "project.problem_input",
+                        "title": "Project problem input",
+                        "phase": "concept",
+                        "activity_id": "concept.scope",
+                        "review_required": True,
+                        "depends_on": [],
+                    }
+                ],
+                "dependency_corrections": [correction],
+            },
+        )
+
+        corrected = next(
+            item
+            for item in process["deliverables"]
+            if item["id"] == "concept.problem_definition"
+        )
+        self.assertEqual(corrected["depends_on"], ["project.problem_input"])
+        edge = next(
+            item
+            for item in process["dependencies"]
+            if item["source"] == "concept.problem_definition"
+            and item["target"] == "project.problem_input"
+            and item["relation"] == "depends_on"
+        )
+        self.assertEqual(
+            edge["provenance"],
+            {"layer": "project", "source_id": "project.dependency_fix"},
+        )
+        self.assertEqual(process["dependency_corrections"], [correction])
+        self.assertEqual(validate_process(process), [])
+
+    def test_gate_migrations_and_dependency_corrections_fail_closed(self) -> None:
+        with self.assertRaisesRegex(
+            ProcessExtensionError, "must appear in exactly one gate migration"
+        ):
+            load_process_extension(
+                {
+                    "schema_version": "1.0",
+                    "extension_id": "invalid.gate_migrations",
+                    "gate_migrations": [
+                        {
+                            "from": "legacy.tr",
+                            "to": "gate.tr.concept",
+                            "reason": "First source.",
+                            "preserve_history": True,
+                        },
+                        {
+                            "from": "legacy.dcp",
+                            "to": "gate.tr.concept",
+                            "reason": "Conflicting source.",
+                            "preserve_history": True,
+                        },
+                    ],
+                }
+            )
+
+        with self.assertRaisesRegex(ProcessExtensionError, "different dependencies"):
+            load_process_extension(
+                {
+                    "schema_version": "1.0",
+                    "extension_id": "invalid.dependency_correction",
+                    "dependency_corrections": [
+                        {
+                            "deliverable": "concept.problem_definition",
+                            "before": ["project.input"],
+                            "after": ["project.input"],
+                            "reason": "No semantic change.",
+                            "preserve_history": True,
+                            "require_reapproval": True,
+                        }
+                    ],
+                }
+            )
+
+        with self.assertRaisesRegex(TailoringError, "candidate Gate"):
+            tailor_profile(
+                {"task_type": "software"},
+                process_extension={
+                    "schema_version": "1.0",
+                    "extension_id": "missing.gate_target",
+                    "gate_migrations": [
+                        {
+                            "from": "legacy.security",
+                            "to": "gate.concept.missing",
+                            "reason": "Invalid target.",
+                            "preserve_history": True,
+                        }
+                    ],
+                },
+            )
 
     def test_extension_cannot_weaken_review_or_history(self) -> None:
         with self.assertRaisesRegex(ProcessExtensionError, "review_required"):

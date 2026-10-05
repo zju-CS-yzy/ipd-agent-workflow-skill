@@ -17,11 +17,13 @@ from ipdctl.project import (
 from ipdctl.runtime import (
     create_runtime_state,
     load_runtime,
+    process_migration_event_issues,
     record_event,
     save_runtime,
     validate_runtime,
 )
 from ipdctl.state import load_state, write_state
+from ipdctl.tailoring import validate_tailored_process
 
 
 class ProcessMigrationRuntimeTests(unittest.TestCase):
@@ -51,9 +53,12 @@ class ProcessMigrationRuntimeTests(unittest.TestCase):
             "extension_id": "project",
             "activities": [],
             "deliverables": deliverables,
+            "gates": [],
             "dependencies": [],
             "checkpoint_criteria": [],
             "migrations": list(migrations or []),
+            "gate_migrations": [],
+            "dependency_corrections": [],
             "refinement_requirements": [],
             "refinements": [],
         }
@@ -114,6 +119,208 @@ class ProcessMigrationRuntimeTests(unittest.TestCase):
         runtime["events"][0]["migrations"] = []
         issues = validate_runtime(runtime)
         self.assertTrue(any("migrations" in issue for issue in issues))
+
+    def test_runtime_rejects_semantic_noop_process_migrations(self) -> None:
+        common = {
+            "action": "process_migration",
+            "at": "2026-10-06T00:00:00Z",
+            "actor": "release-owner",
+            "actor_type": "human",
+            "authorized": True,
+            "reason": "Reject semantic no-op migration records.",
+            "state_revision": 4,
+            "previous_process_schema_version": "2.0",
+            "process_schema_version": "2.0",
+        }
+        deliverable_issues = process_migration_event_issues(
+            {
+                **common,
+                "migrations": [
+                    {
+                        "from": "project.record",
+                        "to": "project.record",
+                        "strategy": "replace",
+                        "reason": "Invalid self migration.",
+                        "preserve_history": True,
+                    }
+                ],
+            }
+        )
+        self.assertTrue(
+            any(
+                "must not map a Deliverable to itself" in issue
+                for issue in deliverable_issues
+            )
+        )
+
+        gate_issues = process_migration_event_issues(
+            {
+                **common,
+                "gate_migrations": [
+                    {
+                        "from": "gate.tr.concept",
+                        "to": "gate.tr.concept",
+                        "reason": "Invalid self migration.",
+                        "preserve_history": True,
+                    }
+                ],
+            }
+        )
+        self.assertTrue(any("must not map a Gate to itself" in issue for issue in gate_issues))
+
+        correction_issues = process_migration_event_issues(
+            {
+                **common,
+                "dependency_corrections": [
+                    {
+                        "deliverable": "concept.problem_definition",
+                        "before": ["project.problem_input"],
+                        "after": ["project.problem_input"],
+                        "reason": "Invalid no-op correction.",
+                        "preserve_history": True,
+                        "require_reapproval": True,
+                    }
+                ],
+            }
+        )
+        self.assertTrue(any("must change dependencies" in issue for issue in correction_issues))
+
+    def test_runtime_rejects_ambiguous_migration_records(self) -> None:
+        common = {
+            "action": "process_migration",
+            "at": "2026-10-06T00:00:00Z",
+            "actor": "release-owner",
+            "actor_type": "human",
+            "authorized": True,
+            "reason": "Record an unambiguous reviewed migration.",
+            "state_revision": 4,
+            "previous_process_schema_version": "2.0",
+            "process_schema_version": "2.0",
+        }
+        first = {
+            "from": "legacy.record",
+            "to": "project.record",
+            "strategy": "replace",
+            "reason": "Replace the historical record.",
+            "preserve_history": True,
+        }
+        duplicate_runtime = create_runtime_state()
+        duplicate_runtime["events"].append(
+            {**common, "migrations": [first, dict(first)]}
+        )
+        duplicate_issues = validate_runtime(duplicate_runtime)
+        self.assertTrue(
+            any("duplicates an earlier migration entry" in issue for issue in duplicate_issues)
+        )
+        self.assertTrue(
+            any("duplicates migration mapping" in issue for issue in duplicate_issues)
+        )
+
+        duplicate_source_runtime = create_runtime_state()
+        duplicate_source_runtime["events"].append(
+            {
+                **common,
+                "migrations": [
+                    first,
+                    {
+                        **first,
+                        "to": "project.assurance_record",
+                        "reason": "Replace with another target.",
+                    },
+                ],
+            }
+        )
+        source_issues = validate_runtime(duplicate_source_runtime)
+        self.assertTrue(
+            any("with multiple targets must use split" in issue for issue in source_issues)
+        )
+
+        duplicate_target_runtime = create_runtime_state()
+        duplicate_target_runtime["events"].append(
+            {
+                **common,
+                "migrations": [
+                    first,
+                    {
+                        **first,
+                        "from": "legacy.assurance_record",
+                        "reason": "Attempt an unsupported merge.",
+                    },
+                ],
+            }
+        )
+        target_issues = validate_runtime(duplicate_target_runtime)
+        self.assertTrue(
+            any("has multiple sources; merge is unsupported" in issue for issue in target_issues)
+        )
+
+    def test_runtime_allows_distinct_split_targets(self) -> None:
+        event = {
+            "action": "process_migration",
+            "at": "2026-10-06T00:00:00Z",
+            "actor": "release-owner",
+            "actor_type": "human",
+            "authorized": True,
+            "reason": "Split one historical record into reviewed successors.",
+            "state_revision": 4,
+            "previous_process_schema_version": "2.0",
+            "process_schema_version": "2.0",
+            "migrations": [
+                {
+                    "from": "legacy.record",
+                    "to": "project.integration_record",
+                    "strategy": "split",
+                    "reason": "Create the integration successor.",
+                    "preserve_history": True,
+                },
+                {
+                    "from": "legacy.record",
+                    "to": "project.assurance_record",
+                    "strategy": "split",
+                    "reason": "Create the assurance successor.",
+                    "preserve_history": True,
+                },
+            ],
+        }
+        runtime = create_runtime_state()
+        runtime["events"].append(event)
+        self.assertEqual(validate_runtime(runtime), [])
+
+    def test_runtime_rejects_multiple_dependency_corrections_per_deliverable(self) -> None:
+        correction = {
+            "deliverable": "concept.problem_definition",
+            "before": ["project.legacy_input"],
+            "after": ["project.reviewed_input"],
+            "reason": "Correct the historical dependency contract.",
+            "preserve_history": True,
+            "require_reapproval": True,
+        }
+        runtime = create_runtime_state()
+        runtime["events"].append(
+            {
+                "action": "process_migration",
+                "at": "2026-10-06T00:00:00Z",
+                "actor": "release-owner",
+                "actor_type": "human",
+                "authorized": True,
+                "reason": "Apply the reviewed dependency correction.",
+                "state_revision": 4,
+                "previous_process_schema_version": "2.0",
+                "process_schema_version": "2.0",
+                "dependency_corrections": [
+                    correction,
+                    {
+                        **correction,
+                        "after": ["project.alternate_input"],
+                        "reason": "Conflicting second correction.",
+                    },
+                ],
+            }
+        )
+        issues = validate_runtime(runtime)
+        self.assertTrue(
+            any("must have exactly one dependency correction" in issue for issue in issues)
+        )
 
     def test_tailor_preview_is_deterministic_and_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -610,6 +817,9 @@ class ProcessMigrationRuntimeTests(unittest.TestCase):
             process_path = root / ".ipd" / "tailored_process.yaml"
             state_path = root / ".ipd" / "project_state.yaml"
             process = _legacy_process_projection(load_state(process_path))
+            self.assertNotIn("gate_migrations", process)
+            self.assertNotIn("dependency_corrections", process)
+            self.assertEqual(validate_tailored_process(process), [])
             write_state(process_path, process)
             state = load_state(state_path)
             for deliverable in state["deliverables"]:

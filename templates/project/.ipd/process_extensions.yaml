@@ -2,8 +2,11 @@ schema_version: '1.0'
 extension_id: project
 activities: []
 deliverables: []
+gates: []
 dependencies: []
 checkpoint_criteria: []
 migrations: []
+gate_migrations: []
+dependency_corrections: []
 refinement_requirements: []
 refinements: []

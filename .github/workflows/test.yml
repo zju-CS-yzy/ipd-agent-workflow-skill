@@ -139,8 +139,26 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install current package
         run: python -m pip install .
-      - name: Qualify v0.3.2-beta to v0.4.0-beta
+      - name: Qualify the published v0.3.2 project upgrade
         run: python -B scripts/verify_v032_upgrade.py
+
+  upgrade-v040:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install current package
+        run: python -m pip install .
+      - name: Qualify v0.4.0-beta to v0.4.1-beta
+        run: python -B scripts/verify_v040_upgrade.py
 
   governance-gate:
     if: always()
@@ -150,6 +168,7 @@ jobs:
       - package
       - upgrade-v031
       - upgrade-v032
+      - upgrade-v040
     steps:
       - name: Require every release-contract job
         shell: bash
@@ -158,11 +177,14 @@ jobs:
           PACKAGE_RESULT: ${{ needs.package.result }}
           UPGRADE_V031_RESULT: ${{ needs.upgrade-v031.result }}
           UPGRADE_V032_RESULT: ${{ needs.upgrade-v032.result }}
+          UPGRADE_V040_RESULT: ${{ needs.upgrade-v040.result }}
         run: |
-          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s\n' \
+          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s upgrade-v040=%s\n' \
             "$TEST_RESULT" "$PACKAGE_RESULT" \
-            "$UPGRADE_V031_RESULT" "$UPGRADE_V032_RESULT"
+            "$UPGRADE_V031_RESULT" "$UPGRADE_V032_RESULT" \
+            "$UPGRADE_V040_RESULT"
           test "$TEST_RESULT" = "success"
           test "$PACKAGE_RESULT" = "success"
           test "$UPGRADE_V031_RESULT" = "success"
           test "$UPGRADE_V032_RESULT" = "success"
+          test "$UPGRADE_V040_RESULT" = "success"

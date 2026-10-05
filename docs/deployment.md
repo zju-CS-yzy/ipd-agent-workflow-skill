@@ -41,15 +41,22 @@ not release artifacts.
 
 Complete [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) before creating a tag. The source commit must be clean, CI must pass, package version and changelog must agree, and the release hygiene check must find no cache, build output, generated runtime data, credential-like files, or high-confidence secret patterns.
 
-The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.4.0-beta` (Python package version `0.4.0b1`).
+The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.4.1-beta` (Python package version `0.4.1b1`).
 
 The direct previous-version gate must build a governed project with the real
-`v0.3.2-beta` Tag, open it under v0.4 without reinitializing, prove
-`tailor --preview` is zero-write, re-tailor it to process schema `2.0`, and
-preserve accepted status, evidence, and review history. Enabling a capability
-must add only planned work, expose provenance in the Dashboard, fail closed on
-the changed binding contract, and pass only after an explicitly authorized
-human baseline adoption.
+`v0.4.0-beta` Tag and open it under v0.4.1 without reinitializing. It must prove
+that `tailor --preview --json` is zero-write and exposes Claim-trace additions,
+removals, redirects, explicit Gate migrations, and dependency corrections.
+Application must fail without authorized-human migration arguments, preserve
+all unaffected project state and every evidence/review record, retain every
+surviving Claim link, and require corrected work to be reviewed again. A final
+`refresh`, `verify`, and `validate --json` must pass.
+
+Retain the v0.3.2-to-v0.4 process-schema upgrade gate as a longer-horizon
+compatibility regression. It must still preserve accepted state, evidence, and
+review history; add only planned capability work; expose provenance; and remain
+fail-closed until a changed Binding baseline is explicitly adopted by an
+authorized human.
 
 Retain the longer-horizon in-place v0.3.1 compatibility regression with
 pre-existing dirty critical files: validate single-owner bindings, preview and

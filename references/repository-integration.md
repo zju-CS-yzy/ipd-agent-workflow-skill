@@ -42,6 +42,12 @@ Only after the binding validates and the matching Claim exists may the Agent mod
 the framework never guesses that `docs/**`, `src/**`, or `tests/**` belongs to
 a particular Deliverable.
 
+Binding patterns are anchored at the project root. `README.md` therefore
+matches only the root file rather than every nested file with that name.
+`docs/*.md` matches one path segment below `docs`; `*` never crosses `/`.
+Only a complete `**` path segment spans zero or more directories. Windows path
+separators are normalized before matching, so the same rule is portable.
+
 Owner and shared-evidence rules have different authority:
 
 ```yaml

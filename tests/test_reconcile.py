@@ -14,6 +14,8 @@ from ipdctl.reconcile import (
     binding_readiness,
     create_claim_binding_window,
     load_artifact_bindings,
+    map_paths_to_deliverables,
+    path_matches,
     preview_artifact_baseline,
     reconcile_project,
     validate_artifact_bindings,
@@ -31,6 +33,69 @@ def run_git(root: Path, *arguments: str) -> str:
         encoding="utf-8",
     )
     return result.stdout.strip()
+
+
+class ArtifactBindingPathMatchingTests(unittest.TestCase):
+    def test_patterns_are_rooted_and_segment_aware(self) -> None:
+        cases = (
+            ("README.md", "README.md", True),
+            ("docs/README.md", "README.md", False),
+            ("docs/guides/README.md", "README.md", False),
+            ("src/main.py", "src/*.py", True),
+            ("src/package/main.py", "src/*.py", False),
+            ("src", "src/**", True),
+            ("src/main.py", "src/**", True),
+            ("src/package/main.py", "src/**", True),
+            ("README.md", "**/README.md", True),
+            ("docs/README.md", "**/README.md", True),
+            ("docs/guides/README.md", "**/README.md", True),
+            (r"docs\README.md", "docs/*.md", True),
+            (r"docs\guides\README.md", "docs/*.md", False),
+            (r"docs\guides\README.md", "**/README.md", True),
+        )
+        for path, pattern, expected in cases:
+            with self.subTest(path=path, pattern=pattern):
+                self.assertEqual(path_matches(path, pattern), expected)
+
+    def test_root_literal_does_not_create_nested_double_owner(self) -> None:
+        bindings = validate_artifact_bindings(
+            {
+                "schema_version": "1.0",
+                "ignore": [],
+                "critical_roots": ["**"],
+                "bindings": [
+                    {
+                        "id": "root-readme",
+                        "glob": "README.md",
+                        "deliverable": "D-ROOT",
+                        "critical": True,
+                    },
+                    {
+                        "id": "docs",
+                        "glob": "docs/**",
+                        "deliverable": "D-DOCS",
+                        "critical": True,
+                    },
+                ],
+            },
+            known_deliverables={"D-ROOT", "D-DOCS"},
+        )
+
+        mapping = map_paths_to_deliverables(
+            ["README.md", "docs/README.md"], bindings
+        )
+
+        self.assertEqual(
+            [item["owner_deliverable_id"] for item in mapping["paths"]["README.md"]],
+            ["D-ROOT"],
+        )
+        self.assertEqual(
+            [
+                item["owner_deliverable_id"]
+                for item in mapping["paths"]["docs/README.md"]
+            ],
+            ["D-DOCS"],
+        )
 
 
 class ArtifactBindingSchemaTests(unittest.TestCase):

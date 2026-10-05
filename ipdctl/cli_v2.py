@@ -47,11 +47,14 @@ from .project import (
     artifact_baseline_preview,
     closed_phase_process_changes,
     context_snapshot,
+    deliverable_has_history,
+    effective_dependency_corrections,
     governed_deliverable_rewrites,
     initialize_project,
     load_project,
     project_consistency_issues,
     project_paths,
+    project_traceability_projection,
     refresh_project,
     sync_state_with_process,
     verify_project,
@@ -73,7 +76,7 @@ from .state import StateError, load_state, resolve_state_path, revised_copy, wri
 from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
 
-VERSION = "0.4.0-beta"
+VERSION = "0.4.1-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -416,6 +419,9 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
     )
     _add_target(validate, translator)
     validate.add_argument("--policy", help=translator.text("cli.argument.policy.help"))
+    validate.add_argument(
+        "--json", action="store_true", help=translator.text("cli.argument.json.help")
+    )
     validate.set_defaults(handler=_cmd_validate)
 
     status = commands.add_parser(
@@ -527,8 +533,8 @@ def _target_hint(command: str, tail: Sequence[str]) -> str:
 
 def _locale_root(target: str | Path) -> Path:
     path = Path(target)
-    if path.suffix.lower() in {".json", ".yaml", ".yml"} and path.parent.name == ".ipd":
-        return path.parent.parent
+    if path.suffix.lower() in {".json", ".yaml", ".yml"}:
+        return path.parent.parent if path.parent.name == ".ipd" else path.parent
     return path
 
 
@@ -571,6 +577,62 @@ def _normalize_task_type(value: str, translator: Translator | None = None) -> st
 
 def _json(data: Any) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True)
+
+
+def _enrich_tailor_preview(
+    diff: dict[str, Any], state: dict[str, Any], process: dict[str, Any]
+) -> dict[str, Any]:
+    """Add state projection and typed migration facts without changing five keys."""
+
+    # Validate replay safety against the current state even in no-write mode.
+    effective_dependency_corrections(state, process)
+    _, impact = project_traceability_projection(state, process)
+    for edge in impact["added"]:
+        diff["added"].append(
+            {
+                "collection": "state.traceability",
+                "id": f"{edge['source']}|{edge['relation']}|{edge['target']}",
+            }
+        )
+    for edge in impact["removed"]:
+        diff["removed"].append(
+            {
+                "collection": "state.traceability",
+                "id": f"{edge['source']}|{edge['relation']}|{edge['target']}",
+            }
+        )
+    for redirect in impact["redirected"]:
+        before = redirect["before"]
+        after = redirect["after"]
+        diff["changed"].append(
+            {
+                "collection": "state.traceability",
+                "id": f"{before['source']}|{before['relation']}|{before['target']}",
+                "fields": list(redirect["fields"]),
+                "before": before,
+                "after": after,
+            }
+        )
+    for blocker in impact["blocked"]:
+        diff["ambiguous"].append(
+            {"kind": "state_traceability_blocked", **blocker}
+        )
+    diff["migrations"].extend(
+        {"entity_type": "gate", **dict(item)}
+        for item in process.get("gate_migrations", [])
+        if isinstance(item, dict)
+    )
+    diff["migrations"].extend(
+        {"entity_type": "deliverable_dependency", **dict(item)}
+        for item in process.get("dependency_corrections", [])
+        if isinstance(item, dict)
+    )
+    sort_key = lambda item: json.dumps(
+        item, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    for field in ("added", "removed", "changed", "migrations", "ambiguous"):
+        diff[field] = sorted(diff[field], key=sort_key)
+    return diff
 
 
 def _transaction_options(
@@ -657,7 +719,9 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
         load_state(paths["process"]) if paths["process"].is_file() else None
     )
     previous_state = load_state(paths["state"])
-    diff = preview_process_diff(current_process, process)
+    diff = _enrich_tailor_preview(
+        preview_process_diff(current_process, process), previous_state, process
+    )
     if args.preview:
         if args.json:
             print(_json(diff))
@@ -766,10 +830,40 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
         current_process or {},
         process,
     )
-    if governed_rewrites:
+    declared_corrections = {
+        item.get("deliverable"): item
+        for item in process.get("dependency_corrections", [])
+        if isinstance(item, dict) and isinstance(item.get("deliverable"), str)
+    }
+    effective_corrections = {
+        item["deliverable"]: item
+        for item in effective_dependency_corrections(previous_state, process)
+    }
+    state_deliverables = {
+        item.get("id"): item
+        for item in previous_state.get("deliverables", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    authorized_dependency_rewrites = {
+        identifier
+        for identifier, fields in governed_rewrites.items()
+        if fields == ["depends_on"]
+        and identifier in declared_corrections
+        and (
+            identifier in effective_corrections
+            or state_deliverables.get(identifier, {}).get("depends_on", [])
+            == declared_corrections[identifier].get("after")
+        )
+    }
+    unsafe_governed_rewrites = {
+        identifier: fields
+        for identifier, fields in governed_rewrites.items()
+        if identifier not in authorized_dependency_rewrites
+    }
+    if unsafe_governed_rewrites:
         detail = ", ".join(
             f"{identifier} ({'/'.join(fields)})"
-            for identifier, fields in governed_rewrites.items()
+            for identifier, fields in unsafe_governed_rewrites.items()
         )
         raise ProjectError(
             translator.text(
@@ -831,7 +925,34 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
         and migration.get("from") in migrated_state_ids
         and previous_statuses.get(migration.get("from")) != "superseded"
     ]
-    if applied_migrations:
+    previous_gate_ids = {
+        item.get("id")
+        for item in previous_state.get("gates", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    candidate_gate_ids = {
+        item.get("id")
+        for item in process.get("gates", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    applied_gate_migrations = [
+        migration
+        for migration in process.get("gate_migrations", [])
+        if isinstance(migration, dict)
+        and migration.get("from") in previous_gate_ids
+        and migration.get("to") in candidate_gate_ids
+        and migration.get("from") != migration.get("to")
+    ]
+    applied_dependency_corrections = [
+        correction
+        for identifier, correction in sorted(effective_corrections.items())
+        if deliverable_has_history(state_deliverables.get(identifier, {}))
+    ]
+    if (
+        applied_migrations
+        or applied_gate_migrations
+        or applied_dependency_corrections
+    ):
         if not isinstance(args.actor, str) or not args.actor.strip():
             raise ProjectError(
                 translator.text("error.tailor_migration_actor_required")
@@ -848,23 +969,29 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
             raise ProjectError(
                 translator.text("error.tailor_migration_reason_required")
             )
+        event_details: dict[str, Any] = {
+            "actor": args.actor.strip(),
+            "actor_type": args.actor_type,
+            "authorized": True,
+            "reason": args.reason.strip(),
+            "state_revision": state["revision"],
+            "previous_process_schema_version": (
+                current_process.get("schema_version")
+                if isinstance(current_process, dict)
+                else None
+            ),
+            "process_schema_version": process.get("schema_version"),
+        }
+        if applied_migrations:
+            event_details["migrations"] = applied_migrations
+        if applied_gate_migrations:
+            event_details["gate_migrations"] = applied_gate_migrations
+        if applied_dependency_corrections:
+            event_details["dependency_corrections"] = applied_dependency_corrections
         runtime = record_event(
             runtime,
             "process_migration",
-            details={
-                "actor": args.actor.strip(),
-                "actor_type": args.actor_type,
-                "authorized": True,
-                "reason": args.reason.strip(),
-                "state_revision": state["revision"],
-                "previous_process_schema_version": (
-                    current_process.get("schema_version")
-                    if isinstance(current_process, dict)
-                    else None
-                ),
-                "process_schema_version": process.get("schema_version"),
-                "migrations": applied_migrations,
-            },
+            details=event_details,
         )
     with project_mutation_guard(
         root,
@@ -2009,27 +2136,103 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     target = Path(args.target)
     project_target = target.is_dir()
     path = resolve_state_path(target)
-    state = load_state(path)
-    issues = validate_state(state)
-    if issues:
-        print(translator.text("cli.validate.invalid", path=path), file=sys.stderr)
-        for issue in issues:
-            print(translator.text("cli.validate.issue", issue=issue), file=sys.stderr)
-        return 1
+    state: dict[str, Any] | None = None
+    report_issues: list[dict[str, Any]] = []
+    checks = {
+        "state": "not_run",
+        "policy": "not_requested" if not args.policy else "not_run",
+        "bindings": "not_applicable" if not project_target else "not_run",
+    }
+
+    def add_issue(code: str, message: str, *, issue_path: str | None = None) -> None:
+        issue: dict[str, Any] = {
+            "severity": "error",
+            "code": code,
+            "message": message,
+        }
+        if issue_path is not None:
+            issue["path"] = issue_path
+        report_issues.append(issue)
+
+    try:
+        state = load_state(path)
+    except (StateError, OSError, ValueError) as exc:
+        checks["state"] = "failed"
+        add_issue("STATE_INPUT_INVALID", str(exc), issue_path=str(path))
+    else:
+        state_issues = validate_state(state)
+        checks["state"] = "failed" if state_issues else "passed"
+        for issue in state_issues:
+            add_issue(
+                "STATE_VALIDATION_ERROR",
+                issue.message,
+                issue_path=issue.path,
+            )
+
     if args.policy:
-        load_policy(args.policy)
-    if project_target:
-        from .reconcile import load_artifact_bindings
+        try:
+            load_policy(args.policy)
+        except (PolicyError, OSError, ValueError) as exc:
+            checks["policy"] = "failed"
+            add_issue("POLICY_INVALID", str(exc), issue_path=str(args.policy))
+        else:
+            checks["policy"] = "passed"
+
+    if project_target and state is not None:
+        from .reconcile import ReconcileError, load_artifact_bindings
 
         deliverable_ids = {
             item["id"]
             for item in state.get("deliverables", [])
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         }
-        load_artifact_bindings(
-            project_paths(target)["bindings"],
-            known_deliverables=deliverable_ids,
-        )
+        try:
+            load_artifact_bindings(
+                project_paths(target)["bindings"],
+                known_deliverables=deliverable_ids,
+            )
+        except ReconcileError as exc:
+            checks["bindings"] = "failed"
+            report_issues.append(exc.as_issue())
+        except (OSError, ValueError) as exc:
+            checks["bindings"] = "failed"
+            add_issue(
+                "ARTIFACT_BINDINGS_INVALID",
+                str(exc),
+                issue_path=str(project_paths(target)["bindings"]),
+            )
+        else:
+            checks["bindings"] = "passed"
+    elif project_target:
+        checks["bindings"] = "not_run"
+
+    if args.json:
+        report = {
+            "schema_version": "1.0",
+            "command": "validate",
+            "status": "failed" if report_issues else "passed",
+            "locale": translator.locale,
+            "scope": "project" if project_target else "state",
+            "target": str(target),
+            "state_path": str(path),
+            "state_revision": state.get("revision") if state is not None else None,
+            "checks": checks,
+            "issues": report_issues,
+        }
+        print(_json(report))
+        return 1 if report_issues else 0
+
+    if report_issues:
+        print(translator.text("cli.validate.invalid", path=path), file=sys.stderr)
+        for issue in report_issues:
+            detail = (
+                f"{issue['path']}: {issue['message']}"
+                if issue.get("path")
+                else issue["message"]
+            )
+            print(translator.text("cli.validate.issue", issue=detail), file=sys.stderr)
+        return 1
+    assert state is not None
     print(
         translator.text(
             "cli.validate.valid", revision=state["revision"], path=path
@@ -2038,7 +2241,18 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _configure_utf8_stdio() -> None:
+    """Make the console-script byte contract deterministic on every platform."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="strict")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is None:
+        _configure_utf8_stdio()
     arguments = list(argv) if argv is not None else sys.argv[1:]
     try:
         bootstrap_translator = get_translator(_infer_cli_locale(arguments))

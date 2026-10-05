@@ -19,6 +19,11 @@
       "default": [],
       "items": { "$ref": "#/$defs/deliverable" }
     },
+    "gates": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/gate" }
+    },
     "dependencies": {
       "type": "array",
       "default": [],
@@ -33,6 +38,16 @@
       "type": "array",
       "default": [],
       "items": { "$ref": "#/$defs/migration" }
+    },
+    "gate_migrations": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/gateMigration" }
+    },
+    "dependency_corrections": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/dependencyCorrection" }
     },
     "refinement_requirements": {
       "type": "array",
@@ -110,6 +125,25 @@
         "requires_artifact_owner": { "type": "boolean" }
       }
     },
+    "gate": {
+      "description": "A project-owned generic Gate that follows the canonical TR and DCP for its phase.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "checkpoint_id", "required_deliverables"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "checkpoint_id": {
+          "type": "string",
+          "pattern": "^(tr|dcp)\\.(concept|plan|develop|qualify|launch|lifecycle)$"
+        },
+        "required_deliverables": {
+          "allOf": [{ "$ref": "#/$defs/identifierList" }],
+          "minItems": 1
+        }
+      }
+    },
     "dependency": {
       "type": "object",
       "additionalProperties": false,
@@ -144,6 +178,39 @@
         "strategy": { "enum": ["replace", "split"] },
         "reason": { "type": "string", "minLength": 1 },
         "preserve_history": { "const": true }
+      }
+    },
+    "gateMigration": {
+      "description": "An explicit one-to-one transfer of governed Gate history to a candidate Gate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason", "preserve_history"],
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true }
+      }
+    },
+    "dependencyCorrection": {
+      "description": "An exact, review-invalidating correction to one existing Deliverable dependency set.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliverable",
+        "before",
+        "after",
+        "reason",
+        "preserve_history",
+        "require_reapproval"
+      ],
+      "properties": {
+        "deliverable": { "$ref": "#/$defs/identifier" },
+        "before": { "$ref": "#/$defs/identifierList" },
+        "after": { "$ref": "#/$defs/identifierList" },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true },
+        "require_reapproval": { "const": true }
       }
     },
     "definitionState": {

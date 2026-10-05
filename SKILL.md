@@ -63,7 +63,7 @@ python -m ipdctl verify .
 python -m ipdctl advance-phase .
 python -m ipdctl repository .
 python -m ipdctl reconcile .
-python -m ipdctl validate .
+python -m ipdctl validate . --json
 ```
 
 The full command surface is `init`, `tailor`, `refine`, `context`, `adopt-baseline`, `claim`, `close`,
@@ -79,8 +79,9 @@ Tailoring compiles exactly four additive layers in order:
 `core -> task_type -> capability -> project`. Select reusable capability packs
 with `task_profile.yaml` at `capability_patterns`; use the canonical
 `.ipd/process_extensions.yaml` only for project-owned Activities,
-Deliverables, typed relations, TR/DCP criteria, and explicit process
-migrations. The project layer cannot delete or override an earlier entity.
+Deliverables, generic Gates, typed relations, TR/DCP criteria, and explicit
+Deliverable, Gate, or dependency-correction migrations. The project layer
+cannot delete or override an earlier entity.
 Every compiled Phase, Activity, Deliverable, TR, DCP, and Gate records its
 `provenance` layer/source and phase-derived `maturity`. Dependencies must be
 acyclic and phase-monotonic: an earlier-Phase Deliverable cannot depend on a
@@ -88,7 +89,10 @@ later-Phase Deliverable.
 
 Always run `tailor --preview` before changing an existing process. Preview is
 read-only; `--json` returns `added`, `removed`, `changed`, `migrations`, and
-`ambiguous`. A re-tailor is forbidden while a Claim is active. Removing a
+`ambiguous`, including `state.traceability` additions, removals, and redirects.
+A Claim-linked relation whose surviving endpoint cannot be preserved or
+explicitly migrated is an `ambiguous` blocker. A re-tailor is forbidden while
+a Claim is active. Removing a
 historical, non-superseded Deliverable requires an explicit `replace` or
 `split` mapping, `--apply-migrations`, and an authorized human Actor and
 reason. The old state node becomes `superseded` and retains its evidence and
@@ -100,6 +104,16 @@ approved or already closed Phase, including TR/DCP criteria. The only upgrade
 exception is deterministic schema `1.0` enrichment with core provenance,
 maturity, and canonical readiness criteria. Do not infer a migration mapping
 or reopen a Phase implicitly.
+
+Move legacy generic Gate history only through an explicit one-to-one
+`gate_migrations` record whose target exists in the candidate process. Correct
+the `depends_on` set of a historical Deliverable under the same ID only through
+an exact `dependency_corrections` record with reviewed `before` and `after`
+sets, `preserve_history: true`, and `require_reapproval: true`. Both operations
+use `--apply-migrations` and explicit authorized-human Actor and reason on their
+first effective application. A dependency correction preserves evidence and
+reviews, blocks the affected Deliverable for rework, and invalidates affected
+unapproved Gate readiness; it must not silently reopen an approved Gate.
 
 New compilation writes tailored-process schema `2.0`. A schema `1.0` process
 remains readable only while it semantically matches a profile without enabled
@@ -134,6 +148,10 @@ must be non-critical and may reference several `deliverables`, but it neither
 authorizes a Claim nor satisfies the required owner for a critical path.
 New Claim events capture a binding window, so a historical Claim cannot
 authorize unrelated later changes.
+
+Treat artifact-binding globs as project-root anchored. A pattern such as
+`README.md` matches only the root file; `*` does not cross `/`, and only a full
+`**` path segment can span zero or more directories.
 
 For an existing project whose governed paths were already dirty before this
 protocol was installed, first validate explicit bindings, then let an

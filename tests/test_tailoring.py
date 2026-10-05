@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from ipdctl.process_model import TASK_TYPES, normalize_task_type
+from ipdctl.project import _process_matches_compilation
 from ipdctl.tailoring import (
     TailoringError,
     load_process,
@@ -524,6 +525,8 @@ class TailoringTests(unittest.TestCase):
         legacy["schema_version"] = "1.0"
         legacy["profile"].pop("capability_patterns")
         legacy.pop("migrations")
+        legacy.pop("gate_migrations")
+        legacy.pop("dependency_corrections")
         for collection in (
             "phases",
             "technical_reviews",
@@ -541,6 +544,35 @@ class TailoringTests(unittest.TestCase):
         for dependency in legacy["dependencies"]:
             dependency.pop("provenance")
         self.assertEqual(validate_tailored_process(legacy), [])
+
+    def test_legacy_v1_empty_compatibility_fields_do_not_appear_stale(self) -> None:
+        candidate = tailor_profile({"task_type": "software"})
+        legacy = deepcopy(candidate)
+        legacy["schema_version"] = "1.0"
+        legacy["profile"].pop("capability_patterns")
+        legacy.pop("migrations")
+        legacy["refinements"] = []
+        legacy["gate_migrations"] = []
+        legacy["dependency_corrections"] = []
+        for collection in (
+            "phases",
+            "technical_reviews",
+            "decision_checkpoints",
+            "gates",
+            "activities",
+            "deliverables",
+        ):
+            for item in legacy[collection]:
+                item.pop("provenance")
+                item.pop("maturity")
+        for collection in ("technical_reviews", "decision_checkpoints"):
+            for item in legacy[collection]:
+                item.pop("criteria")
+        for dependency in legacy["dependencies"]:
+            dependency.pop("provenance")
+
+        self.assertEqual(validate_tailored_process(legacy), [])
+        self.assertTrue(_process_matches_compilation(legacy, candidate))
 
     def test_schema_files_are_valid_json_and_cover_required_collections(self) -> None:
         task_schema = json.loads(
@@ -563,6 +595,8 @@ class TailoringTests(unittest.TestCase):
             ["1.0", "2.0"],
         )
         self.assertIn("migrations", process_schema["properties"])
+        self.assertIn("gate_migrations", process_schema["properties"])
+        self.assertIn("dependency_corrections", process_schema["properties"])
         self.assertEqual(
             set(process_schema["required"]),
             {
