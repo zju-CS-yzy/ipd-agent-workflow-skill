@@ -33,6 +33,27 @@ class MessageFormatError(LocaleError):
 _EXCEPTION_MESSAGE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
+            r"re-tailoring requires explicit --apply-migrations for historical "
+            r"deliverables: (?P<deliverables>.+)"
+        ),
+        "error.tailor_migrations_required",
+    ),
+    (
+        re.compile(
+            r"re-tailoring would remove unmapped historical deliverables: "
+            r"(?P<deliverables>.+)"
+        ),
+        "error.tailor_unmapped_history",
+    ),
+    (
+        re.compile(
+            r"state-only superseded history has invalid replacements or trace "
+            r"links: (?P<deliverables>.+)"
+        ),
+        "error.tailor_invalid_superseded_history",
+    ),
+    (
+        re.compile(
             r"deliverable (?P<deliverable>.+?) belongs to phase "
             r"(?P<deliverable_phase>.+?); current phase is (?P<current_phase>.+)"
         ),
@@ -96,6 +117,13 @@ _EXCEPTION_MESSAGE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(r"gate rejection requires a latest authorized human rejection review"),
         "error.gate_rejection_authority",
+    ),
+    (
+        re.compile(
+            r"gate approval requires a latest authorized human approval "
+            r"in review epoch (?P<epoch>\d+)"
+        ),
+        "error.gate_approval_review_epoch",
     ),
     (
         re.compile(

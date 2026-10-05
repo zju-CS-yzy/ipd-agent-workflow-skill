@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -19,8 +20,14 @@ SPEC.loader.exec_module(simulation)
 
 
 class FullLifecycleSimulationTests(unittest.TestCase):
+    def test_cli_accepts_each_supported_locale(self) -> None:
+        parser = simulation._build_parser()
+        self.assertEqual(parser.parse_args(["--locale", "en"]).locale, "en")
+        self.assertEqual(parser.parse_args(["--locale", "zh-CN"]).locale, "zh-CN")
+
     def test_realistic_project_completes_without_missing_outputs_or_severe_issues(self) -> None:
-        report = simulation.run_simulation()
+        locale = os.environ.get("IPD_TEST_LOCALE", "zh-CN")
+        report = simulation.run_simulation(locale=locale)
 
         self.assertTrue(report["passed"], report["severe_issues"])
         self.assertEqual(report["missing_outputs"], [])
@@ -29,8 +36,8 @@ class FullLifecycleSimulationTests(unittest.TestCase):
 
         checks = report["checks"]
         self.assertEqual(checks["phases"], 6)
-        self.assertEqual(checks["deliverables"], 18)
-        self.assertEqual(checks["accepted_deliverables"], 18)
+        self.assertEqual(checks["deliverables"], 22)
+        self.assertEqual(checks["accepted_deliverables"], 22)
         self.assertEqual(checks["gates"], 12)
         self.assertEqual(checks["approved_gates"], 12)
         self.assertEqual(checks["current_phase"], "lifecycle")
@@ -38,13 +45,17 @@ class FullLifecycleSimulationTests(unittest.TestCase):
         self.assertEqual(checks["active_claims"], 0)
 
         self.assertEqual(checks["dashboard_files"], 15)
-        self.assertEqual(checks["dashboard_locale"], "zh-CN")
+        self.assertEqual(checks["dashboard_locale"], locale)
         self.assertEqual(
             checks["dashboard_state_revision"], checks["state_revision"]
         )
         self.assertEqual(checks["reconciliation_status"], "passed")
         self.assertEqual(checks["repository_kind"], "git")
         self.assertEqual(checks["repository_branch"], "main")
+        self.assertEqual(checks["capability_deliverables"], 3)
+        self.assertEqual(checks["project_extension_deliverables"], 1)
+        self.assertTrue(checks["binding_owner_role"])
+        self.assertTrue(checks["binding_shared_evidence_role"])
 
         self.assertEqual(checks["blocked_iterations"], 1)
         self.assertEqual(checks["deliverable_rejections"], 1)

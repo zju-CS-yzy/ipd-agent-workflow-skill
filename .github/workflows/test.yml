@@ -28,6 +28,8 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
+        env:
+          IPD_TEST_LOCALE: ${{ matrix.locale }}
         run: python -B -m unittest discover -s tests -v
       - name: Smoke-test lifecycle
         shell: bash
@@ -56,17 +58,52 @@ jobs:
           wheel="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
+          python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
+          python -m zipfile -l "$wheel" | grep 'schemas/process_extensions.schema.json'
+          python -m zipfile -l "$wheel" | grep 'schemas/refinement_plan.schema.json'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/sourced_component_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'templates/project/.ipd/process_extensions.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
+          tar -tzf "$sdist" | grep '/schemas/capability_policy.schema.json$'
+          tar -tzf "$sdist" | grep '/schemas/process_extensions.schema.json$'
+          tar -tzf "$sdist" | grep '/schemas/refinement_plan.schema.json$'
+          tar -tzf "$sdist" | grep '/scripts/simulate_progressive_refinement.py$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/sourced_component_integration.yaml$'
+          tar -tzf "$sdist" | grep '/templates/project/.ipd/process_extensions.yaml$'
+      - name: Test progressive refinement from extracted sdist
+        shell: bash
+        run: |
+          sdist="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/sdist-source"
+          tar -xzf "$sdist" -C "$RUNNER_TEMP/sdist-source"
+          source_root="$(find "$RUNNER_TEMP/sdist-source" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          mkdir -p "$RUNNER_TEMP/sdist-progressive"
+          cp "$source_root/scripts/simulate_progressive_refinement.py" \
+            "$RUNNER_TEMP/sdist-progressive/simulate_progressive_refinement.py"
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          "$RUNNER_TEMP/sdist-venv/bin/pip" install "$sdist"
+          cd "$RUNNER_TEMP/sdist-progressive"
+          "$RUNNER_TEMP/sdist-venv/bin/python" -B \
+            simulate_progressive_refinement.py --json
+          cd "$source_root"
+          "$RUNNER_TEMP/sdist-venv/bin/python" -B -m unittest tests.test_progressive_refinement_simulation -v
       - name: Test installed wheel outside checkout
         shell: bash
         run: |
           wheel="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/wheel-progressive"
+          cp scripts/simulate_progressive_refinement.py \
+            "$RUNNER_TEMP/wheel-progressive/simulate_progressive_refinement.py"
           python -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install "$wheel"
+          cd "$RUNNER_TEMP/wheel-progressive"
+          "$RUNNER_TEMP/venv/bin/python" -B \
+            simulate_progressive_refinement.py --json
           cd "$RUNNER_TEMP"
           for locale in en zh-CN; do
             project="$(mktemp -d)/project-$locale"
             "$RUNNER_TEMP/venv/bin/ipdctl" init "$project" --name "package-$locale" --locale "$locale"
+            "$RUNNER_TEMP/venv/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=["sourced_component_integration"]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml"
             "$RUNNER_TEMP/venv/bin/ipdctl" tailor "$project"
             "$RUNNER_TEMP/venv/bin/ipdctl" context "$project"
             "$RUNNER_TEMP/venv/bin/ipdctl" refresh "$project"
@@ -87,6 +124,24 @@ jobs:
       - name: Qualify the published v0.3.1 project upgrade
         run: python -B scripts/verify_v031_upgrade.py
 
+  upgrade-v032:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install current package
+        run: python -m pip install .
+      - name: Qualify v0.3.2-beta to v0.4.0-beta
+        run: python -B scripts/verify_v032_upgrade.py
+
   governance-gate:
     if: always()
     runs-on: ubuntu-latest
@@ -94,16 +149,20 @@ jobs:
       - test
       - package
       - upgrade-v031
+      - upgrade-v032
     steps:
       - name: Require every release-contract job
         shell: bash
         env:
           TEST_RESULT: ${{ needs.test.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
-          UPGRADE_RESULT: ${{ needs.upgrade-v031.result }}
+          UPGRADE_V031_RESULT: ${{ needs.upgrade-v031.result }}
+          UPGRADE_V032_RESULT: ${{ needs.upgrade-v032.result }}
         run: |
-          printf 'test=%s package=%s upgrade-v031=%s\n' \
-            "$TEST_RESULT" "$PACKAGE_RESULT" "$UPGRADE_RESULT"
+          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s\n' \
+            "$TEST_RESULT" "$PACKAGE_RESULT" \
+            "$UPGRADE_V031_RESULT" "$UPGRADE_V032_RESULT"
           test "$TEST_RESULT" = "success"
           test "$PACKAGE_RESULT" = "success"
-          test "$UPGRADE_RESULT" = "success"
+          test "$UPGRADE_V031_RESULT" = "success"
+          test "$UPGRADE_V032_RESULT" = "success"

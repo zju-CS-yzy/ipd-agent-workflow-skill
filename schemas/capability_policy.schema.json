@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/schemas/capability_policy.schema.json",
+  "title": "IPD Capability Pattern Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability_pattern",
+    "title",
+    "activities",
+    "deliverables",
+    "dependencies",
+    "checkpoint_criteria"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "capability_pattern": { "const": "sourced_component_integration" },
+    "title": { "type": "string", "minLength": 1 },
+    "activities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/activity" }
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/deliverable" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "checkpoint_criteria": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/checkpointCriterion" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "phaseId": {
+      "enum": ["concept", "plan", "develop", "qualify", "launch", "lifecycle"]
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "sequence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "definition_state": { "$ref": "#/$defs/definitionState" },
+        "refinement_required": { "type": "boolean" },
+        "refinement_trigger": { "$ref": "#/$defs/refinementTrigger" },
+        "refines": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "phase", "activity_id", "review_required", "depends_on"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1 },
+        "phase": { "$ref": "#/$defs/phaseId" },
+        "activity_id": { "$ref": "#/$defs/identifier" },
+        "review_required": { "const": true },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "definition_state": { "$ref": "#/$defs/definitionState" },
+        "refinement_required": { "type": "boolean" },
+        "refinement_trigger": { "$ref": "#/$defs/refinementTrigger" },
+        "refines": { "$ref": "#/$defs/identifier" },
+        "requires_artifact_owner": { "type": "boolean" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "relation"],
+      "properties": {
+        "source": { "$ref": "#/$defs/identifier" },
+        "target": { "$ref": "#/$defs/identifier" },
+        "relation": { "enum": ["depends_on", "supports", "verifies", "supersedes", "refines"] }
+      }
+    },
+    "checkpointCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "checkpoint_id", "description", "evidence_required"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "checkpoint_id": {
+          "type": "string",
+          "pattern": "^(tr|dcp)\\.(concept|plan|develop|qualify|launch|lifecycle)$"
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "evidence_required": { "const": true }
+      }
+    },
+    "definitionState": {
+      "enum": ["concrete", "placeholder", "abstract"]
+    },
+    "refinementTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_of"],
+      "properties": {
+        "all_of": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subject", "condition"],
+            "properties": {
+              "subject": { "$ref": "#/$defs/identifier" },
+              "condition": { "enum": ["accepted", "approved"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

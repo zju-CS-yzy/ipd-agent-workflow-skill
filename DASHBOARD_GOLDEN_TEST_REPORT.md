@@ -58,7 +58,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 - Graph edges: 87
 - Node types: `Activity, DCP, Deliverable, Gate, Phase, TR`
 - Relations: `depends_on, supports, verifies`
-- Declared relation capability: `depends_on, supersedes, supports, verifies`
+- Declared relation capability: `depends_on, refines, supersedes, supports, verifies`
 - Statuses: `in_progress, planned`
 
 ### Check results
@@ -88,7 +88,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 | PASS | Localized HTML, SVG, and Matrix markers | locale=en |
 | PASS | Interactive node details | {'node_links': True, 'hash_navigation': True, 'detail_panel': True, 'dependencies': True, 'evidence': True, 'review_history': True} |
 | PASS | Typed graph nodes | ['Activity', 'DCP', 'Deliverable', 'Gate', 'Phase', 'TR'] |
-| PASS | Typed graph relation capability | declared=['depends_on', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
+| PASS | Typed graph relation capability | declared=['depends_on', 'refines', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
 | PASS | Dependency view isolates dependency facts | relations=['depends_on'], expected=9, rendered=9, mismatches=[] |
 | PASS | Dependency projection is prerequisite to dependent | edges=23, views=7, canonical=True, state_graph=True, projection=True, order=True |
 | PASS | State is displayed | ['in_progress', 'planned'] |
@@ -118,7 +118,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 - Graph edges: 87
 - Node types: `Activity, DCP, Deliverable, Gate, Phase, TR`
 - Relations: `depends_on, supports, verifies`
-- Declared relation capability: `depends_on, supersedes, supports, verifies`
+- Declared relation capability: `depends_on, refines, supersedes, supports, verifies`
 - Statuses: `in_progress, planned`
 
 ### Check results
@@ -148,7 +148,7 @@ The normalized Golden graph is rendered in memory through the current custom SVG
 | PASS | Localized HTML, SVG, and Matrix markers | locale=zh-CN |
 | PASS | Interactive node details | {'node_links': True, 'hash_navigation': True, 'detail_panel': True, 'dependencies': True, 'evidence': True, 'review_history': True} |
 | PASS | Typed graph nodes | ['Activity', 'DCP', 'Deliverable', 'Gate', 'Phase', 'TR'] |
-| PASS | Typed graph relation capability | declared=['depends_on', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
+| PASS | Typed graph relation capability | declared=['depends_on', 'refines', 'supersedes', 'supports', 'verifies']; observed=['depends_on', 'supports', 'verifies'] |
 | PASS | Dependency view isolates dependency facts | relations=['depends_on'], expected=9, rendered=9, mismatches=[] |
 | PASS | Dependency projection is prerequisite to dependent | edges=23, views=7, canonical=True, state_graph=True, projection=True, order=True |
 | PASS | State is displayed | ['in_progress', 'planned'] |

@@ -1,23 +1,23 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.3.2b1` and public label `v0.3.2-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.4.0b1` and public label `v0.4.0-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
 
 ## Repository baseline
 
 - [x] Public capability claims map to implemented modules and behavior tests.
 - [x] `SKILL.md` has valid frontmatter, a discriminating description, reference routing, and an explicit human-approval boundary.
-- [x] Package, Skill, changelog, workflow, and intended release label consistently use `0.3.2b1` and `v0.3.2-beta`.
+- [x] Package, Skill, changelog, workflow, and intended release label consistently use `0.4.0b1` and `v0.4.0-beta`.
 - [x] State and policy schemas reject unknown fields and document semantic checks performed by `ipdctl`.
 - [x] Deliverable acceptance and final TR/DCP approval require an authorized human record; agents cannot finalize approval.
 - [x] English and Simplified Chinese README, architecture, and deployment files are present and cross-linked.
 - [x] The single package includes `ipdctl/messages.yaml`; no locale-specific package or long-lived language branch is required.
-- [x] CI covers Python 3.10 and 3.14, both locales, clean package installation, and the v0.3.1 in-place upgrade.
-- [x] From the final source, `python -B -m unittest discover -s tests -v` passed 142/142 tests in 1024.615 seconds on 2026-10-02.
-- [x] From the final source, the Skill validator, compile check, CLI version, and `python -B -m ipdctl --help` pass.
-- [x] Wheel and sdist build in a temporary directory, contain the message and binding-schema package data, and each passes installed `init` → `tailor` → `context` → `validate` → `refresh` → `verify` smoke tests in both locales with 15 Dashboard files.
-- [x] `python -B scripts/release_check.py .` passes after generated caches and build metadata are removed (99 text files scanned).
+- [x] CI covers Python 3.10 and 3.14, both locales, clean package installation, v0.3.1 compatibility, and the direct v0.3.2 in-place upgrade.
+- [x] From the final source, `python -B -m unittest discover -s tests -v` passes with no skipped release-critical checks (224/224 in 1274.065 seconds on 2026-10-05).
+- [x] From the final source, the Skill validator, compile check, CLI version, and `python -B -m ipdctl --help` pass (`ipdctl 0.4.0-beta`).
+- [x] Wheel and sdist build into an isolated temporary directory, contain the message catalog, Capability Policy, process-extension template, and all schemas, and each passes installed progressive-refinement simulation plus capability-enabled smoke tests in both locales with the exact 15-file Dashboard inventory (four artifact/locale combinations passed on 2026-10-05).
+- [x] `python -B scripts/release_check.py .` passes after generated caches and build metadata are removed (119 text files scanned on 2026-10-05).
 - [x] `git diff --check` passes and `git status --short` contains only intended release source; line-ending notices are configuration warnings, not whitespace errors.
-- [x] Review the final diff, untracked-file inventory, and recent repository history for credentials or unintended project data before publishing; no high-confidence secret pattern or project-instance output was found.
+- [x] Review the final diff, untracked-file inventory, and recent repository history for credentials or unintended project data before publishing; no credentials, project-instance data, generated Dashboard output, screenshots, caches, or unexpected binaries were found.
 
 ## Artifact binding and Claim provenance
 
@@ -54,6 +54,16 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 - [x] Final context and Dashboard eligibility are true, reconciliation and the latest verification pass, and all 15 Dashboard files exist.
 - [x] Recorded result on 2026-10-02: stale S1 plus exact S2 adoption, 3 Claims (1 legacy, 2 windowed), 1 Claim expiry, 2 passed verifications, unchanged profile/process hashes, and 15 Dashboard files.
 
+## v0.3.2 to v0.4 in-place upgrade gate
+
+- [x] Build the fixture from the actual published `v0.3.2-beta` Tag and open it with v0.4 without rerunning `init`.
+- [x] Verify the legacy process before re-tailoring and prove read-only commands leave `task_profile.yaml` and `tailored_process.yaml` byte-identical.
+- [x] Prove `tailor --preview --json` writes nothing and reports no ambiguous migration.
+- [x] Re-tailor to process schema `2.0` while preserving accepted status, evidence, and review history.
+- [x] Enable `sourced_component_integration` and prove its three Deliverables begin at `planned` with Capability provenance in Dashboard data.
+- [x] Prove the changed managed-binding contract fails closed with `BINDING_BASELINE_STALE`, then passes only after previewed, authorized-human baseline adoption.
+- [x] Recorded local result on 2026-10-03: all 13 upgrade assertions passed, the canonical project extension was materialized, and final verification reported `passed`.
+
 ## Simulated lifecycle release gate
 
 - [x] In an isolated realistic project, complete initialization, tailoring, context, Claim, work evidence, close, review, authorized-human approval or rejection, refresh, repository inspection, reconciliation, and verify.
@@ -62,28 +72,41 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 - [x] Exercise Deliverable and Gate review subjects plus `advance-phase`; premature advancement fails without corrupting state and a ready phase advances exactly once.
 - [x] Complete every generated Phase/TR/DCP/Gate and compare every expected artifact with actual output.
 - [x] Run both locales and prove structural equivalence from the same facts; presentation changes while machine facts and topology do not.
-- [x] Confirm zero missing outputs and zero severity-one workflow blockers. Recorded result: 40 verified iterations; 6 phases; 18/18 accepted Deliverables; 12/12 approved Gates; final `lifecycle`; state revision 307; runtime revision/events 192; 15 Dashboard files; 66 graph nodes; 153 graph edges; 0 active Claims; cleanup confirmed.
+- [x] Confirm zero missing outputs and zero severity-one workflow blockers for the v0.4 capability-enabled, project-extension-enabled scenario. Recorded from the final source in both locales on 2026-10-05: 22/22 Deliverables accepted, 12/12 Gates approved, 5 phase advances, 44 verified iterations, 216 Runtime events, 15 Dashboard files, zero missing outputs, and zero severe issues in each locale.
 - [x] Independently verify a three-level cross-phase dependency chain: canonical JSON is `dependent -> prerequisite` and dependency SVG is `prerequisite -> dependent` with no unrelated edge types.
+
+## Progressive refinement release gate
+
+- [x] Declare an explicit project refinement requirement, accept its concrete root through the public lifecycle, and confirm `context` plus Dashboard change it from `pending` to `due` without template or domain inference.
+- [x] Prove two identical `refine --preview --json` calls are deterministic and byte-for-byte zero-write, while a stale base, pending trigger, active Claim, or missing human authority fails closed.
+- [x] Apply two nested `expand` plans through the public CLI and prove parent/intermediate evidence and review history remain intact while every new child starts `planned` with empty evidence and reviews.
+- [x] Prove a managed evidence rule and parent Owner do not authorize a new concrete child: preview, context, verify, Dashboard, and Claim expose `REFINEMENT_OWNER_REQUIRED` until a user-authored Owner binding is added.
+- [x] Confirm `refines` is same-Phase acyclic structural ancestry only, `depends_on` remains the sole execution topology, and recursive root/intermediate concrete leaf closures are correct after two rounds.
+- [x] Confirm each changed Gate requirement fingerprint increments `review_epoch`, preserves old evidence, invalidates old approval, and requires a current-epoch authorized-human decision.
+- [x] Confirm exactly two strict `process_refinement_applied` events, exact replay no-op, plan-ID conflict rejection, ordinary `tailor` lineage-bypass rejection, and verification fingerprint invalidation.
+- [x] After each round, run `refresh` and `verify`; confirm all 15 Dashboard outputs, hierarchy/status/impact details, graph relations, matrices, and machine projections are present and consistent.
+
+Recorded on 2026-10-05 from source, installed wheel, and installed sdist: two authorized refinement events, two nested leaf closures, Gate review epoch 2, parent/intermediate history preserved, deterministic replay, all four preflight failures, plan-ID conflict, input/runtime tamper, duplicate event, ordinary-tailor bypass, historical ID/dependency rewrite, downstream Claim, and missing Owner protections all behaved fail-closed; each successful round regenerated all 15 Dashboard files and ended with a passed verification.
 
 ## Version and release content
 
-- [x] Source version references were prepared for `0.3.2b1` / `v0.3.2-beta`, and no conflicting release Tag existed at freeze time.
-- [x] Release notes document upgrade behavior, beta compatibility, approval boundaries, Python support, transaction behavior, and known limitations.
-- [x] Freeze the reviewed release commit and create a new annotated `v0.3.2-beta` Tag; never reuse or move a published Tag.
-- [x] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
-- [x] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
+- [x] Source version references are prepared for `0.4.0b1` / `v0.4.0-beta`; confirm no conflicting release Tag at freeze time.
+- [x] Release notes document upgrade behavior, beta compatibility, approval boundaries, Python support, process migration, and known limitations.
+- [ ] Freeze the reviewed release commit and create a new annotated `v0.4.0-beta` Tag; never reuse or move a published Tag.
+- [ ] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
+- [ ] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
 
 ## GitHub and publication
 
 - [x] Use `zju-CS-yzy/ipd-agent-workflow-skill` as the canonical GitHub repository and include its URLs in project metadata and documentation.
 - [x] Confirm the canonical remote repository exists and is reachable.
-- [x] Push the reviewed default branch and `v0.3.2-beta` Tag.
+- [ ] Push the reviewed default branch and `v0.4.0-beta` Tag.
 - [x] Require pull requests, the current `governance-gate`, an up-to-date branch, and resolved conversations on the default branch; restrict default-branch deletion and force pushes and published `v*` Tag mutation.
 - [ ] Require one independent approving review after a second trusted maintainer is appointed; until then, keep the owner bypass limited to pull requests so a single maintainer cannot push directly to the protected default branch.
 - [x] Enable private vulnerability reporting and point `SECURITY.md` to the canonical private security advisory process.
 - [x] Set the repository description and topics; confirm the Apache-2.0 license display, read-only default Actions permissions, immutable Action revisions, and public prerelease visibility.
-- [x] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
-- [x] After publication, install the public Skill ZIP, wheel, and sdist and run the `init` → `tailor` → `context` → `validate` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+- [ ] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
+- [ ] After publication, install the public Skill ZIP, wheel, and sdist and run the capability-enabled `init` → `tailor` → `context` → `validate` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
 
 ## v0.3.2-beta publication record
 

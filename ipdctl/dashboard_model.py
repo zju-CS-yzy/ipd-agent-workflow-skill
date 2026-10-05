@@ -13,12 +13,13 @@ from typing import Any
 
 
 PHASE_ORDER = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
-RELATIONS = ("depends_on", "supports", "verifies", "supersedes")
+RELATIONS = ("depends_on", "supports", "verifies", "supersedes", "refines")
 DISPLAY_STATUSES = {"planned": "not_started", "accepted": "approved"}
 ACTIONABILITY_STATES = (
     "actionable",
     "waiting_on_dependencies",
     "waiting_on_bindings",
+    "waiting_on_refinement",
     "waiting_on_protocol",
     "claimed",
     "inactive",
@@ -28,6 +29,7 @@ ATTENTION_STATES = (
     "rework_required",
     "orphan_claim",
     "binding_blocked",
+    "refinement_due",
 )
 
 
@@ -144,6 +146,11 @@ def _eligibility_fields(value: Any) -> dict[str, Any] | None:
         "issue_codes": issue_codes,
         "binding_blockers": blockers,
         "binding_blocked": binding_blocked,
+        "binding_impact": (
+            _machine_copy(value.get("binding_impact"))
+            if isinstance(value.get("binding_impact"), Mapping)
+            else None
+        ),
     }
 
 
@@ -170,6 +177,70 @@ def _display_text(value: Any, fallback: str) -> str:
 def _safe_reference(value: Any) -> str | None:
     text = _string(value).strip()
     return text or None
+
+
+def _definition_state(*records: Mapping[str, Any]) -> str:
+    """Return the declared process-definition state with a legacy-safe default."""
+
+    for record in records:
+        value = _string(record.get("definition_state")).strip().lower()
+        if value in {"abstract", "placeholder", "concrete"}:
+            return value
+    return "concrete"
+
+
+def _refinement_trigger(*records: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return the trigger as machine data without localizing its identifiers."""
+
+    for record in records:
+        value = record.get("refinement_trigger")
+        if isinstance(value, Mapping):
+            return _machine_copy(value)
+    return None
+
+
+def _provenance(*records: Mapping[str, Any]) -> dict[str, str] | None:
+    """Return declared node provenance without inventing legacy metadata."""
+
+    for record in records:
+        raw = record.get("provenance")
+        if not isinstance(raw, Mapping):
+            continue
+        layer = _string(raw.get("layer")).strip()
+        source_id = _string(raw.get("source_id")).strip()
+        if layer and source_id:
+            return {"layer": layer, "source_id": source_id}
+    return None
+
+
+def _criteria(value: Any, translator: Any | None = None) -> list[dict[str, Any]]:
+    """Normalize independently addressable TR/DCP review criteria."""
+
+    result: list[dict[str, Any]] = []
+    for raw in _records(value):
+        identifier = _identifier(raw, "criterion_id")
+        description = _string(raw.get("description")).strip()
+        if not identifier or not description:
+            continue
+        if translator is not None:
+            key = f"workflow.criterion.{identifier}"
+            try:
+                from .i18n import get_translator
+
+                english = get_translator("en").text(key)
+                localized = translator.text(key)
+            except (AttributeError, KeyError, TypeError, ValueError):
+                english = localized = key
+            if english != key and localized != key and description == english:
+                description = localized
+        result.append(
+            {
+                "id": identifier,
+                "description": description,
+                "evidence_required": raw.get("evidence_required") is True,
+            }
+        )
+    return sorted(result, key=lambda item: item["id"])
 
 
 def _translated_title(
@@ -415,12 +486,16 @@ def _normalized_edges(
     for deliverable in deliverables:
         for dependency in deliverable["depends_on"]:
             add(deliverable["id"], dependency, "depends_on")
+        for parent_id in deliverable.get("refines", []):
+            add(deliverable["id"], parent_id, "refines")
         if deliverable.get("replacement"):
             add(deliverable["id"], deliverable["replacement"], "supersedes")
         if deliverable.get("activity"):
             add(deliverable["activity"], deliverable["id"], "supports")
     for activity in activities:
         add(activity.get("phase"), activity["id"], "supports")
+        for parent_id in activity.get("refines", []):
+            add(activity["id"], parent_id, "refines")
     for checkpoint in checkpoints:
         phase = checkpoint.get("phase")
         if phase:
@@ -537,6 +612,39 @@ def build_dashboard_model(
                         )
                     )
                 ),
+                "definition_state": _definition_state(state_item, process_item),
+                "refinement_required": bool(
+                    state_item.get(
+                        "refinement_required",
+                        process_item.get("refinement_required", False),
+                    )
+                ),
+                "refinement_trigger": _refinement_trigger(state_item, process_item),
+                "refines": sorted(
+                    set(
+                        _string_list(
+                            state_item.get("refines", process_item.get("refines"))
+                        )
+                    )
+                ),
+                "requires_artifact_owner": bool(
+                    state_item.get(
+                        "requires_artifact_owner",
+                        process_item.get("requires_artifact_owner", False),
+                    )
+                ),
+                "binding_impact": _machine_copy(
+                    state_item.get(
+                        "binding_impact", process_item.get("binding_impact")
+                    )
+                )
+                if isinstance(
+                    state_item.get(
+                        "binding_impact", process_item.get("binding_impact")
+                    ),
+                    Mapping,
+                )
+                else None,
                 "review_required": bool(
                     state_item.get(
                         "review_required", process_item.get("review_required", False)
@@ -556,7 +664,71 @@ def build_dashboard_model(
                 ),
                 "recoverable_claim": orphaned_claim,
                 "replacement": _string(state_item.get("replacement")) or None,
+                "replacements": sorted(
+                    set(
+                        _string_list(state_item.get("replacements"))
+                        + _string_list(state_item.get("replacement"))
+                    )
+                ),
+                "provenance": _provenance(state_item, process_item),
+                "maturity": _string(
+                    state_item.get("maturity") or process_item.get("maturity")
+                )
+                or None,
             }
+        )
+
+    deliverables_by_id = {item["id"]: item for item in deliverables}
+    refined_by: dict[str, list[str]] = {identifier: [] for identifier in deliverables_by_id}
+    for child in deliverables:
+        for parent_id in child["refines"]:
+            if parent_id in refined_by:
+                refined_by[parent_id].append(child["id"])
+    for identifier, children in refined_by.items():
+        deliverables_by_id[identifier]["refined_by"] = sorted(set(children))
+
+    def concrete_leaf_closure(identifier: str, trail: frozenset[str] = frozenset()) -> list[str]:
+        if identifier in trail or identifier not in deliverables_by_id:
+            return []
+        item = deliverables_by_id[identifier]
+        children = item["refined_by"]
+        if not children:
+            return [identifier] if item["definition_state"] == "concrete" else []
+        leaves = {
+            leaf
+            for child_id in children
+            for leaf in concrete_leaf_closure(child_id, trail | {identifier})
+        }
+        return sorted(leaves)
+
+    from .eligibility import deliverable_refinement_status
+
+    refinement_state = {
+        "deliverables": [
+            {
+                "id": item["id"],
+                "status": item["status"],
+                "definition_state": item["definition_state"],
+                "refinement_required": item["refinement_required"],
+                "refinement_trigger": deepcopy(item["refinement_trigger"]),
+                **(
+                    {"refines": item["refines"][0]}
+                    if item["refines"]
+                    else {}
+                ),
+            }
+            for item in deliverables
+        ],
+        "gates": deepcopy(state.get("gates", [])),
+    }
+    for item in deliverables:
+        item["concrete_leaf_closure"] = concrete_leaf_closure(item["id"])
+        refinement = deliverable_refinement_status(refinement_state, item["id"])
+        item["refinement_status"] = refinement["refinement_status"]
+        item["refinement_due"] = refinement["refinement_status"] == "due"
+        item["refinement_reason"] = refinement.get("refinement_reason")
+        item["unresolved_refinement_leaves"] = list(
+            refinement.get("unresolved_leaves", [])
         )
 
     status_by_id = {item["id"]: item["status"] for item in deliverables}
@@ -578,12 +750,15 @@ def build_dashboard_model(
         ]
         is_claimed = item["id"] in active_claims
         in_current_scope = not current_phase or item.get("phase") in {None, current_phase}
+        non_concrete = item["definition_state"] in {"abstract", "placeholder"}
         if item["status"] in {"accepted", "superseded"}:
             actionability_state = "inactive"
         elif is_claimed:
             actionability_state = "claimed"
         elif not in_current_scope:
             actionability_state = "inactive"
+        elif non_concrete:
+            actionability_state = "waiting_on_refinement"
         elif unmet:
             actionability_state = "waiting_on_dependencies"
         elif binding_actionability_blocked:
@@ -603,6 +778,8 @@ def build_dashboard_model(
             attention = "rework_required"
         elif binding_actionability_blocked:
             attention = "binding_blocked"
+        elif item["refinement_due"]:
+            attention = "refinement_due"
         else:
             attention = None
 
@@ -612,6 +789,16 @@ def build_dashboard_model(
             "in_current_scope": in_current_scope,
             "unmet_dependencies": unmet,
         }
+        if (
+            item["refinement_status"] != "not_required"
+            or item["definition_state"] != "concrete"
+        ):
+            item["actionability"].update(
+                {
+                    "refinement_status": item["refinement_status"],
+                    "refinement_due": item["refinement_due"],
+                }
+            )
         if not claim_ready:
             item["actionability"]["claim_ready"] = False
             item["actionability"]["claim_blocker"] = (
@@ -619,6 +806,12 @@ def build_dashboard_model(
             )
         if eligibility_fields is not None:
             item["actionability"].update(eligibility_fields)
+            if item.get("binding_impact") is None and isinstance(
+                eligibility_fields.get("binding_impact"), Mapping
+            ):
+                item["binding_impact"] = deepcopy(
+                    eligibility_fields["binding_impact"]
+                )
         item["attention"] = attention
 
         if item["actionability"]["actionable"]:
@@ -639,6 +832,7 @@ def build_dashboard_model(
             or actionability_state == "waiting_on_dependencies"
             or binding_actionability_blocked
             or item.get("recoverable_claim")
+            or item["refinement_due"]
         ):
             blocked_items.append(
                 {
@@ -656,6 +850,8 @@ def build_dashboard_model(
                         if eligibility_fields is not None
                         else []
                     ),
+                    "refinement_status": item["refinement_status"],
+                    "refinement_due": item["refinement_due"],
                 }
             )
 
@@ -694,7 +890,20 @@ def build_dashboard_model(
                     for deliverable in deliverables
                     if deliverable.get("activity") == identifier
                 ),
+                "definition_state": _definition_state(item),
+                "refinement_required": item.get("refinement_required") is True,
+                "refinement_trigger": _refinement_trigger(item),
+                "refines": sorted(set(_string_list(item.get("refines")))),
+                "provenance": _provenance(item),
+                "maturity": _string(item.get("maturity")) or None,
             }
+        )
+
+    for activity in activities:
+        activity["refined_by"] = sorted(
+            child["id"]
+            for child in activities
+            if activity["id"] in child["refines"]
         )
 
     state_gates = _state_index(state, "gates", "gate_id", "checkpoint_id")
@@ -797,6 +1006,12 @@ def build_dashboard_model(
                     "latest_authorized_human_decision": latest_authorized_decision,
                     "reviews": reviews,
                 },
+                "criteria": _criteria(process_item.get("criteria"), translator),
+                "provenance": _provenance(state_item, process_item),
+                "maturity": _string(
+                    state_item.get("maturity") or process_item.get("maturity")
+                )
+                or None,
             }
         )
 
@@ -845,6 +1060,8 @@ def build_dashboard_model(
                 "current": identifier == current_phase,
                 "deliverable_count": len(phase_deliverables),
                 "accepted_count": sum(item["status"] == "accepted" for item in phase_deliverables),
+                "provenance": _provenance(raw),
+                "maturity": _string(raw.get("maturity")) or None,
             }
         )
 
@@ -861,6 +1078,8 @@ def build_dashboard_model(
                 "display_status": _display_status(phase["status"]),
                 "current": phase["current"],
                 "blocked": phase["status"] == "blocked",
+                "provenance": phase.get("provenance"),
+                "maturity": phase.get("maturity"),
                 "detail_key": f"phase:{phase['id']}",
             }
         )
@@ -876,6 +1095,13 @@ def build_dashboard_model(
                 "display_status": _display_status(activity["status"]),
                 "current": activity["phase"] == current_phase,
                 "blocked": activity["status"] == "blocked",
+                "definition_state": activity["definition_state"],
+                "refinement_required": activity["refinement_required"],
+                "refinement_trigger": activity["refinement_trigger"],
+                "refines": list(activity["refines"]),
+                "refined_by": list(activity["refined_by"]),
+                "provenance": activity.get("provenance"),
+                "maturity": activity.get("maturity"),
                 "detail_key": f"activity:{activity['id']}",
             }
         )
@@ -896,6 +1122,22 @@ def build_dashboard_model(
                 "blocked": deliverable["status"] == "blocked",
                 "actionability": dict(deliverable["actionability"]),
                 "attention": deliverable["attention"],
+                "definition_state": deliverable["definition_state"],
+                "refinement_required": deliverable["refinement_required"],
+                "refinement_trigger": deliverable["refinement_trigger"],
+                "refines": list(deliverable["refines"]),
+                "refined_by": list(deliverable["refined_by"]),
+                "refinement_status": deliverable["refinement_status"],
+                "refinement_due": deliverable["refinement_due"],
+                "concrete_leaf_closure": list(
+                    deliverable["concrete_leaf_closure"]
+                ),
+                "requires_artifact_owner": deliverable[
+                    "requires_artifact_owner"
+                ],
+                "binding_impact": deepcopy(deliverable.get("binding_impact")),
+                "provenance": deliverable.get("provenance"),
+                "maturity": deliverable.get("maturity"),
                 "detail_key": f"deliverable:{deliverable['id']}",
             }
         )
@@ -916,6 +1158,8 @@ def build_dashboard_model(
                     checkpoint["phase"] == current_phase
                     and bool(checkpoint["blockers"])
                 ),
+                "provenance": checkpoint.get("provenance"),
+                "maturity": checkpoint.get("maturity"),
                 "detail_key": f"{checkpoint['type'].lower()}:{checkpoint['id']}",
             }
         )
@@ -980,6 +1224,16 @@ def build_dashboard_model(
                 and item["actionability"]["in_current_scope"]
                 for item in deliverables
             ),
+            "waiting_on_refinement": sum(
+                item["actionability"]["state"] == "waiting_on_refinement"
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
+            "refinement_due": sum(
+                item["refinement_due"]
+                and item["actionability"]["in_current_scope"]
+                for item in deliverables
+            ),
         },
         "phases": phases,
         "activities": activities,
@@ -987,6 +1241,20 @@ def build_dashboard_model(
         "deliverables": deliverables,
         "available_tasks": available_tasks,
         "blocked_items": blocked_items,
+        "refinement_due": [
+            {
+                "id": item["id"],
+                "title": item["title"],
+                "display_label": item["display_label"],
+                "phase": item["phase"],
+                "definition_state": item["definition_state"],
+                "refinement_trigger": deepcopy(item["refinement_trigger"]),
+                "concrete_leaf_closure": list(item["concrete_leaf_closure"]),
+                "binding_impact": deepcopy(item.get("binding_impact")),
+            }
+            for item in deliverables
+            if item["refinement_due"]
+        ],
         "claim_readiness": claim_readiness_document,
     }
     graph_document = {

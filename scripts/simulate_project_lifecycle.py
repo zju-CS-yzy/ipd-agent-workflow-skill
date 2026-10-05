@@ -14,7 +14,6 @@ import argparse
 import contextlib
 import io
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -30,11 +29,13 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from ipdctl.cli import main as cli_main
+from ipdctl.i18n import get_translator
 from ipdctl.runtime import load_runtime, save_runtime
 from ipdctl.state import load_state, write_state
 
 
 TASK_TYPES = ("software", "embedded", "robotics", "ai_system")
+CAPABILITY_PATTERNS = ("sourced_component_integration",)
 EXPECTED_PHASES = (
     "concept",
     "plan",
@@ -43,6 +44,13 @@ EXPECTED_PHASES = (
     "launch",
     "lifecycle",
 )
+EXPECTED_DELIVERABLES = 22
+CAPABILITY_DELIVERABLES = {
+    "sourced_component.candidate_validation",
+    "sourced_component.selection_decision",
+    "sourced_component.integration_baseline",
+}
+PROJECT_DELIVERABLE = "project.integration_readiness"
 EXPECTED_DASHBOARD_FILES = frozenset(
     {
         "index.html",
@@ -62,9 +70,6 @@ EXPECTED_DASHBOARD_FILES = frozenset(
         "manifest.json",
     }
 )
-_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
-
-
 class SimulationFailure(RuntimeError):
     """Raised when a lifecycle invariant or expected CLI result is absent."""
 
@@ -99,8 +104,9 @@ def _json_output(result: CommandResult) -> dict[str, Any]:
 class LifecycleScenario:
     """Mutable scenario driver whose observable actions all use the public CLI."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, locale: str = "zh-CN") -> None:
         self.root = root
+        self.locale = locale
         self.commands: list[dict[str, Any]] = []
         self.iterations: list[dict[str, Any]] = []
         self.processed_deliverables: list[str] = []
@@ -117,6 +123,8 @@ class LifecycleScenario:
         self.expired_claim_deliverable: str | None = None
         self.project_source_binding_exercised = False
         self.project_source_binding_deliverable: str | None = None
+        self.binding_owner_role_exercised = False
+        self.binding_shared_evidence_role_exercised = False
 
     @property
     def state_path(self) -> Path:
@@ -223,19 +231,97 @@ class LifecycleScenario:
             "--name",
             "多模态机器人平台",
             "--locale",
-            "zh-CN",
+            self.locale,
         ]
         for task_type in TASK_TYPES:
             arguments.extend(("--task-type", task_type))
         initialized = self.invoke(arguments)
-        _require(
-            _CJK.search(initialized.stdout) is not None,
-            "zh-CN init output did not contain localized presentation text",
+        init_marker = (
+            "已初始化 IPD 项目"
+            if self.locale == "zh-CN"
+            else "Initialized IPD project"
         )
-        tailored = self.invoke(("tailor", str(self.root)))
         _require(
-            _CJK.search(tailored.stdout) is not None,
-            "zh-CN tailor output did not contain localized presentation text",
+            init_marker in initialized.stdout,
+            f"{self.locale} init output did not contain localized presentation text",
+        )
+
+        profile_path = self.root / ".ipd" / "task_profile.yaml"
+        profile = load_state(profile_path)
+        profile["capability_patterns"] = list(CAPABILITY_PATTERNS)
+        write_state(profile_path, profile)
+
+        extension_path = self.root / ".ipd" / "process_extensions.yaml"
+        write_state(
+            extension_path,
+            {
+                "schema_version": "1.0",
+                "extension_id": "simulation.integration",
+                "activities": [
+                    {
+                        "id": "develop.project_integration_readiness",
+                        "title": "Confirm project integration readiness",
+                        "phase": "develop",
+                        "sequence": 39,
+                    }
+                ],
+                "deliverables": [
+                    {
+                        "id": PROJECT_DELIVERABLE,
+                        "title": "Project integration readiness record",
+                        "phase": "develop",
+                        "activity_id": "develop.project_integration_readiness",
+                        "review_required": True,
+                        "depends_on": [
+                            "sourced_component.integration_baseline",
+                            "develop.solution_baseline",
+                        ],
+                    }
+                ],
+                "dependencies": [
+                    {
+                        "source": "sourced_component.integration_baseline",
+                        "target": PROJECT_DELIVERABLE,
+                        "relation": "supports",
+                    }
+                ],
+                "checkpoint_criteria": [
+                    {
+                        "id": "criterion.project.integration_readiness",
+                        "checkpoint_id": "dcp.develop",
+                        "description": (
+                            "Project interfaces, ownership, and residual integration "
+                            "risks have authorized evidence."
+                        ),
+                        "evidence_required": True,
+                    }
+                ],
+                "migrations": [],
+            },
+        )
+
+        preview = _json_output(
+            self.invoke(("tailor", str(self.root), "--preview", "--json"))
+        )
+        _require(not self.process_path.exists(), "tailor preview wrote the process file")
+        preview_deliverables = {
+            item.get("id")
+            for item in preview.get("added", [])
+            if item.get("collection") == "deliverables"
+        }
+        _require(
+            CAPABILITY_DELIVERABLES | {PROJECT_DELIVERABLE}
+            <= preview_deliverables,
+            "tailor preview omitted capability or project Deliverable additions",
+        )
+        _require(not preview.get("ambiguous"), "initial v0.4 process preview was ambiguous")
+        tailored = self.invoke(("tailor", str(self.root)))
+        tailor_marker = (
+            "已生成裁剪流程" if self.locale == "zh-CN" else "Tailored process"
+        )
+        _require(
+            tailor_marker in tailored.stdout,
+            f"{self.locale} tailor output did not contain localized presentation text",
         )
 
         process = load_state(self.process_path)
@@ -245,19 +331,35 @@ class LifecycleScenario:
             "tailored process did not contain the six canonical phases",
         )
         _require(
-            len(process.get("deliverables", [])) == 18,
-            "four selected task types did not produce 18 deliverables",
+            len(process.get("deliverables", [])) == EXPECTED_DELIVERABLES,
+            "v0.4 layered compilation did not produce 22 deliverables",
         )
         _require(
             len(process.get("gates", [])) == 12,
             "six phases did not produce 12 governed TR/DCP gates",
         )
+        process_deliverables = {
+            item["id"]: item for item in process.get("deliverables", [])
+        }
+        _require(
+            all(
+                process_deliverables[identifier].get("provenance", {}).get("layer")
+                == "capability"
+                for identifier in CAPABILITY_DELIVERABLES
+            )
+            and process_deliverables[PROJECT_DELIVERABLE]
+            .get("provenance", {})
+            .get("layer")
+            == "project",
+            "compiled Deliverables lost capability/project provenance",
+        )
         self._assert_managed_evidence_bindings(process)
 
         localized_context = self.invoke(("context", str(self.root)))
+        context_marker = "阶段：" if self.locale == "zh-CN" else "Phase:"
         _require(
-            _CJK.search(localized_context.stdout) is not None,
-            "zh-CN context output did not contain localized presentation text",
+            context_marker in localized_context.stdout,
+            f"{self.locale} context output did not contain localized presentation text",
         )
         context = _json_output(
             self.invoke(("context", str(self.root), "--json"))
@@ -280,7 +382,9 @@ class LifecycleScenario:
             "tailor did not create the public managed evidence-binding contract",
         )
 
-    def _configure_project_source_binding(self, deliverable: str) -> None:
+    def _configure_project_source_binding(
+        self, deliverable: str, shared_deliverable: str
+    ) -> None:
         bindings_path = self.root / ".ipd" / "artifact_bindings.yaml"
         bindings = load_state(bindings_path)
         bindings["bindings"].insert(
@@ -289,9 +393,22 @@ class LifecycleScenario:
                 "id": "perception-source-owner",
                 "glob": "src/perception/**",
                 "deliverable": deliverable,
+                "role": "owner",
                 "critical": True,
                 "review_required": True,
                 "description": "Explicit source ownership established before claim",
+            },
+        )
+        bindings["bindings"].insert(
+            1,
+            {
+                "id": "perception-shared-evidence",
+                "glob": "src/perception/**",
+                "deliverables": [shared_deliverable],
+                "role": "shared_evidence",
+                "critical": False,
+                "review_required": True,
+                "description": "Shared integration evidence without Claim authority",
             },
         )
         write_state(bindings_path, bindings)
@@ -418,9 +535,9 @@ class LifecycleScenario:
             f"Dashboard state revision diverged after verify for {label}",
         )
         _require(
-            final_manifest.get("locale") == "zh-CN"
-            and final_state_data.get("locale") == "zh-CN"
-            and final_graph_data.get("locale") == "zh-CN",
+            final_manifest.get("locale") == self.locale
+            and final_state_data.get("locale") == self.locale
+            and final_graph_data.get("locale") == self.locale,
             f"locale was not propagated through every Dashboard contract for {label}",
         )
         current_phase = after_verify["project"]["phase"]
@@ -503,6 +620,23 @@ class LifecycleScenario:
             and identifier == self.project_source_binding_deliverable
         ):
             self._change_project_source()
+            report = _json_output(
+                self.invoke(("reconcile", str(self.root), "--json"))
+            )
+            mapping = report.get("paths", {}).get("src/perception/fusion.py", {})
+            self.binding_owner_role_exercised = (
+                mapping.get("owner_deliverable_id") == identifier
+            )
+            self.binding_shared_evidence_role_exercised = (
+                mapping.get("shared_evidence_deliverable_ids")
+                == ["sourced_component.candidate_validation"]
+            )
+            _require(
+                report.get("status") == "passed"
+                and self.binding_owner_role_exercised
+                and self.binding_shared_evidence_role_exercised,
+                "active Claim reconciliation lost Owner/shared-evidence role separation",
+            )
 
     def _close_ready(self, identifier: str, actor: str, attempt: str) -> None:
         work = self._evidence(
@@ -904,7 +1038,9 @@ class LifecycleScenario:
             and isinstance(first_deliverable.get("id"), str),
             "tailored process did not provide a first Deliverable",
         )
-        self._configure_project_source_binding(first_deliverable["id"])
+        self._configure_project_source_binding(
+            first_deliverable["id"], "sourced_component.candidate_validation"
+        )
         self.refresh_and_verify("initial")
         blocked_used = False
         rejection_used = False
@@ -1069,9 +1205,9 @@ class LifecycleScenario:
         )
 
         _require(
-            len(state.get("deliverables", [])) == 18
+            len(state.get("deliverables", [])) == EXPECTED_DELIVERABLES
             and all(item.get("status") == "accepted" for item in state["deliverables"]),
-            "not all 18 deliverables reached accepted",
+            "not all 22 deliverables reached accepted",
         )
         _require(
             len(state.get("gates", [])) == 12
@@ -1140,12 +1276,13 @@ class LifecycleScenario:
             node for node in graph_data.get("nodes", []) if node.get("type") == "Deliverable"
         ]
         _require(
-            len(dashboard_deliverables) == 18
+            len(dashboard_deliverables) == EXPECTED_DELIVERABLES
             and all(node.get("status") == "accepted" for node in dashboard_deliverables),
             "final graph did not expose all accepted deliverables",
         )
         _require(
-            state_data.get("summary", {}).get("accepted_deliverables") == 18
+            state_data.get("summary", {}).get("accepted_deliverables")
+            == EXPECTED_DELIVERABLES
             and state_data.get("summary", {}).get("progress_percent") == 100,
             "Dashboard summary did not report complete delivery",
         )
@@ -1157,24 +1294,27 @@ class LifecycleScenario:
             "final next-task list leaked work from a non-current phase",
         )
 
-        localized_files = (
-            "index.html",
-            "matrices/deliverable_matrix.html",
-            "matrices/gate_matrix.html",
-            "assets/ipd_flow.svg",
-            "assets/current_status_flow.svg",
-        )
+        translator = get_translator(self.locale)
+        localized_files = {
+            "index.html": translator.text("dashboard.current_phase"),
+            "matrices/deliverable_matrix.html": translator.text(
+                "matrix.back_to_dashboard"
+            ),
+            "matrices/gate_matrix.html": translator.text("matrix.back_to_dashboard"),
+            "assets/ipd_flow.svg": translator.text("svg.legend"),
+            "assets/current_status_flow.svg": translator.text("svg.legend"),
+        }
         _require(
             all(
-                _CJK.search((self.dashboard / relative).read_text(encoding="utf-8"))
-                is not None
-                for relative in localized_files
+                marker in (self.dashboard / relative).read_text(encoding="utf-8")
+                for relative, marker in localized_files.items()
             ),
-            "one or more zh-CN Dashboard presentation files lacked Chinese text",
+            f"one or more {self.locale} Dashboard files lacked localized text",
         )
 
         expected_project_paths = {
             ".ipd/task_profile.yaml",
+            ".ipd/process_extensions.yaml",
             ".ipd/tailored_process.yaml",
             ".ipd/project_state.yaml",
             ".ipd/agent_runtime.yaml",
@@ -1201,6 +1341,11 @@ class LifecycleScenario:
             repository.get("kind") == "git" and reconciliation.get("status") == "passed",
             "repository inspection or reconciliation was not successful",
         )
+        _require(
+            self.binding_owner_role_exercised
+            and self.binding_shared_evidence_role_exercised,
+            "lifecycle did not exercise Owner/shared-evidence role separation",
+        )
 
         return {
             "phases": len(process.get("phases", [])),
@@ -1225,6 +1370,18 @@ class LifecycleScenario:
             "reconciliation_status": reconciliation.get("status"),
             "repository_kind": repository.get("kind"),
             "repository_branch": repository.get("branch"),
+            "capability_deliverables": len(
+                CAPABILITY_DELIVERABLES
+                & {item.get("id") for item in state.get("deliverables", [])}
+            ),
+            "project_extension_deliverables": sum(
+                item.get("provenance", {}).get("layer") == "project"
+                for item in state.get("deliverables", [])
+            ),
+            "binding_owner_role": self.binding_owner_role_exercised,
+            "binding_shared_evidence_role": (
+                self.binding_shared_evidence_role_exercised
+            ),
             "blocked_iterations": self.blocked_iterations,
             "deliverable_rejections": self.deliverable_rejections,
             "gate_rejections": self.gate_rejections,
@@ -1237,15 +1394,19 @@ class LifecycleScenario:
         }
 
 
-def run_simulation() -> dict[str, Any]:
+def run_simulation(locale: str = "zh-CN") -> dict[str, Any]:
     """Run the complete scenario and return a JSON-serializable report."""
+
+    if locale not in {"en", "zh-CN"}:
+        raise ValueError(f"unsupported simulation locale: {locale}")
 
     started = time.perf_counter()
     report: dict[str, Any] = {
         "schema_version": "1.0",
         "scenario": "full-ipd-project-lifecycle",
         "task_types": list(TASK_TYPES),
-        "locale": "zh-CN",
+        "capability_patterns": list(CAPABILITY_PATTERNS),
+        "locale": locale,
         "passed": False,
         "missing_outputs": [],
         "severe_issues": [],
@@ -1258,7 +1419,7 @@ def run_simulation() -> dict[str, Any]:
     try:
         with tempfile.TemporaryDirectory(prefix="ipd-full-lifecycle-") as directory:
             project_root = Path(directory) / "simulated-project"
-            scenario = LifecycleScenario(project_root)
+            scenario = LifecycleScenario(project_root, locale=locale)
             git_baseline = scenario.initialize_git()
             process, _ = scenario.initialize_ipd()
             repository_initial = scenario.repository_read_only_check()
@@ -1309,7 +1470,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Scenario",
         "",
-        "A temporary Git project was initialized in `zh-CN` for software, embedded, "
+        f"A temporary Git project was initialized in `{report.get('locale')}` for software, embedded, "
         "robotics, and AI-system work. The public CLI executed all six product phases, "
         "including blocked work recovery, deliverable and Gate rejection/rework, "
         "expired-claim recovery, human-only approvals, phase governance, Dashboard "
@@ -1342,6 +1503,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Simulate a complete IPD project lifecycle in an isolated Git repository."
     )
     parser.add_argument(
+        "--locale",
+        choices=("en", "zh-CN"),
+        default="zh-CN",
+        help="Project presentation locale to exercise (default: zh-CN).",
+    )
+    parser.add_argument(
         "--report",
         type=Path,
         help="Optional Markdown report path. No report is written by default.",
@@ -1356,7 +1523,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    report = run_simulation()
+    report = run_simulation(args.locale)
     markdown = render_markdown(report)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)

@@ -32,6 +32,17 @@
         }
       ]
     },
+    "capability_patterns": {
+      "oneOf": [
+        { "$ref": "#/$defs/capabilityPattern" },
+        {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capabilityPattern" }
+        }
+      ],
+      "default": []
+    },
     "description": { "type": "string" },
     "metadata": { "type": "object" },
     "presentation": {
@@ -62,6 +73,10 @@
         "material-change",
         "material change"
       ]
+    },
+    "capabilityPattern": {
+      "type": "string",
+      "enum": ["sourced_component_integration"]
     }
   }
 }

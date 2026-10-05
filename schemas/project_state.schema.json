@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IPD Project State",
-  "description": "Structural contract for .ipd/project_state.yaml. Use ipdctl verify for cross-reference and workflow invariants.",
+  "description": "Structural contract for .ipd/project_state.yaml. Progressive refinement requirement metadata belongs only to Deliverables; Activities are structural process nodes and are not execution-state requirement roots. Use ipdctl verify for cross-reference and workflow invariants.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -77,6 +77,15 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "source_id"],
+      "properties": {
+        "layer": { "enum": ["core", "task_type", "capability", "project"] },
+        "source_id": { "$ref": "#/$defs/identifier" }
+      }
+    },
     "repository": {
       "type": "object",
       "additionalProperties": false,
@@ -148,9 +157,41 @@
           "items": { "$ref": "#/$defs/review" }
         },
         "blocked_reason": { "type": ["string", "null"], "minLength": 1 },
-        "replacement": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]*$" }
+        "replacement": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "replacements": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": {
+          "enum": ["defined", "selected", "integrated", "verified", "released", "monitored"]
+        },
+        "definition_state": { "enum": ["concrete", "abstract", "placeholder"] },
+        "refinement_required": { "type": "boolean" },
+        "refinement_trigger": { "$ref": "#/$defs/refinementTrigger" },
+        "refines": { "$ref": "#/$defs/identifier" },
+        "requires_artifact_owner": { "type": "boolean" }
       },
       "allOf": [
+        {
+          "if": {
+            "required": ["definition_state"],
+            "properties": { "definition_state": { "const": "placeholder" } }
+          },
+          "then": {
+            "required": ["refinement_required", "refinement_trigger"],
+            "properties": { "refinement_required": { "const": true } }
+          }
+        },
+        {
+          "if": {
+            "required": ["refinement_required"],
+            "properties": { "refinement_required": { "const": true } }
+          },
+          "then": { "required": ["refinement_trigger"] }
+        },
         {
           "if": { "properties": { "status": { "const": "accepted" } } },
           "then": {
@@ -202,6 +243,40 @@
         "evidence": { "type": "string", "minLength": 1 }
       }
     },
+    "gateReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "reviewer_type", "authorized", "decision", "evidence"],
+      "properties": {
+        "reviewer": { "type": "string", "minLength": 1 },
+        "reviewer_type": { "enum": ["human", "agent"] },
+        "authorized": { "type": "boolean" },
+        "decision": { "enum": ["approve", "reject"] },
+        "evidence": { "type": "string", "minLength": 1 },
+        "gate_epoch": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "refinementTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_of"],
+      "properties": {
+        "all_of": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subject", "condition"],
+            "properties": {
+              "subject": { "$ref": "#/$defs/identifier" },
+              "condition": { "enum": ["accepted", "approved"] }
+            }
+          }
+        }
+      }
+    },
     "gate": {
       "type": "object",
       "additionalProperties": false,
@@ -219,11 +294,15 @@
         },
         "reviews": {
           "type": "array",
-          "items": { "$ref": "#/$defs/review" }
+          "items": { "$ref": "#/$defs/gateReview" }
         },
         "evidence": { "$ref": "#/$defs/stringList" },
         "blockers": { "$ref": "#/$defs/stringList" },
-        "approval": { "type": ["string", "null"], "minLength": 1 }
+        "approval": { "type": ["string", "null"], "minLength": 1 },
+        "requirements_fingerprint": { "type": "string", "minLength": 1 },
+        "review_epoch": { "type": "integer", "minimum": 0 },
+        "stale": { "type": "boolean" },
+        "stale_reason": { "type": ["string", "null"], "minLength": 1 }
       },
       "allOf": [
         {
@@ -253,7 +332,7 @@
       "properties": {
         "source": { "$ref": "#/$defs/identifier" },
         "target": { "$ref": "#/$defs/identifier" },
-        "relation": { "enum": ["supports", "depends_on", "verifies", "supersedes"] }
+        "relation": { "enum": ["supports", "depends_on", "verifies", "supersedes", "refines"] }
       }
     }
   }

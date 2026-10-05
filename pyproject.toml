@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipd-agent-workflow-skill"
-version = "0.3.2b1"
+version = "0.4.0b1"
 description = "Bilingual IPD Agent Workflow Framework with tailoring, execution state, dashboards, and repository reconciliation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,9 +41,10 @@ ipdctl = ["messages.yaml"]
 [tool.setuptools.data-files]
 "share/ipd-agent-workflow-skill/policies/default" = ["policies/default/*.yaml"]
 "share/ipd-agent-workflow-skill/policies/task-types" = ["policies/task-types/*.yaml"]
+"share/ipd-agent-workflow-skill/policies/capabilities" = ["policies/capabilities/*.yaml"]
 "share/ipd-agent-workflow-skill/schemas" = ["schemas/*.json"]
 "share/ipd-agent-workflow-skill/templates/hooks" = ["templates/hooks/*.sh"]
-"share/ipd-agent-workflow-skill/templates/project/.ipd" = ["templates/project/.ipd/README.md", "templates/project/.ipd/task_profile.yaml"]
+"share/ipd-agent-workflow-skill/templates/project/.ipd" = ["templates/project/.ipd/README.md", "templates/project/.ipd/task_profile.yaml", "templates/project/.ipd/process_extensions.yaml"]
 "share/ipd-agent-workflow-skill/templates/project/docs" = ["templates/project/docs/README.md"]
 "share/ipd-agent-workflow-skill/templates/project/dashboard" = ["templates/project/dashboard/README.md"]
 "share/ipd-agent-workflow-skill/templates/project/state" = ["templates/project/state/README.md"]

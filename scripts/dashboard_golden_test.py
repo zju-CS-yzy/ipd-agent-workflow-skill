@@ -186,7 +186,13 @@ def _relation(value: Any) -> str:
         "soft": "supports",
         "soft_dependency": "supports",
         "feedback": "supports",
-    }.get(relation, relation if relation in {"depends_on", "supports", "verifies", "supersedes"} else "depends_on")
+    }.get(
+        relation,
+        relation
+        if relation
+        in {"depends_on", "supports", "verifies", "supersedes", "refines"}
+        else "depends_on",
+    )
 
 
 def _source_label(source: Mapping[str, Any], identifier: str, index: int) -> str:
@@ -423,7 +429,15 @@ def dependency_svg_contract(svg_text: str) -> dict[str, Any]:
         "node_ids": sorted(boxes),
         "rendered_relations": relations,
         "dependency_edges": dependency_edges,
-        "only_depends_on": relations == ["depends_on"],
+        # ``refines`` is definition lineage, not an execution dependency.  It may
+        # be overlaid in the dependency view without changing the only execution
+        # topology, which remains ``depends_on``.
+        "only_depends_on": bool(dependency_edges)
+        and set(relations).issubset({"depends_on", "refines"}),
+        "execution_relations": ["depends_on"] if dependency_edges else [],
+        "lineage_relations": [
+            relation for relation in relations if relation == "refines"
+        ],
         "projection_preserves_contract": projection_preserves_contract,
         "execution_order": execution_order,
     }
@@ -655,7 +669,13 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
         "rendered_relations": rendered_dependency_relations,
         "dependency_edges": dependency_edges,
         "only_depends_on": bool(dependency_edges)
-        and rendered_dependency_relations == ["depends_on"],
+        and set(rendered_dependency_relations).issubset({"depends_on", "refines"}),
+        "execution_relations": ["depends_on"] if dependency_edges else [],
+        "lineage_relations": [
+            relation
+            for relation in rendered_dependency_relations
+            if relation == "refines"
+        ],
         "projection_preserves_contract": bool(dependency_edges)
         and all(
             view["projection_preserves_contract"]
@@ -773,15 +793,29 @@ def inspect_dashboard(dashboard_root: Path, locale: str = "en") -> dict[str, Any
     svg_text = "\n".join(path.read_text(encoding="utf-8") for path in svg_files)
     matrix_path = dashboard_root / "matrices" / "deliverable_matrix.html"
     matrix_text = matrix_path.read_text(encoding="utf-8") if matrix_path.exists() else ""
+    def contains_localized_marker(text: str, marker: str) -> bool:
+        """Accept visible text and JSON-script escaped localized labels."""
+
+        escaped = json.dumps(marker, ensure_ascii=True)[1:-1]
+        return marker in text or escaped in text
+
     locale_markers_present = all(
         (
-            translator.text("dashboard.current_phase") in index,
-            translator.text("dashboard.waiting_on_dependencies") in index,
-            translator.text("detail.actionability") in index,
-            translator.text("detail.unmet_dependencies") in index,
-            translator.text("svg.legend") in svg_text,
-            translator.text("svg.dependency_direction") in svg_text,
-            translator.text("matrix.back_to_dashboard") in matrix_text,
+            contains_localized_marker(index, translator.text("dashboard.current_phase")),
+            contains_localized_marker(
+                index, translator.text("dashboard.waiting_on_dependencies")
+            ),
+            contains_localized_marker(index, translator.text("detail.actionability")),
+            contains_localized_marker(
+                index, translator.text("detail.unmet_dependencies")
+            ),
+            contains_localized_marker(svg_text, translator.text("svg.legend")),
+            contains_localized_marker(
+                svg_text, translator.text("svg.dependency_direction")
+            ),
+            contains_localized_marker(
+                matrix_text, translator.text("matrix.back_to_dashboard")
+            ),
         )
     )
     interactions = {
@@ -921,7 +955,7 @@ def evaluate(
             _result(
                 "Typed graph relation capability",
                 set(current.get("declared_relations", []))
-                == {"depends_on", "supports", "verifies", "supersedes"},
+                == {"depends_on", "supports", "verifies", "supersedes", "refines"},
                 "declared=" + str(current.get("declared_relations", []))
                 + "; observed=" + str(current.get("relations", [])),
             ),

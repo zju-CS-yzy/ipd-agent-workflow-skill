@@ -1,0 +1,63 @@
+schema_version: "1.0"
+capability_pattern: sourced_component_integration
+title: Sourced component integration
+activities:
+  - id: plan.sourced_component_candidate_validation
+    title: Validate sourced component candidates against governed requirements
+    phase: plan
+    sequence: 27
+  - id: plan.sourced_component_selection_decision
+    title: Record the sourced component selection decision and residual risks
+    phase: plan
+    sequence: 28
+  - id: develop.sourced_component_integration
+    title: Integrate the selected component into a controlled solution baseline
+    phase: develop
+    sequence: 38
+deliverables:
+  - id: sourced_component.candidate_validation
+    title: Sourced component candidate validation record
+    phase: plan
+    activity_id: plan.sourced_component_candidate_validation
+    review_required: true
+    depends_on:
+      - plan.integrated_plan
+  - id: sourced_component.selection_decision
+    title: Sourced component selection decision
+    phase: plan
+    activity_id: plan.sourced_component_selection_decision
+    review_required: true
+    depends_on:
+      - sourced_component.candidate_validation
+  - id: sourced_component.integration_baseline
+    title: Sourced component integration baseline
+    phase: develop
+    activity_id: develop.sourced_component_integration
+    review_required: true
+    depends_on:
+      - sourced_component.selection_decision
+      - develop.solution_baseline
+dependencies:
+  - source: sourced_component.candidate_validation
+    target: sourced_component.selection_decision
+    relation: supports
+  - source: sourced_component.selection_decision
+    target: sourced_component.integration_baseline
+    relation: supports
+checkpoint_criteria:
+  - id: criterion.sourced_component.candidate_validation
+    checkpoint_id: tr.plan
+    description: Candidate validation evidence covers requirements, interfaces, constraints, and known risks.
+    evidence_required: true
+  - id: criterion.sourced_component.selection_decision
+    checkpoint_id: dcp.plan
+    description: The selection decision records alternatives, rationale, ownership, and accepted residual risks.
+    evidence_required: true
+  - id: criterion.sourced_component.integration_baseline
+    checkpoint_id: tr.develop
+    description: The selected component is integrated against controlled interfaces with reproducible evidence.
+    evidence_required: true
+  - id: criterion.sourced_component.integration_governance
+    checkpoint_id: dcp.develop
+    description: Integration ownership, lifecycle obligations, and residual risks have an authorized decision.
+    evidence_required: true

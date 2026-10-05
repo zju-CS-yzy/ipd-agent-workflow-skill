@@ -1,8 +1,82 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.3.2-beta` maps to package version `0.3.2b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.4.0-beta` maps to package version `0.4.0b1`.
 
 ## [Unreleased]
+
+## [0.4.0b1] - 2026-10-05
+
+### Added
+
+- Added deterministic four-layer process compilation in the order
+  `core -> task_type -> capability -> project`, with explicit
+  `capability_patterns` and a constrained `.ipd/process_extensions.yaml`.
+- Added the reusable `sourced_component_integration` capability for candidate
+  validation, an authorized selection decision, and a controlled integration
+  baseline without embedding project, supplier, or robotics instance data.
+- Added node provenance, phase-derived maturity, independent TR/DCP criteria,
+  and phase-monotonic dependency validation to the process, state, and
+  Dashboard contracts.
+- Added `tailor --preview`, explicit replace/split migration mappings, and
+  authorized-human process-migration audit events.
+- Added explicit artifact-binding roles for the single Claim-authorizing
+  `owner` and non-critical multi-Deliverable `shared_evidence`.
+- Added the human-reviewable Progressive Refinement Kernel: declared triggers,
+  fingerprinted `expand` plans, zero-write preview, authorized apply, replay-safe
+  runtime events, structural `refines` lineage, and recursive concrete leaf
+  closure.
+- Added Gate requirement fingerprints and review epochs so a changed refined
+  leaf set preserves evidence but invalidates the old approval.
+- Added refinement and Binding impact to context, Dashboard projections,
+  interactive details, graphs, and matrices; refined concrete children require
+  explicit user-authored Owner bindings before Claim.
+
+### Changed
+
+- Re-tailoring now fails while a Claim is active and fails closed when governed
+  history would be removed without a complete migration mapping.
+- Ordinary re-tailoring now rejects in-place semantic rewrites of a
+  Deliverable with governed lifecycle history and rejects changes targeting a
+  Phase with an approved Gate or an already closed Phase, including TR/DCP
+  criteria. Zero-write preview remains available; deterministic schema `1.0`
+  core metadata and canonical readiness-criteria enrichment is the only
+  compatibility exception.
+- Migrated historical Deliverables remain as `superseded` state records with
+  their evidence and review history; replacement Deliverables start at
+  `planned` and never inherit acceptance or evidence automatically.
+- Dashboard node details now expose provenance, maturity, TR/DCP criteria, and
+  replacement targets while preserving bilingual interactive JavaScript.
+- Verification fingerprints now include project process extensions and verify
+  the tailored process against all four source layers, including applied
+  refinement history.
+- `ipdctl refine` now defaults to a deterministic preview; applying a new plan
+  is blocked by an active Claim, pending trigger, closed Phase, stale process
+  fingerprint, or missing human authorization.
+- Refinement triggers must be reachable before the governed root Gate;
+  placeholder children must carry their next executable requirement, and only
+  Deliverables may own refinement requirements.
+- Applied and currently due refinement lineage is protected from ordinary
+  re-tailoring. Refinement preview, apply, and replay fail closed when source
+  inputs or Agent runtime provenance diverge from the governed process.
+- Nested refinement roots remain leaves until a later authorized Plan;
+  downstream Claims wait for prerequisite refinement, and plans cannot reuse
+  historical Deliverable IDs or rewrite dependencies of governed history.
+- Every concrete refined child requires an explicit user-authored Owner;
+  placeholder and abstract nodes remain structural and do not require one.
+- Applied refinement records now bind the exact result process fingerprint and
+  invalidated Gate set to the strict authorized runtime event; malformed
+  digests or field-level runtime tampering fail consistency and replay checks.
+
+### Compatibility
+
+- v0.3.2 projects and legacy process schema `1.0` remain readable before
+  re-tailoring. The qualified in-place upgrade preserves accepted state,
+  evidence, and review records.
+- Capability enablement may add framework-managed evidence bindings. The
+  changed binding contract remains fail-closed until an authorized human
+  reviews and adopts the replacement artifact baseline.
+- The serialized single-Claim execution model and authorized-human final
+  approval boundary remain unchanged.
 
 ## [0.3.2b1] - 2026-10-02
 

@@ -6,6 +6,12 @@ from collections.abc import Iterable
 from typing import Any
 
 from .dependencies import unmet_dependencies
+from .eligibility import (
+    deliverable_refinement_status,
+    gate_requirement_readiness,
+    requirements_fingerprint,
+    unresolved_refinement_dependencies,
+)
 from .model import DELIVERABLE_TRANSITIONS, REVIEW_DECISIONS, REVIEWER_TYPES, WORKFLOW_STEPS
 from .state import revised_copy
 from .validation import validate_state
@@ -123,6 +129,14 @@ def claim_deliverable(state: dict[str, Any], identifier: str) -> dict[str, Any]:
 
     _ensure_valid(state)
     deliverable = _find(state["deliverables"], identifier, "deliverable")
+    refinement = deliverable_refinement_status(state, identifier)
+    if not refinement["claimable"]:
+        raise TransitionError(
+            "REFINEMENT_REQUIRED: "
+            f"deliverable {identifier!r} is {refinement['definition_state']!r} "
+            f"with refinement status {refinement['refinement_status']!r}; "
+            "apply an authorized refinement plan before Claim"
+        )
     deliverable_phase = deliverable.get("phase")
     current_phase = state["project"].get("phase")
     if deliverable_phase is not None and deliverable_phase != current_phase:
@@ -133,6 +147,15 @@ def claim_deliverable(state: dict[str, Any], identifier: str) -> dict[str, Any]:
     graph = {
         item["id"]: item.get("depends_on", []) for item in state["deliverables"]
     }
+    refinement_dependencies = unresolved_refinement_dependencies(
+        state, identifier
+    )
+    if refinement_dependencies:
+        raise TransitionError(
+            "REFINEMENT_DEPENDENCY_REQUIRED: "
+            f"deliverable {identifier!r} depends on unresolved refinement "
+            f"roots: {', '.join(refinement_dependencies)}"
+        )
     statuses = {item["id"]: item.get("status") for item in state["deliverables"]}
     unmet = list(unmet_dependencies(identifier, graph, statuses))
     if unmet:
@@ -224,6 +247,7 @@ def record_gate_review(
     authorized: bool,
     decision: str,
     evidence: str,
+    gate_epoch: int | None = None,
 ) -> dict[str, Any]:
     """Record review evidence; this does not itself approve the gate."""
 
@@ -236,16 +260,72 @@ def record_gate_review(
         raise TransitionError("reviewer and review evidence must not be empty")
     updated = revised_copy(state)
     gate = _find(updated["gates"], gate_id, "gate")
-    gate["reviews"].append(
-        {
-            "reviewer": reviewer,
-            "reviewer_type": reviewer_type,
-            "authorized": authorized,
-            "decision": decision,
-            "evidence": evidence,
-        }
-    )
+    _ensure_gate_requirements_current(updated, gate)
+    if gate.get("stale") is True:
+        raise TransitionError(
+            f"gate {gate_id!r} is stale and must be made ready before review"
+        )
+    current_epoch = gate.get("review_epoch", 0)
+    if type(current_epoch) is not int or current_epoch < 0:
+        raise TransitionError("gate review_epoch must be a non-negative integer")
+    if gate_epoch is not None and gate_epoch != current_epoch:
+        raise TransitionError(
+            f"gate review epoch {gate_epoch} is stale; current epoch is {current_epoch}"
+        )
+    review = {
+        "reviewer": reviewer,
+        "reviewer_type": reviewer_type,
+        "authorized": authorized,
+        "decision": decision,
+        "evidence": evidence,
+    }
+    if gate_epoch is not None or "review_epoch" in gate:
+        review["gate_epoch"] = current_epoch
+    gate["reviews"].append(review)
     return _finalize(updated)
+
+
+def _ensure_gate_requirements_ready(
+    state: dict[str, Any], gate: dict[str, Any]
+) -> None:
+    readiness = gate_requirement_readiness(state, gate)
+    if readiness["refinement_due"]:
+        raise TransitionError(
+            "REFINEMENT_REQUIRED: "
+            f"gate {gate.get('id')!r} has unresolved refinement requirements: "
+            + ", ".join(readiness["refinement_due"])
+        )
+    if readiness["incomplete"]:
+        gate_index = next(
+            (
+                index
+                for index, item in enumerate(state.get("gates", []))
+                if item.get("id") == gate.get("id")
+            ),
+            0,
+        )
+        raise TransitionError(
+            f"$.gates[{gate_index}].required_deliverables: "
+            "gate prerequisites are not accepted: "
+            + ", ".join(readiness["incomplete"])
+        )
+
+
+def _ensure_gate_requirements_current(
+    state: dict[str, Any], gate: dict[str, Any]
+) -> str:
+    current = requirements_fingerprint(
+        gate.get("required_deliverables", []), state
+    )
+    recorded = gate.get("requirements_fingerprint")
+    if recorded is not None and recorded != current:
+        raise TransitionError(
+            f"gate {gate.get('id')!r} requirements are stale; "
+            "apply or reconcile the current process refinement first"
+        )
+    if recorded is None:
+        gate["requirements_fingerprint"] = current
+    return current
 
 
 def set_gate_ready(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
@@ -256,8 +336,20 @@ def set_gate_ready(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
     gate = _find(updated["gates"], gate_id, "gate")
     if gate["status"] not in {"planned", "rejected"}:
         raise TransitionError("only a planned or rejected gate can be marked ready")
+    _ensure_gate_requirements_current(updated, gate)
+    _ensure_gate_requirements_ready(updated, gate)
     gate["status"] = "ready"
     gate["approval"] = None
+    if "stale" in gate:
+        gate["stale"] = False
+    if "stale_reason" in gate:
+        gate["stale_reason"] = None
+    if isinstance(gate.get("blockers"), list):
+        gate["blockers"] = [
+            item
+            for item in gate["blockers"]
+            if item != "GATE_REQUIREMENTS_CHANGED"
+        ]
     return _finalize(updated)
 
 
@@ -269,15 +361,27 @@ def approve_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
     gate = _find(updated["gates"], gate_id, "gate")
     if gate["status"] != "ready":
         raise TransitionError("only a ready gate can be approved")
-    gate["status"] = "approved"
+    if gate.get("stale") is True:
+        raise TransitionError(
+            f"gate {gate_id!r} is stale and must be made ready in the current review epoch"
+        )
+    _ensure_gate_requirements_current(updated, gate)
+    _ensure_gate_requirements_ready(updated, gate)
+    current_epoch = gate.get("review_epoch", 0)
     authorized_human = [
         review
         for review in gate.get("reviews", [])
         if review.get("reviewer_type") == "human"
         and review.get("authorized") is True
+        and review.get("gate_epoch", 0) == current_epoch
     ]
-    if authorized_human and authorized_human[-1].get("decision") == "approve":
-        gate["approval"] = authorized_human[-1].get("reviewer")
+    if not authorized_human or authorized_human[-1].get("decision") != "approve":
+        raise TransitionError(
+            "gate approval requires a latest authorized human approval "
+            f"in review epoch {current_epoch}"
+        )
+    gate["status"] = "approved"
+    gate["approval"] = authorized_human[-1].get("reviewer")
     return _finalize(updated)
 
 
@@ -291,12 +395,14 @@ def reject_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
         raise TransitionError("only a ready gate can be rejected")
     gate["status"] = "rejected"
     gate["approval"] = None
+    current_epoch = gate.get("review_epoch", 0)
     reviews = gate.get("reviews", [])
     authorized_human = [
         review
         for review in reviews
         if review.get("reviewer_type") == "human"
         and review.get("authorized") is True
+        and review.get("gate_epoch", 0) == current_epoch
     ]
     if not authorized_human or authorized_human[-1].get("decision") != "reject":
         raise TransitionError(

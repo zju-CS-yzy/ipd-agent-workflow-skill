@@ -5,6 +5,32 @@
   "description": "Deterministic process definition generated from an IPD task profile.",
   "type": "object",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "schema_version": { "const": "2.0" } },
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["migrations"],
+        "properties": {
+          "profile": { "required": ["name", "task_types", "capability_patterns"] },
+          "phases": { "items": { "required": ["provenance", "maturity"] } },
+          "technical_reviews": {
+            "items": { "required": ["criteria", "provenance", "maturity"] }
+          },
+          "decision_checkpoints": {
+            "items": { "required": ["criteria", "provenance", "maturity"] }
+          },
+          "gates": { "items": { "required": ["provenance", "maturity"] } },
+          "activities": { "items": { "required": ["provenance", "maturity"] } },
+          "deliverables": { "items": { "required": ["provenance", "maturity"] } },
+          "dependencies": { "items": { "required": ["provenance"] } }
+        }
+      },
+      "else": { "not": { "required": ["migrations"] } }
+    }
+  ],
   "required": [
     "schema_version",
     "profile",
@@ -18,7 +44,7 @@
     "review_requirements"
   ],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "enum": ["1.0", "2.0"] },
     "profile": {
       "type": "object",
       "additionalProperties": false,
@@ -39,6 +65,11 @@
               "material_change"
             ]
           }
+        },
+        "capability_patterns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["sourced_component_integration"] }
         }
       }
     },
@@ -79,6 +110,14 @@
     "review_requirements": {
       "type": "array",
       "items": { "$ref": "#/$defs/reviewRequirement" }
+    },
+    "migrations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/migration" }
+    },
+    "refinements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/appliedRefinement" }
     }
   },
   "$defs": {
@@ -94,6 +133,28 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/identifier" }
     },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "source_id"],
+      "properties": {
+        "layer": { "enum": ["core", "task_type", "capability", "project"] },
+        "source_id": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "maturity": {
+      "enum": ["defined", "selected", "integrated", "verified", "released", "monitored"]
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "evidence_required"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "description": { "type": "string", "minLength": 1 },
+        "evidence_required": { "const": true }
+      }
+    },
     "phase": {
       "type": "object",
       "additionalProperties": false,
@@ -101,7 +162,9 @@
       "properties": {
         "id": { "$ref": "#/$defs/phaseId" },
         "title": { "type": "string", "minLength": 1 },
-        "sequence": { "type": "integer", "minimum": 0 }
+        "sequence": { "type": "integer", "minimum": 0 },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": { "$ref": "#/$defs/maturity" }
       }
     },
     "checkpoint": {
@@ -114,7 +177,14 @@
         "phase": { "$ref": "#/$defs/phaseId" },
         "sequence": { "type": "integer", "minimum": 0 },
         "gate_id": { "$ref": "#/$defs/identifier" },
-        "required_deliverables": { "$ref": "#/$defs/identifierList" }
+        "required_deliverables": { "$ref": "#/$defs/identifierList" },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/criterion" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": { "$ref": "#/$defs/maturity" }
       }
     },
     "gate": {
@@ -138,10 +208,13 @@
         "checkpoint_id": { "$ref": "#/$defs/identifier" },
         "required_deliverables": { "$ref": "#/$defs/identifierList" },
         "review_required": { "const": true },
-        "final_approval": { "const": "authorized_human" }
+        "final_approval": { "const": "authorized_human" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": { "$ref": "#/$defs/maturity" }
       }
     },
     "activity": {
+      "description": "A structural Activity node. Activities may carry definition_state and refines, but only Deliverables may declare refinement requirements or triggers.",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "title", "phase", "sequence"],
@@ -149,12 +222,36 @@
         "id": { "$ref": "#/$defs/identifier" },
         "title": { "type": "string", "minLength": 1 },
         "phase": { "$ref": "#/$defs/phaseId" },
-        "sequence": { "type": "integer", "minimum": 0 }
+        "sequence": { "type": "integer", "minimum": 0 },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": { "$ref": "#/$defs/maturity" },
+        "definition_state": { "$ref": "#/$defs/definitionState" },
+        "refines": { "$ref": "#/$defs/identifier" }
       }
     },
     "deliverable": {
+      "description": "An executable Deliverable node and the only entity type that may declare a refinement requirement and trigger.",
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["definition_state"],
+            "properties": { "definition_state": { "const": "placeholder" } }
+          },
+          "then": {
+            "required": ["refinement_required", "refinement_trigger"],
+            "properties": { "refinement_required": { "const": true } }
+          }
+        },
+        {
+          "if": {
+            "required": ["refinement_required"],
+            "properties": { "refinement_required": { "const": true } }
+          },
+          "then": { "required": ["refinement_trigger"] }
+        }
+      ],
       "required": ["id", "title", "phase", "activity_id", "review_required", "depends_on"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
@@ -162,7 +259,15 @@
         "phase": { "$ref": "#/$defs/phaseId" },
         "activity_id": { "$ref": "#/$defs/identifier" },
         "review_required": { "type": "boolean" },
-        "depends_on": { "$ref": "#/$defs/identifierList" }
+        "depends_on": { "$ref": "#/$defs/identifierList" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "maturity": { "$ref": "#/$defs/maturity" },
+        "definition_state": { "$ref": "#/$defs/definitionState" },
+        "refinement_required": { "type": "boolean" },
+        "refinement_trigger": { "$ref": "#/$defs/refinementTrigger" },
+        "completion_policy": { "const": "all_children_accepted" },
+        "refines": { "$ref": "#/$defs/identifier" },
+        "requires_artifact_owner": { "type": "boolean" }
       }
     },
     "dependency": {
@@ -172,7 +277,93 @@
       "properties": {
         "source": { "$ref": "#/$defs/identifier" },
         "target": { "$ref": "#/$defs/identifier" },
-        "relation": { "enum": ["depends_on", "supports", "verifies", "supersedes"] }
+        "relation": { "enum": ["depends_on", "supports", "verifies", "supersedes", "refines"] },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "strategy", "reason", "preserve_history"],
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "strategy": { "enum": ["replace", "split"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true }
+      }
+    },
+    "definitionState": {
+      "enum": ["concrete", "placeholder", "abstract"]
+    },
+    "refinementTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_of"],
+      "properties": {
+        "all_of": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subject", "condition"],
+            "properties": {
+              "subject": { "$ref": "#/$defs/identifier" },
+              "condition": { "enum": ["accepted", "approved"] }
+            }
+          }
+        }
+      }
+    },
+    "appliedRefinement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "root",
+        "mode",
+        "base_process_fingerprint",
+        "reason",
+        "basis",
+        "plan_digest",
+        "children"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "root": { "$ref": "#/$defs/identifier" },
+        "mode": { "const": "expand" },
+        "base_process_fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "reason": { "type": "string", "minLength": 1 },
+        "basis": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "plan_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "result_process_fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "invalidated_gates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
       }
     },
     "reviewRequirement": {

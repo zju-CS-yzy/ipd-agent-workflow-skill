@@ -115,6 +115,32 @@ class I18nTests(unittest.TestCase):
             "无法确定项目事务所属进程 4312 是否仍在运行；请确认没有 ipdctl 命令在执行后重试",
         )
 
+    def test_process_migration_errors_are_localized_without_changing_ids(self) -> None:
+        chinese = get_translator("zh-CN")
+        cases = (
+            (
+                "re-tailoring requires explicit --apply-migrations for historical "
+                "deliverables: old.requirements",
+                "历史交付件迁移需要显式提供 --apply-migrations：old.requirements",
+            ),
+            (
+                "re-tailoring would remove unmapped historical deliverables: "
+                "old.architecture",
+                "重新裁剪将移除未映射的历史交付件：old.architecture",
+            ),
+            (
+                "state-only superseded history has invalid replacements or trace "
+                "links: old.design",
+                "已取代历史节点的替代目标无效：old.design",
+            ),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(
+                    localized_exception_message(RuntimeError(source), chinese),
+                    expected,
+                )
+
     def test_init_writes_locale_and_localizes_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "project"

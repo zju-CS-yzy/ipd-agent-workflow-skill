@@ -2,5 +2,6 @@ schema_version: "1.0"
 project_name: example-project
 task_types:
   - software
+capability_patterns: []
 presentation:
   locale: en

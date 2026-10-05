@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.3.2b1"
-PUBLIC_VERSION = "0.3.2-beta"
+PACKAGE_VERSION = "0.4.0b1"
+PUBLIC_VERSION = "0.4.0-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -26,7 +26,10 @@ REQUIRED_FILES = (
     "CHANGELOG.md",
     "RELEASE_CHECKLIST.md",
     "AGENT_RUNTIME_PROTOCOL.md",
+    "MANIFEST.in",
     "scripts/verify_v031_upgrade.py",
+    "scripts/verify_v032_upgrade.py",
+    "scripts/simulate_progressive_refinement.py",
     "pyproject.toml",
     "agents/openai.yaml",
     ".github/workflows/test.yml",
@@ -43,6 +46,9 @@ REQUIRED_FILES = (
     "schemas/tailored_process.schema.json",
     "schemas/agent_runtime.schema.json",
     "schemas/artifact_bindings.schema.json",
+    "schemas/capability_policy.schema.json",
+    "schemas/process_extensions.schema.json",
+    "schemas/refinement_plan.schema.json",
     "policies/default/tailoring_rules.yaml",
     "policies/task-types/software.yaml",
     "policies/task-types/hardware.yaml",
@@ -50,7 +56,9 @@ REQUIRED_FILES = (
     "policies/task-types/robotics.yaml",
     "policies/task-types/ai_system.yaml",
     "policies/task-types/material_change.yaml",
+    "policies/capabilities/sourced_component_integration.yaml",
     "templates/project/.ipd/task_profile.yaml",
+    "templates/project/.ipd/process_extensions.yaml",
     "templates/project/docs/README.md",
     "templates/project/dashboard/README.md",
     "templates/project/state/README.md",
@@ -64,6 +72,7 @@ FORBIDDEN_DIRECTORY_NAMES = {"examples", "generated", "locales"}
 
 GENERATED_DIRECTORIES = {
     "__pycache__",
+    ".golden-debug",
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
@@ -77,7 +86,7 @@ GENERATED_DIRECTORIES = {
 GENERATED_DIRECTORY_SUFFIXES = (".egg-info",)
 GENERATED_FILES = {".coverage", "coverage.xml"}
 GENERATED_SUFFIXES = {".pyc", ".pyo", ".tmp", ".bak", ".log", ".swp"}
-FORBIDDEN_BINARY_SUFFIXES = {".png"}
+FORBIDDEN_BINARY_SUFFIXES = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 SENSITIVE_FILENAMES = (
     re.compile(r"^\.env(?:\..+)?$", re.IGNORECASE),
@@ -174,6 +183,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "ipdctl/messages.yaml must be declared as package data",
         ),
         (
+            "MANIFEST.in",
+            r"^recursive-include scripts \*\.py\s*$",
+            "sdist must include the release simulation scripts",
+        ),
+        (
             "ipdctl/__init__.py",
             rf'^__version__\s*=\s*"{escaped_package}"\s*$',
             f'__version__ must be "{PACKAGE_VERSION}"',
@@ -194,9 +208,19 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             f"README must identify v{PUBLIC_VERSION}",
         ),
         (
+            "README.zh-CN.md",
+            rf'`v{escaped_public}`.*?`{escaped_package}`',
+            "Chinese README must identify the current public and package versions",
+        ),
+        (
             "RELEASE_CHECKLIST.md",
             rf'target for this cycle is Python package `{escaped_package}` and public label `v{escaped_public}`',
             "release checklist must identify the current package and public versions",
+        ),
+        (
+            RELEASE_NOTES_PATH,
+            rf'^# IPD Agent Workflow Framework v{escaped_public}\s*$',
+            "release notes title must identify the current public version",
         ),
         (
             RELEASE_NOTES_PATH,
@@ -229,14 +253,69 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "release workflow must qualify the published v0.3.1 in-place upgrade",
         ),
         (
+            ".github/workflows/release.yml",
+            r"python -B scripts/verify_v032_upgrade\.py",
+            "release workflow must qualify the direct v0.3.2 in-place upgrade",
+        ),
+        (
             ".github/workflows/test.yml",
             r"fetch-depth:\s*0.*?python -B scripts/verify_v031_upgrade\.py",
             "CI must fetch release history and qualify the v0.3.1 in-place upgrade",
         ),
         (
             ".github/workflows/test.yml",
-            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$",
+            r"upgrade-v032:.*?fetch-depth:\s*0.*?python -B scripts/verify_v032_upgrade\.py",
+            "CI must fetch release history and qualify the direct v0.3.2 upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$",
             "CI must expose the stable governance-gate over all release-contract jobs",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"UPGRADE_V032_RESULT:\s*\$\{\{\s*needs\.upgrade-v032\.result\s*\}\}.*?test \"\$UPGRADE_V032_RESULT\" = \"success\"",
+            "governance-gate must explicitly require the v0.3.2 upgrade result",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"IPD_TEST_LOCALE:\s*\$\{\{\s*matrix\.locale\s*\}\}.*?python -B -m unittest discover -s tests -v",
+            "CI must run the complete lifecycle simulation in each locale matrix entry",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"python -B -m unittest discover -s tests -v.*?IPD_TEST_LOCALE=en python -B -m unittest.*?tests\.test_full_lifecycle_simulation -v",
+            "release workflow must qualify the complete lifecycle in both locales",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"tar -tzf \"\$sdist\" \| grep '/scripts/simulate_progressive_refinement\.py\$'.*?cp \"\$source_root/scripts/simulate_progressive_refinement\.py\".*?sdist-progressive/simulate_progressive_refinement\.py.*?sdist-venv/bin/python.*?simulate_progressive_refinement\.py --json",
+            "CI must inspect the sdist and execute its progressive simulation against the installed package outside the extracted source",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"tar -tzf \"\$sdist\" \| grep '/scripts/simulate_progressive_refinement\.py\$'.*?cp \"\$sdist_root/scripts/simulate_progressive_refinement\.py\".*?sdist-progressive/simulate_progressive_refinement\.py.*?sdist-validation-venv/bin/python.*?simulate_progressive_refinement\.py --json",
+            "release workflow must inspect the sdist and execute its progressive simulation against the installed package outside the extracted source",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"cp scripts/simulate_progressive_refinement\.py.*?wheel-progressive/simulate_progressive_refinement\.py.*?wheel-progressive.*?simulate_progressive_refinement\.py --json",
+            "CI must execute the progressive simulation against the installed wheel outside the checkout",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"cp \"\$GITHUB_WORKSPACE/scripts/simulate_progressive_refinement\.py\".*?wheel-progressive/simulate_progressive_refinement\.py.*?wheel-refinement-venv/bin/pip.*?wheel-progressive.*?simulate_progressive_refinement\.py --json",
+            "release workflow must execute the progressive simulation against the installed wheel outside the checkout",
+        ),
+        (
+            "docs/deployment.md",
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.3\.2-beta`',
+            "deployment guide must identify the release and direct upgrade baseline",
+        ),
+        (
+            "docs/deployment.zh-CN.md",
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.3\.2-beta`',
+            "Chinese deployment guide must identify the release and direct upgrade baseline",
         ),
         (
             "SKILL.md",

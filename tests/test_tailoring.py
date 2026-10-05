@@ -262,6 +262,8 @@ class TailoringTests(unittest.TestCase):
                 ],
                 "review_required": True,
                 "final_approval": "authorized_human",
+                "provenance": {"layer": "project", "source_id": "test.extension"},
+                "maturity": "defined",
             }
         )
         self.assertEqual(validate_tailored_process(process), [])
@@ -333,6 +335,213 @@ class TailoringTests(unittest.TestCase):
         self.assertTrue(any("deliverables[0].id" in issue for issue in issues))
         self.assertTrue(any("profile.task_types: must be an array" in issue for issue in issues))
 
+    def test_capability_pattern_adds_three_stage_governed_process(self) -> None:
+        process = tailor_profile(
+            {
+                "schema_version": "1.0",
+                "project_name": "component-integration",
+                "task_type": "software",
+                "capability_patterns": ["sourced_component_integration"],
+            }
+        )
+        self.assertEqual(process["schema_version"], "2.0")
+        self.assertEqual(
+            process["profile"]["capability_patterns"],
+            ["sourced_component_integration"],
+        )
+        deliverables = {item["id"]: item for item in process["deliverables"]}
+        self.assertEqual(
+            [
+                identifier
+                for identifier in (
+                    "sourced_component.candidate_validation",
+                    "sourced_component.selection_decision",
+                    "sourced_component.integration_baseline",
+                )
+                if identifier in deliverables
+            ],
+            [
+                "sourced_component.candidate_validation",
+                "sourced_component.selection_decision",
+                "sourced_component.integration_baseline",
+            ],
+        )
+        self.assertEqual(
+            deliverables["sourced_component.integration_baseline"]["provenance"],
+            {
+                "layer": "capability",
+                "source_id": "sourced_component_integration",
+            },
+        )
+        self.assertEqual(
+            deliverables["sourced_component.integration_baseline"]["maturity"],
+            "integrated",
+        )
+        tr_plan = next(
+            item for item in process["technical_reviews"] if item["id"] == "tr.plan"
+        )
+        dcp_plan = next(
+            item
+            for item in process["decision_checkpoints"]
+            if item["id"] == "dcp.plan"
+        )
+        self.assertIn(
+            "criterion.sourced_component.candidate_validation",
+            {item["id"] for item in tr_plan["criteria"]},
+        )
+        self.assertIn(
+            "criterion.sourced_component.selection_decision",
+            {item["id"] for item in dcp_plan["criteria"]},
+        )
+        self.assertEqual(validate_tailored_process(process), [])
+
+    def test_project_extension_is_additive_and_recomputes_controls(self) -> None:
+        extension = {
+            "schema_version": "1.0",
+            "extension_id": "demo.extension",
+            "activities": [
+                {
+                    "id": "qualify.project_acceptance",
+                    "title": "Run project acceptance",
+                    "phase": "qualify",
+                    "sequence": 49,
+                }
+            ],
+            "deliverables": [
+                {
+                    "id": "project.acceptance_record",
+                    "title": "Project acceptance record",
+                    "phase": "qualify",
+                    "activity_id": "qualify.project_acceptance",
+                    "review_required": True,
+                    "depends_on": ["develop.solution_baseline"],
+                }
+            ],
+            "dependencies": [
+                {
+                    "source": "project.acceptance_record",
+                    "target": "qualify.validation_report",
+                    "relation": "supports",
+                }
+            ],
+            "checkpoint_criteria": [
+                {
+                    "id": "criterion.project.acceptance",
+                    "checkpoint_id": "dcp.qualify",
+                    "description": "Project acceptance evidence has an authorized decision.",
+                    "evidence_required": True,
+                }
+            ],
+            "migrations": [
+                {
+                    "from": "legacy.acceptance_record",
+                    "to": "project.acceptance_record",
+                    "strategy": "replace",
+                    "reason": "Adopt the governed project acceptance record.",
+                    "preserve_history": True,
+                }
+            ],
+        }
+        process = tailor_profile({"task_type": "software"}, extension)
+        deliverable = next(
+            item
+            for item in process["deliverables"]
+            if item["id"] == "project.acceptance_record"
+        )
+        self.assertEqual(
+            deliverable["provenance"],
+            {"layer": "project", "source_id": "demo.extension"},
+        )
+        for collection in (
+            "technical_reviews",
+            "decision_checkpoints",
+            "gates",
+        ):
+            qualify_rows = [
+                item for item in process[collection] if item["phase"] == "qualify"
+            ]
+            self.assertTrue(
+                all(
+                    "project.acceptance_record" in item["required_deliverables"]
+                    for item in qualify_rows
+                )
+            )
+        self.assertEqual(process["migrations"], extension["migrations"])
+        self.assertEqual(validate_tailored_process(process), [])
+
+    def test_extension_cannot_replace_canonical_nodes_or_depend_on_later_phase(self) -> None:
+        duplicate = {
+            "schema_version": "1.0",
+            "extension_id": "invalid.extension",
+            "activities": [
+                {
+                    "id": "concept.scope",
+                    "title": "Replacement",
+                    "phase": "concept",
+                    "sequence": 1,
+                }
+            ],
+        }
+        with self.assertRaisesRegex(TailoringError, "cannot replace existing id"):
+            tailor_profile({"task_type": "software"}, duplicate)
+
+        later_dependency = {
+            "schema_version": "1.0",
+            "extension_id": "invalid.dependency",
+            "activities": [
+                {
+                    "id": "plan.invalid_dependency",
+                    "title": "Invalid dependency",
+                    "phase": "plan",
+                    "sequence": 29,
+                }
+            ],
+            "deliverables": [
+                {
+                    "id": "project.invalid_dependency",
+                    "title": "Invalid dependency record",
+                    "phase": "plan",
+                    "activity_id": "plan.invalid_dependency",
+                    "review_required": True,
+                    "depends_on": ["qualify.validation_report"],
+                }
+            ],
+        }
+        with self.assertRaisesRegex(TailoringError, "earlier phase 'plan'"):
+            tailor_profile({"task_type": "software"}, later_dependency)
+
+    def test_unknown_capability_pattern_fails_closed(self) -> None:
+        with self.assertRaisesRegex(TailoringError, "unknown capability pattern"):
+            tailor_profile(
+                {
+                    "task_type": "software",
+                    "capability_patterns": ["robot_directory_inference"],
+                }
+            )
+
+    def test_legacy_v1_process_remains_valid(self) -> None:
+        legacy = tailor_profile({"task_type": "software"})
+        legacy["schema_version"] = "1.0"
+        legacy["profile"].pop("capability_patterns")
+        legacy.pop("migrations")
+        for collection in (
+            "phases",
+            "technical_reviews",
+            "decision_checkpoints",
+            "gates",
+            "activities",
+            "deliverables",
+        ):
+            for item in legacy[collection]:
+                item.pop("provenance")
+                item.pop("maturity")
+        for collection in ("technical_reviews", "decision_checkpoints"):
+            for item in legacy[collection]:
+                item.pop("criteria")
+        for dependency in legacy["dependencies"]:
+            dependency.pop("provenance")
+        self.assertEqual(validate_tailored_process(legacy), [])
+
     def test_schema_files_are_valid_json_and_cover_required_collections(self) -> None:
         task_schema = json.loads(
             (ROOT / "schemas" / "task_profile.schema.json").read_text(encoding="utf-8")
@@ -348,6 +557,12 @@ class TailoringTests(unittest.TestCase):
             )
         )
         self.assertIn("task_types", task_schema["properties"])
+        self.assertIn("capability_patterns", task_schema["properties"])
+        self.assertEqual(
+            process_schema["properties"]["schema_version"]["enum"],
+            ["1.0", "2.0"],
+        )
+        self.assertIn("migrations", process_schema["properties"])
         self.assertEqual(
             set(process_schema["required"]),
             {

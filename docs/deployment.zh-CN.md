@@ -35,9 +35,15 @@ ipdctl --help
 
 创建 Tag 前完成 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)。源 Commit 必须干净，CI 必须通过，包版本与 Changelog 必须一致，发布卫生检查必须确认不存在缓存、构建输出、运行时生成数据、凭据类文件或高置信度 Secret。
 
-规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.3.2-beta`（Python 包版本 `0.3.2b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
+规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.4.0-beta`（Python 包版本 `0.4.0b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
 
-发布验证必须包含一次 v0.3.1 项目原地升级：项目已有 Dirty Critical 文件，
+直接前序版本验证必须使用真实 `v0.3.2-beta` Tag 创建受控项目，在不重新
+初始化的前提下由 v0.4 读取，证明 `tailor --preview` 零写入，再将流程重新
+裁剪为 Schema `2.0`，同时保留 accepted 状态、证据和评审历史。启用
+Capability 后，只能新增 planned 工作，Dashboard 必须显示 Provenance；绑定
+契约发生变化时必须先 Fail-closed，只有经授权的人类明确采纳新基线后才能通过。
+
+同时保留长期兼容性所需的 v0.3.1 项目原地升级回归：项目已有 Dirty Critical 文件，
 验证单一 Owner Binding，预览并记录获得授权的 Baseline Adoption，使一个真实
 v0.3.1 无 Window Active Claim 过期并完成恢复，再完成两轮完整 Claim 迭代，
 并证明 Context、Dashboard、Reconcile 与 Verify 给出的

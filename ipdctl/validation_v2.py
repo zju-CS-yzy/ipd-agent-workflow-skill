@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .dependencies import find_cycle, unmet_dependencies
+from .eligibility import gate_requirement_readiness
 from .model import (
     CLAIM_STATUSES,
     DELIVERABLE_STATUSES,
@@ -119,10 +120,17 @@ def _object_collection(
 
 
 def _validate_review(
-    review: dict[str, Any], path: str, issues: list[ValidationIssue]
+    review: dict[str, Any],
+    path: str,
+    issues: list[ValidationIssue],
+    *,
+    allow_gate_epoch: bool = False,
 ) -> None:
-    fields = {"reviewer", "reviewer_type", "authorized", "decision", "evidence"}
-    _required(review, fields, path, issues)
+    required = {"reviewer", "reviewer_type", "authorized", "decision", "evidence"}
+    fields = set(required)
+    if allow_gate_epoch:
+        fields.add("gate_epoch")
+    _required(review, required, path, issues)
     _reject_unknown(review, fields, path, issues)
     if "reviewer" in review:
         _non_empty_string(review["reviewer"], f"{path}.reviewer", issues)
@@ -134,6 +142,53 @@ def _validate_review(
         _enum_string(review["decision"], REVIEW_DECISIONS, f"{path}.decision", issues)
     if "evidence" in review:
         _non_empty_string(review["evidence"], f"{path}.evidence", issues)
+    if "gate_epoch" in review and (
+        type(review["gate_epoch"]) is not int or review["gate_epoch"] < 0
+    ):
+        issues.append(
+            ValidationIssue(f"{path}.gate_epoch", "must be a non-negative integer")
+        )
+
+
+def _validate_refinement_trigger(
+    value: Any, path: str, issues: list[ValidationIssue]
+) -> list[tuple[str, str, str]]:
+    """Validate trigger syntax and return conditions for cross-reference checks."""
+
+    if not isinstance(value, dict):
+        issues.append(ValidationIssue(path, "must be an object"))
+        return []
+    _required(value, {"all_of"}, path, issues)
+    _reject_unknown(value, {"all_of"}, path, issues)
+    conditions = _object_collection(value.get("all_of"), f"{path}.all_of", issues)
+    if isinstance(value.get("all_of"), list) and not value["all_of"]:
+        issues.append(ValidationIssue(f"{path}.all_of", "must not be empty"))
+    parsed: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, condition in enumerate(conditions):
+        condition_path = f"{path}.all_of[{index}]"
+        _required(condition, {"subject", "condition"}, condition_path, issues)
+        _reject_unknown(condition, {"subject", "condition"}, condition_path, issues)
+        subject = _identifier(
+            condition.get("subject"), f"{condition_path}.subject", issues
+        )
+        expected = (
+            _enum_string(
+                condition["condition"],
+                ("accepted", "approved"),
+                f"{condition_path}.condition",
+                issues,
+            )
+            if "condition" in condition
+            else None
+        )
+        if subject and expected:
+            key = (subject, expected)
+            if key in seen:
+                issues.append(ValidationIssue(condition_path, "duplicates a condition"))
+            seen.add(key)
+            parsed.append((subject, expected, condition_path))
+    return parsed
 
 
 def _authorized_reviews(
@@ -259,7 +314,12 @@ def validate_state(value: Any) -> list[ValidationIssue]:
     graph: dict[str, list[str]] = {}
     deliverable_status: dict[str, str] = {}
     deliverable_paths: dict[str, str] = {}
-    superseded: list[tuple[str, str, str]] = []
+    deliverable_phases: dict[str, Any] = {}
+    refinement_parents: dict[str, str] = {}
+    refinement_triggers: list[
+        tuple[str, Any, Any, str, str, str]
+    ] = []
+    superseded: list[tuple[str, tuple[str, ...], str]] = []
     legacy_statuses = ("planned", "in_progress", "blocked", "ready_for_review", "accepted")
     for index, deliverable in enumerate(deliverables):
         path = f"$.deliverables[{index}]"
@@ -275,6 +335,14 @@ def validate_state(value: Any) -> list[ValidationIssue]:
             "reviews",
             "blocked_reason",
             "replacement",
+            "replacements",
+            "provenance",
+            "maturity",
+            "definition_state",
+            "refinement_required",
+            "refinement_trigger",
+            "refines",
+            "requires_artifact_owner",
         }
         required = {"id", "title", "status", "depends_on", "evidence"}
         if is_v2:
@@ -310,6 +378,126 @@ def validate_state(value: Any) -> list[ValidationIssue]:
         replacement = deliverable.get("replacement")
         if replacement is not None:
             replacement = _identifier(replacement, f"{path}.replacement", issues)
+        raw_replacements = deliverable.get("replacements", [])
+        replacements = _string_list(
+            raw_replacements, f"{path}.replacements", issues
+        ) if "replacements" in deliverable else []
+        normalized_replacements: list[str] = []
+        for replacement_index, candidate in enumerate(replacements):
+            valid = _identifier(
+                candidate,
+                f"{path}.replacements[{replacement_index}]",
+                issues,
+            )
+            if valid is not None:
+                normalized_replacements.append(valid)
+        if "replacements" in deliverable and not normalized_replacements:
+            issues.append(
+                ValidationIssue(
+                    f"{path}.replacements", "must contain at least one replacement"
+                )
+            )
+        if replacement is not None and normalized_replacements:
+            if normalized_replacements[0] != replacement:
+                issues.append(
+                    ValidationIssue(
+                        f"{path}.replacements",
+                        "the first replacement must equal the legacy replacement field",
+                    )
+                )
+        provenance = deliverable.get("provenance")
+        if provenance is not None:
+            provenance_path = f"{path}.provenance"
+            if not isinstance(provenance, dict):
+                issues.append(ValidationIssue(provenance_path, "must be an object"))
+            else:
+                _required(provenance, {"layer", "source_id"}, provenance_path, issues)
+                _reject_unknown(
+                    provenance, {"layer", "source_id"}, provenance_path, issues
+                )
+                if "layer" in provenance:
+                    _enum_string(
+                        provenance["layer"],
+                        ("core", "task_type", "capability", "project"),
+                        f"{provenance_path}.layer",
+                        issues,
+                    )
+                if "source_id" in provenance:
+                    _identifier(
+                        provenance["source_id"],
+                        f"{provenance_path}.source_id",
+                        issues,
+                    )
+        if "maturity" in deliverable:
+            _enum_string(
+                deliverable["maturity"],
+                ("defined", "selected", "integrated", "verified", "released", "monitored"),
+                f"{path}.maturity",
+                issues,
+            )
+        if "definition_state" in deliverable:
+            _enum_string(
+                deliverable["definition_state"],
+                ("concrete", "abstract", "placeholder"),
+                f"{path}.definition_state",
+                issues,
+            )
+        if "refinement_required" in deliverable and type(
+            deliverable["refinement_required"]
+        ) is not bool:
+            issues.append(
+                ValidationIssue(f"{path}.refinement_required", "must be a boolean")
+            )
+        if (
+            deliverable.get("definition_state") == "placeholder"
+            and deliverable.get("refinement_required") is not True
+        ):
+            issues.append(
+                ValidationIssue(
+                    f"{path}.refinement_required",
+                    "must be true when definition_state is placeholder",
+                )
+            )
+        if (
+            deliverable.get("refinement_required") is True
+            and "refinement_trigger" not in deliverable
+        ):
+            issues.append(
+                ValidationIssue(
+                    f"{path}.refinement_trigger",
+                    "required when refinement_required is true",
+                )
+            )
+        if "requires_artifact_owner" in deliverable and type(
+            deliverable["requires_artifact_owner"]
+        ) is not bool:
+            issues.append(
+                ValidationIssue(
+                    f"{path}.requires_artifact_owner", "must be a boolean"
+                )
+            )
+        if "refines" in deliverable:
+            parent = _identifier(deliverable["refines"], f"{path}.refines", issues)
+            if parent is not None and identifier is not None:
+                refinement_parents[identifier] = parent
+        if "refinement_trigger" in deliverable:
+            conditions = _validate_refinement_trigger(
+                deliverable["refinement_trigger"],
+                f"{path}.refinement_trigger",
+                issues,
+            )
+            if identifier is not None:
+                refinement_triggers.extend(
+                    (
+                        identifier,
+                        deliverable.get("phase"),
+                        deliverable.get("definition_state"),
+                        subject,
+                        expected,
+                        condition_path,
+                    )
+                    for subject, expected, condition_path in conditions
+                )
 
         if status == "accepted":
             if not evidence:
@@ -336,11 +524,13 @@ def validate_state(value: Any) -> list[ValidationIssue]:
                     )
                 )
             elif identifier:
-                superseded.append((identifier, replacement, path))
+                effective_replacements = tuple(normalized_replacements or [replacement])
+                superseded.append((identifier, effective_replacements, path))
 
         if identifier is not None:
             graph[identifier] = dependencies
             deliverable_paths[identifier] = path
+            deliverable_phases[identifier] = deliverable.get("phase")
             if status is not None:
                 deliverable_status[identifier] = status
 
@@ -373,9 +563,104 @@ def validate_state(value: Any) -> list[ValidationIssue]:
             ValidationIssue("$.deliverables", f"dependency cycle detected: {' -> '.join(cycle)}")
         )
 
+    refinement_graph = {identifier: [] for identifier in graph}
+    for identifier, parent in refinement_parents.items():
+        path = deliverable_paths[identifier]
+        if parent == identifier:
+            issues.append(ValidationIssue(f"{path}.refines", "must not refine itself"))
+        elif parent not in graph:
+            issues.append(
+                ValidationIssue(
+                    f"{path}.refines",
+                    f"references unknown deliverable {parent!r}",
+                )
+            )
+        else:
+            refinement_graph[identifier] = [parent]
+            if deliverable_phases.get(identifier) != deliverable_phases.get(parent):
+                issues.append(
+                    ValidationIssue(
+                        f"{path}.refines",
+                        f"must refine a deliverable in the same phase as {identifier!r}",
+                    )
+                )
+    refinement_cycle = find_cycle(refinement_graph)
+    if refinement_cycle:
+        issues.append(
+            ValidationIssue(
+                "$.deliverables",
+                f"refinement cycle detected: {' -> '.join(refinement_cycle)}",
+            )
+        )
+
     gates = _object_collection(value.get("gates"), "$.gates", issues)
     for index, gate in enumerate(gates):
-        _validate_gate(gate, index, graph, deliverable_status, issues)
+        _validate_gate(gate, index, value, graph, issues)
+
+    gate_by_id = {
+        gate.get("id"): gate
+        for gate in gates
+        if isinstance(gate.get("id"), str) and gate.get("id")
+    }
+    gate_ids = set(gate_by_id)
+    phase_sequence = {phase: index for index, phase in enumerate(PROJECT_PHASES)}
+
+    def depends_on_subject(start: str, target: str) -> bool:
+        pending = list(graph.get(start, []))
+        visited: set[str] = set()
+        while pending:
+            current = pending.pop()
+            if current == target:
+                return True
+            if current in visited:
+                continue
+            visited.add(current)
+            pending.extend(graph.get(current, []))
+        return False
+
+    for owner, owner_phase, definition_state, subject, expected, condition_path in refinement_triggers:
+        if expected == "accepted" and subject not in graph:
+            message = (
+                "condition 'accepted' must reference a Deliverable"
+                if subject in gate_ids
+                else f"references unknown Deliverable {subject!r}"
+            )
+            issues.append(ValidationIssue(condition_path, message))
+        elif expected == "approved" and subject not in gate_ids:
+            message = (
+                "condition 'approved' must reference a Gate"
+                if subject in graph
+                else f"references unknown Gate {subject!r}"
+            )
+            issues.append(ValidationIssue(condition_path, message))
+        elif expected == "accepted":
+            if phase_sequence.get(deliverable_phases.get(subject), -1) > phase_sequence.get(
+                owner_phase, -1
+            ):
+                issues.append(
+                    ValidationIssue(
+                        condition_path,
+                        f"later-phase Deliverable {subject!r} cannot trigger refinement",
+                    )
+                )
+            if definition_state == "placeholder" and (
+                subject == owner or depends_on_subject(subject, owner)
+            ):
+                issues.append(
+                    ValidationIssue(
+                        condition_path,
+                        f"placeholder refinement root {owner!r} cannot be required to complete before its trigger",
+                    )
+                )
+        elif expected == "approved":
+            gate_phase = gate_by_id[subject].get("phase")
+            if phase_sequence.get(gate_phase, -1) >= phase_sequence.get(owner_phase, -1):
+                issues.append(
+                    ValidationIssue(
+                        condition_path,
+                        f"Gate {subject!r} must belong to a phase before refinement root {owner!r}",
+                    )
+                )
 
     links = _object_collection(value.get("traceability"), "$.traceability", issues)
     normalized_links: set[tuple[str, str, str]] = set()
@@ -387,7 +672,12 @@ def validate_state(value: Any) -> list[ValidationIssue]:
         source = _identifier(link.get("source"), f"{path}.source", issues)
         target = _identifier(link.get("target"), f"{path}.target", issues)
         relation = (
-            _enum_string(link["relation"], TRACE_RELATIONS, f"{path}.relation", issues)
+            _enum_string(
+                link["relation"],
+                TRACE_RELATIONS + (() if "refines" in TRACE_RELATIONS else ("refines",)),
+                f"{path}.relation",
+                issues,
+            )
             if "relation" in link
             else None
         )
@@ -406,23 +696,26 @@ def validate_state(value: Any) -> list[ValidationIssue]:
                 f"references unknown entity {identifier!r}",
             )
         )
-    for identifier, replacement, path in superseded:
-        if replacement not in graph:
-            issues.append(
-                ValidationIssue(
-                    f"{path}.replacement", f"references unknown replacement {replacement!r}"
+    for identifier, replacements, path in superseded:
+        for replacement in replacements:
+            if replacement not in graph:
+                issues.append(
+                    ValidationIssue(
+                        f"{path}.replacements",
+                        f"references unknown replacement {replacement!r}",
+                    )
                 )
-            )
-        elif not (
-            (replacement, identifier, "supersedes") in normalized_links
-            or (identifier, replacement, "supersedes") in normalized_links
-        ):
-            issues.append(
-                ValidationIssue(
-                    "$.traceability",
-                    f"superseded deliverable {identifier!r} requires a supersedes trace link",
+            elif not (
+                (replacement, identifier, "supersedes") in normalized_links
+                or (identifier, replacement, "supersedes") in normalized_links
+            ):
+                issues.append(
+                    ValidationIssue(
+                        "$.traceability",
+                        f"superseded deliverable {identifier!r} requires a supersedes "
+                        f"trace link to {replacement!r}",
+                    )
                 )
-            )
     return sorted(set(issues))
 
 
@@ -451,8 +744,8 @@ def _validate_repository(value: Any, issues: list[ValidationIssue]) -> None:
 def _validate_gate(
     gate: dict[str, Any],
     index: int,
+    state: dict[str, Any],
     graph: dict[str, list[str]],
-    deliverable_status: dict[str, str],
     issues: list[ValidationIssue],
 ) -> None:
     path = f"$.gates[{index}]"
@@ -467,6 +760,10 @@ def _validate_gate(
         "evidence",
         "blockers",
         "approval",
+        "requirements_fingerprint",
+        "review_epoch",
+        "stale",
+        "stale_reason",
     }
     required = {"id", "title", "kind", "status", "required_deliverables", "reviews"}
     _required(gate, required, path, issues)
@@ -497,31 +794,77 @@ def _validate_gate(
             )
     reviews = _object_collection(gate.get("reviews"), f"{path}.reviews", issues)
     for review_index, review in enumerate(reviews):
-        _validate_review(review, f"{path}.reviews[{review_index}]", issues)
+        _validate_review(
+            review,
+            f"{path}.reviews[{review_index}]",
+            issues,
+            allow_gate_epoch=True,
+        )
     for field in ("evidence", "blockers"):
         if field in gate:
             _string_list(gate[field], f"{path}.{field}", issues)
     if "approval" in gate:
         _nullable_string(gate["approval"], f"{path}.approval", issues)
+    if "requirements_fingerprint" in gate:
+        _non_empty_string(
+            gate["requirements_fingerprint"],
+            f"{path}.requirements_fingerprint",
+            issues,
+        )
+    review_epoch = gate.get("review_epoch", 0)
+    if "review_epoch" in gate and (
+        type(review_epoch) is not int or review_epoch < 0
+    ):
+        issues.append(
+            ValidationIssue(f"{path}.review_epoch", "must be a non-negative integer")
+        )
+        review_epoch = 0
+    if "stale" in gate and type(gate["stale"]) is not bool:
+        issues.append(ValidationIssue(f"{path}.stale", "must be a boolean"))
+    if "stale_reason" in gate:
+        _nullable_string(gate["stale_reason"], f"{path}.stale_reason", issues)
+    if gate.get("stale") is True and not gate.get("stale_reason"):
+        issues.append(
+            ValidationIssue(
+                f"{path}.stale_reason", "is required when the gate is stale"
+            )
+        )
 
     if status in {"ready", "approved"}:
-        incomplete = [
-            identifier
-            for identifier in required_deliverables
-            if deliverable_status.get(identifier) != "accepted"
-        ]
-        if incomplete:
+        readiness = gate_requirement_readiness(state, gate)
+        if readiness["refinement_due"]:
             issues.append(
                 ValidationIssue(
                     f"{path}.required_deliverables",
-                    f"gate prerequisites are not accepted: {', '.join(incomplete)}",
+                    "REFINEMENT_REQUIRED: unresolved refinement requirements: "
+                    + ", ".join(readiness["refinement_due"]),
+                )
+            )
+        if readiness["incomplete"]:
+            issues.append(
+                ValidationIssue(
+                    f"{path}.required_deliverables",
+                    "gate prerequisites are not accepted: "
+                    + ", ".join(readiness["incomplete"]),
                 )
             )
     if status == "approved":
-        if _latest_authorized_human_decision(reviews) != "approve":
+        if gate.get("stale") is True:
+            issues.append(
+                ValidationIssue(
+                    f"{path}.stale", "an approved gate must not be stale"
+                )
+            )
+        current_reviews = [
+            review
+            for review in reviews
+            if review.get("gate_epoch", 0) == review_epoch
+        ]
+        if _latest_authorized_human_decision(current_reviews) != "approve":
             issues.append(
                 ValidationIssue(
                     f"{path}.reviews",
-                    "approved TR/DCP gate requires an authorized human approval",
+                    "approved TR/DCP gate requires an authorized human approval "
+                    f"in review epoch {review_epoch}",
                 )
             )

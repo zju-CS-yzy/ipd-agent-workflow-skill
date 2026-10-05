@@ -65,6 +65,7 @@
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
         },
+        "role": { "enum": ["owner", "shared_evidence"] },
         "critical": { "type": "boolean", "default": true },
         "review_required": { "type": "boolean" },
         "description": { "type": "string" },
@@ -92,6 +93,27 @@
           },
           "else": {
             "properties": { "deliverables": { "maxItems": 1 } }
+          }
+        },
+        {
+          "if": {
+            "required": ["role"],
+            "properties": { "role": { "const": "owner" } }
+          },
+          "then": {
+            "required": ["deliverable"],
+            "not": { "required": ["deliverables"] }
+          }
+        },
+        {
+          "if": {
+            "required": ["role"],
+            "properties": { "role": { "const": "shared_evidence" } }
+          },
+          "then": {
+            "required": ["deliverables", "critical"],
+            "not": { "required": ["deliverable"] },
+            "properties": { "critical": { "const": false } }
           }
         }
       ]

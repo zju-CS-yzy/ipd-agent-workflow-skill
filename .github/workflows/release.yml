@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - "v0.3.2-beta"
+      - "v0.4.0-beta"
 
 permissions:
   contents: write
@@ -23,7 +23,10 @@ jobs:
           python -B scripts/release_check.py .
           python -m pip install . build
           python -B scripts/verify_v031_upgrade.py
+          python -B scripts/verify_v032_upgrade.py
           python -B -m unittest discover -s tests -v
+          IPD_TEST_LOCALE=en python -B -m unittest \
+            tests.test_full_lifecycle_simulation -v
       - name: Build the single bilingual distribution
         shell: bash
         run: |
@@ -31,24 +34,57 @@ jobs:
           git archive \
             --format=zip \
             --prefix=ipd-agent-workflow-skill/ \
-            --output=dist/ipd-agent-workflow-skill-v0.3.2-beta.zip \
+            --output=dist/ipd-agent-workflow-skill-v0.4.0-beta.zip \
             HEAD
           cd dist
           sha256sum \
-            ipd-agent-workflow-skill-v0.3.2-beta.zip \
-            ipd_agent_workflow_skill-0.3.2b1-py3-none-any.whl \
-            ipd_agent_workflow_skill-0.3.2b1.tar.gz \
+            ipd-agent-workflow-skill-v0.4.0-beta.zip \
+            ipd_agent_workflow_skill-0.4.0b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.4.0b1.tar.gz \
             > SHA256SUMS.txt
       - name: Inspect and smoke-test release artifacts
         shell: bash
         run: |
           wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.3.2-beta.zip"
+          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.4.0-beta.zip"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
           python -m zipfile -l "$wheel" | grep 'schemas/artifact_bindings.schema.json'
+          python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
+          python -m zipfile -l "$wheel" | grep 'schemas/process_extensions.schema.json'
+          python -m zipfile -l "$wheel" | grep 'schemas/refinement_plan.schema.json'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/sourced_component_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'templates/project/.ipd/process_extensions.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
           tar -tzf "$sdist" | grep '/schemas/artifact_bindings.schema.json$'
+          tar -tzf "$sdist" | grep '/schemas/capability_policy.schema.json$'
+          tar -tzf "$sdist" | grep '/schemas/process_extensions.schema.json$'
+          tar -tzf "$sdist" | grep '/schemas/refinement_plan.schema.json$'
+          tar -tzf "$sdist" | grep '/scripts/simulate_progressive_refinement.py$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/sourced_component_integration.yaml$'
+          tar -tzf "$sdist" | grep '/templates/project/.ipd/process_extensions.yaml$'
+          mkdir -p "$RUNNER_TEMP/wheel-progressive"
+          cp "$GITHUB_WORKSPACE/scripts/simulate_progressive_refinement.py" \
+            "$RUNNER_TEMP/wheel-progressive/simulate_progressive_refinement.py"
+          cd "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/sdist-source"
+          tar -xzf "$sdist" -C "$RUNNER_TEMP/sdist-source"
+          sdist_root="$(find "$RUNNER_TEMP/sdist-source" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          mkdir -p "$RUNNER_TEMP/sdist-progressive"
+          cp "$sdist_root/scripts/simulate_progressive_refinement.py" \
+            "$RUNNER_TEMP/sdist-progressive/simulate_progressive_refinement.py"
+          python -m venv "$RUNNER_TEMP/sdist-validation-venv"
+          "$RUNNER_TEMP/sdist-validation-venv/bin/pip" install "$sdist"
+          cd "$RUNNER_TEMP/sdist-progressive"
+          "$RUNNER_TEMP/sdist-validation-venv/bin/python" -B \
+            simulate_progressive_refinement.py --json
+          cd "$sdist_root"
+          "$RUNNER_TEMP/sdist-validation-venv/bin/python" -B -m unittest tests.test_progressive_refinement_simulation -v
+          python -m venv "$RUNNER_TEMP/wheel-refinement-venv"
+          "$RUNNER_TEMP/wheel-refinement-venv/bin/pip" install "$wheel"
+          cd "$RUNNER_TEMP/wheel-progressive"
+          "$RUNNER_TEMP/wheel-refinement-venv/bin/python" -B \
+            simulate_progressive_refinement.py --json
           cd "$RUNNER_TEMP"
           python -m zipfile -e "$skill_zip" "$RUNNER_TEMP/skill-source"
           skill_root="$RUNNER_TEMP/skill-source/ipd-agent-workflow-skill"
@@ -56,6 +92,11 @@ jobs:
           test -f "$skill_root/agents/openai.yaml"
           test -f "$skill_root/ipdctl/messages.yaml"
           test -f "$skill_root/schemas/artifact_bindings.schema.json"
+          test -f "$skill_root/schemas/capability_policy.schema.json"
+          test -f "$skill_root/schemas/process_extensions.schema.json"
+          test -f "$skill_root/schemas/refinement_plan.schema.json"
+          test -f "$skill_root/policies/capabilities/sourced_component_integration.yaml"
+          test -f "$skill_root/templates/project/.ipd/process_extensions.yaml"
           artifact_index=0
           for artifact in "$wheel" "$sdist" "$skill_root"; do
             artifact_index=$((artifact_index + 1))
@@ -65,6 +106,7 @@ jobs:
             for locale in en zh-CN; do
               project="$(mktemp -d)/project-$locale"
               "$environment/bin/ipdctl" init "$project" --name "release-$locale" --locale "$locale"
+              "$environment/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=["sourced_component_integration"]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml"
               "$environment/bin/ipdctl" tailor "$project"
               "$environment/bin/ipdctl" context "$project"
               "$environment/bin/ipdctl" validate "$project"
@@ -76,12 +118,12 @@ jobs:
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@5113cdc90fd4d541c801c55356214017bf5ae34b # v3
         with:
-          name: "IPD Agent Workflow Framework v0.3.2-beta"
-          body_path: .github/release-notes/v0.3.2-beta.md
+          name: "IPD Agent Workflow Framework v0.4.0-beta"
+          body_path: .github/release-notes/v0.4.0-beta.md
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            dist/ipd-agent-workflow-skill-v0.3.2-beta.zip
-            dist/ipd_agent_workflow_skill-0.3.2b1-py3-none-any.whl
-            dist/ipd_agent_workflow_skill-0.3.2b1.tar.gz
+            dist/ipd-agent-workflow-skill-v0.4.0-beta.zip
+            dist/ipd_agent_workflow_skill-0.4.0b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.4.0b1.tar.gz
             dist/SHA256SUMS.txt

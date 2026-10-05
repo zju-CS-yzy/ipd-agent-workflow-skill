@@ -5,10 +5,14 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from copy import deepcopy
 from pathlib import Path
 
 from ipdctl.cli import main
+from ipdctl.project import sync_state_with_process
+from ipdctl.refinement import merge_refinement_plan, process_fingerprint
 from ipdctl.state import load_state, write_state
+from ipdctl.tailoring import tailor_profile
 
 
 class CliLifecycleTests(unittest.TestCase):
@@ -34,6 +38,7 @@ class CliLifecycleTests(unittest.TestCase):
             self.assertTrue((root / ".ipd" / "task_profile.yaml").is_file())
             profile = load_state(root / ".ipd" / "task_profile.yaml")
             self.assertEqual(profile["presentation"]["locale"], "en")
+            self.assertEqual(profile["capability_patterns"], [])
 
             self.assertEqual(self.invoke(["tailor", str(root)])[0], 0)
             bindings = load_state(root / ".ipd" / "artifact_bindings.yaml")
@@ -330,6 +335,203 @@ class CliLifecycleTests(unittest.TestCase):
             state = load_state(root / ".ipd" / "project_state.yaml")
             accepted = next(item for item in state["deliverables"] if item["id"] == deliverable)
             self.assertEqual(accepted["status"], "accepted")
+
+    def test_tailor_cannot_apply_hand_written_refinement_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            self.assertEqual(self.invoke(["init", str(root), "--name", "demo"])[0], 0)
+            extension_path = root / ".ipd" / "process_extensions.yaml"
+            extension = load_state(extension_path)
+            extension["refinement_requirements"].append(
+                {
+                    "root": "concept.problem_definition",
+                    "definition_state": "concrete",
+                    "refinement_required": True,
+                    "trigger": {
+                        "all_of": [
+                            {
+                                "subject": "concept.problem_definition",
+                                "condition": "accepted",
+                            }
+                        ]
+                    },
+                    "completion_policy": "all_children_accepted",
+                }
+            )
+            write_state(extension_path, extension)
+            self.assertEqual(self.invoke(["tailor", str(root)])[0], 0)
+            process_path = root / ".ipd" / "tailored_process.yaml"
+            process = load_state(process_path)
+            plan = {
+                "schema_version": "1.0",
+                "id": "refinement.problem.v1",
+                "root": "concept.problem_definition",
+                "mode": "expand",
+                "base_process_fingerprint": process_fingerprint(process),
+                "reason": "Unauthorized direct extension edit used for a negative test.",
+                "basis": ["evidence/concept.problem_definition/approval.md"],
+                "activities": [
+                    {
+                        "id": "concept.define_problem_subsystem",
+                        "title": "Define problem subsystem",
+                        "phase": "concept",
+                        "sequence": 2,
+                    }
+                ],
+                "deliverables": [
+                    {
+                        "id": "concept.problem_subsystem",
+                        "title": "Problem subsystem definition",
+                        "phase": "concept",
+                        "activity_id": "concept.define_problem_subsystem",
+                        "review_required": True,
+                        "depends_on": [],
+                        "refines": "concept.problem_definition",
+                    }
+                ],
+                "dependencies": [],
+            }
+            unauthorized, applied = merge_refinement_plan(
+                extension, plan, process=process
+            )
+            self.assertTrue(applied)
+            write_state(extension_path, unauthorized)
+
+            code, output, error = self.invoke(
+                ["tailor", str(root), "--preview", "--json"]
+            )
+            self.assertEqual(code, 0, output + error)
+            self.assertTrue(
+                any(
+                    item.get("collection") == "refinements"
+                    for item in json.loads(output)["added"]
+                )
+            )
+            protected = {
+                path.name: path.read_bytes()
+                for path in (
+                    process_path,
+                    root / ".ipd" / "project_state.yaml",
+                    root / ".ipd" / "agent_runtime.yaml",
+                )
+            }
+            code, output, error = self.invoke(["tailor", str(root)])
+            self.assertEqual(code, 1, output + error)
+            self.assertIn("ipdctl refine --apply", error)
+            self.assertEqual(
+                protected,
+                {
+                    path.name: path.read_bytes()
+                    for path in (
+                        process_path,
+                        root / ".ipd" / "project_state.yaml",
+                        root / ".ipd" / "agent_runtime.yaml",
+                    )
+                },
+            )
+
+            # Materialize the authorized shape, then prove changing a child
+            # while keeping the recorded plan unchanged cannot use tailor as a
+            # lineage bypass.
+            authorized_process = tailor_profile(
+                load_state(root / ".ipd" / "task_profile.yaml"),
+                process_extension=unauthorized,
+            )
+            write_state(process_path, authorized_process)
+            write_state(
+                root / ".ipd" / "project_state.yaml",
+                sync_state_with_process(
+                    load_state(root / ".ipd" / "project_state.yaml"),
+                    authorized_process,
+                ),
+            )
+            drifted = deepcopy(unauthorized)
+            next(
+                item
+                for item in drifted["deliverables"]
+                if item["id"] == "concept.problem_subsystem"
+            )["title"] = "Drifted problem subsystem definition"
+            write_state(extension_path, drifted)
+            protected = {
+                path.name: path.read_bytes()
+                for path in (
+                    process_path,
+                    root / ".ipd" / "project_state.yaml",
+                    root / ".ipd" / "agent_runtime.yaml",
+                )
+            }
+            code, output, error = self.invoke(["tailor", str(root)])
+            self.assertEqual(code, 1, output + error)
+            self.assertIn("ipdctl refine --apply", error)
+            self.assertEqual(
+                protected,
+                {
+                    path.name: path.read_bytes()
+                    for path in (
+                        process_path,
+                        root / ".ipd" / "project_state.yaml",
+                        root / ".ipd" / "agent_runtime.yaml",
+                    )
+                },
+            )
+
+    def test_unapplied_requirement_can_be_corrected_but_not_preexpanded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            self.assertEqual(self.invoke(["init", str(root), "--name", "demo"])[0], 0)
+            extension_path = root / ".ipd" / "process_extensions.yaml"
+            extension = load_state(extension_path)
+            extension["refinement_requirements"].append(
+                {
+                    "root": "software.architecture",
+                    "definition_state": "placeholder",
+                    "refinement_required": True,
+                    "trigger": {
+                        "all_of": [
+                            {"subject": "plan.integrated_plan", "condition": "accepted"}
+                        ]
+                    },
+                    "completion_policy": "all_children_accepted",
+                }
+            )
+            write_state(extension_path, extension)
+            self.assertEqual(self.invoke(["tailor", str(root)])[0], 0)
+
+            corrected = load_state(extension_path)
+            corrected["refinement_requirements"][0]["trigger"] = {
+                "all_of": [{"subject": "gate.dcp.concept", "condition": "approved"}]
+            }
+            write_state(extension_path, corrected)
+            code, output, error = self.invoke(["tailor", str(root)])
+            self.assertEqual(code, 0, output + error)
+
+            preexpanded = load_state(extension_path)
+            preexpanded["activities"].append(
+                {
+                    "id": "plan.hidden_module_design",
+                    "title": "Define hidden module",
+                    "phase": "plan",
+                    "sequence": 99,
+                }
+            )
+            preexpanded["deliverables"].append(
+                {
+                    "id": "software.hidden_module",
+                    "title": "Hidden module",
+                    "phase": "plan",
+                    "activity_id": "plan.hidden_module_design",
+                    "review_required": True,
+                    "depends_on": ["plan.integrated_plan"],
+                    "refines": "software.architecture",
+                }
+            )
+            write_state(extension_path, preexpanded)
+            process_path = root / ".ipd" / "tailored_process.yaml"
+            protected = process_path.read_bytes()
+            code, output, error = self.invoke(["tailor", str(root)])
+            self.assertEqual(code, 1, output + error)
+            self.assertIn("ipdctl refine --apply", error)
+            self.assertEqual(process_path.read_bytes(), protected)
 
 
 if __name__ == "__main__":

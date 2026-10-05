@@ -131,7 +131,13 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
                     path.write_text(
                         json.dumps(
                             {
-                                "relation_types": ["depends_on", "supports", "verifies", "supersedes"],
+                                "relation_types": [
+                                    "depends_on",
+                                    "supports",
+                                    "verifies",
+                                    "supersedes",
+                                    "refines",
+                                ],
                                 "nodes": [
                                     {"id": "D-0", "type": "Deliverable", "phase": "concept", "status": "planned"},
                                     {"id": "D-1", "type": "Deliverable", "phase": "plan", "status": "planned"},
@@ -175,7 +181,7 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
             self.assertEqual(inspected["language_violations"], [])
             self.assertEqual(
                 inspected["declared_relations"],
-                ["depends_on", "supersedes", "supports", "verifies"],
+                ["depends_on", "refines", "supersedes", "supports", "verifies"],
             )
             self.assertTrue(all(inspected["interactions"].values()))
             self.assertTrue(inspected["locale_markers_present"])
@@ -356,7 +362,13 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
                 "review_history": True,
             },
             "node_types": ["Phase", "TR", "DCP", "Gate", "Activity", "Deliverable"],
-            "declared_relations": ["depends_on", "supports", "verifies", "supersedes"],
+            "declared_relations": [
+                "depends_on",
+                "supports",
+                "verifies",
+                "supersedes",
+                "refines",
+            ],
             "relations": ["depends_on"],
             "dependency_contract": {
                 "rendered_relations": ["depends_on"],

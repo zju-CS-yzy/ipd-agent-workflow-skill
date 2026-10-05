@@ -8,8 +8,8 @@ Read this reference when creating, changing, validating, or recovering `.ipd/pro
 - `revision`: non-negative integer incremented once per runtime transition.
 - `project`: name, task types, product phase, current workflow step, current TR/DCP/Gate, and optional repository metadata.
 - `claims`: assertions with `open`, `supported`, or `rejected` status and evidence references.
-- `deliverables`: work products, eight-state lifecycle, dependencies, evidence, and review records.
-- `gates`: TR/DCP readiness, required deliverables, and review records.
+- `deliverables`: work products, eight-state lifecycle, dependencies, evidence, review records, and optional compiled `provenance`, `maturity`, replacement, `definition_state`, trigger, and `refines` metadata.
+- `gates`: TR/DCP readiness, required deliverables, review records, concrete-requirement fingerprint, review epoch, and stale state.
 - `traceability`: typed links among claims, deliverables, and gates.
 
 Entity IDs are globally unique lowercase identifiers. They may contain digits, `.`, `_`, and `-`. Unknown fields are rejected so misspellings cannot silently alter governance.
@@ -25,6 +25,22 @@ non-empty Deliverable, Actor, timezone-aware timestamp, non-negative
 `state_revision`, and an exact `binding_window`. Legacy events remain readable
 history but cannot prove ownership for new path changes. Authorized migration
 baselines are append-only `artifact_baseline_adopted` events.
+An applied process migration appends one `process_migration` event with its
+authorized human Actor, reason, state revision, old/new process schema
+versions, and explicit mappings. Re-running an already-applied migration does
+not duplicate this event.
+An applied progressive refinement appends one strict
+`process_refinement_applied` event containing its plan ID/digest, base and
+result process fingerprints, authorized human Actor and reason, root, child
+IDs, state revision, and invalidated Gates. An exact replay is a no-op; an ID
+reuse with a changed digest or base is a conflict.
+
+The tailored process is a separate contract. New compilation emits process
+schema `2.0`, where Phase, Activity, Deliverable, TR, DCP, and Gate nodes carry
+`provenance` and `maturity`, TR/DCP contain independent criteria, and the
+top-level `migrations` list records explicit replacement/split intent. The
+runtime can continue to read schema `1.0` when its semantic projection matches
+a profile without capabilities and an empty project extension.
 
 ## Safe persistence
 
@@ -36,7 +52,8 @@ The runtime writes each file through a same-directory temporary file and atomica
 
 ```bash
 ipdctl init [TARGET] [--name NAME] [--task-type TYPE ...] [--locale en|zh-CN] [--force]
-ipdctl tailor [TARGET] [--profile PATH] [--output PATH]
+ipdctl tailor [TARGET] [--profile PATH] [--output PATH] [--preview] [--json] [--apply-migrations] [--actor HUMAN --actor-type human --authorized --reason TEXT]
+ipdctl refine [TARGET] --plan PATH [--preview | --apply] [--json] [--actor HUMAN --actor-type human --authorized --reason TEXT]
 ipdctl context [TARGET] [--json]
 ipdctl status [TARGET] [--json]
 ipdctl adopt-baseline [TARGET] [--preview] [--json] [--actor HUMAN --actor-type human --authorized --reason TEXT]
@@ -55,11 +72,22 @@ ipdctl validate [TARGET] [--policy PATH]
 
 `status` is an alias for `context`. `init` refuses to replace existing state
 unless `--force` is explicit. `tailor --output`, when supplied, must resolve to
-the canonical `.ipd/tailored_process.yaml`. State-changing commands validate
+the canonical `.ipd/tailored_process.yaml`. `tailor --preview` is read-only;
+its JSON form uses the fixed keys `added`, `removed`, `changed`, `migrations`,
+and `ambiguous`. State-changing commands validate
 before writing. `context` refuses to summarize invalid state. `verify` exits
 non-zero for state, process, runtime, evidence, Dashboard, or reconciliation
 errors. `repository` and repository inspection within reconciliation are
 read-only and degrade to `kind: none` when neither Git nor SVN is available.
+
+`refine` defaults to preview unless `--apply` is explicit. Preview is
+zero-write and returns the plan/base/result fingerprints, semantic diff, Gate
+impact, Binding impact, blockers, and applicability. Application requires a
+`due` trigger, current-Phase root, no active Claim, an exact base fingerprint,
+and an authorized human Actor and reason. It preserves the parent history,
+adds children at `planned` with empty evidence and reviews, and never infers an
+Owner binding. A child requiring an artifact Owner is not claimable until a
+user-authored Owner rule exists.
 
 The reviewable iteration is strictly serialized:
 
@@ -85,9 +113,10 @@ Phase/TR/DCP/Gate pointer bundle cannot bypass governance. Advancement requires
 all current-Phase canonical Gates to be approved,
 `last_verification.status` to be `passed`, the verified revision to equal the
 current state revision, and a freshly calculated verification-input fingerprint
-to match. The fingerprint covers the profile, tailored process, project state,
-artifact bindings, active claim, Claim history, local evidence content,
-Phase advancement history, Dashboard manifest and outputs, repository facts,
+to match. The fingerprint covers the profile, canonical project process
+extension, tailored process, project state, artifact bindings, active claim,
+Claim history, local evidence content,
+Phase advancement and refinement history, Dashboard manifest and outputs, repository facts,
 and engineering changed
 paths. Advancement leaves
 the workflow at `refresh`; the new Phase must be refreshed and verified before
@@ -104,6 +133,46 @@ it is outside the current iteration's valid Claim binding window. A reviewed
 dirty project that predates this protocol uses one explicitly authorized
 `adopt-baseline` migration decision instead of a fabricated Claim. Successful
 verification stores the exact artifact baseline for the next iteration.
+
+Artifact Binding roles are distinct. A missing `role` preserves legacy Owner
+semantics; explicit `role: owner` also uses one `deliverable` and may authorize
+that Deliverable's Claim. `role: shared_evidence` uses a `deliverables` list,
+must set `critical: false`, and only records shared supporting evidence. It
+cannot authorize a Claim or satisfy the required Owner of a critical path.
+
+Tailoring itself compiles `core -> task_type -> capability -> project`.
+`task_profile.capability_patterns` selects reusable capability policies; the
+canonical `.ipd/process_extensions.yaml` adds project Activities,
+review-required Deliverables, typed relations, TR/DCP criteria, and process
+migration mappings plus declared/applied refinements. Layers are additive and cannot override duplicate entity
+or criterion IDs. Dependencies must be acyclic and phase-monotonic.
+
+Any actual re-tailor is rejected while a Claim is active. Removing a historical
+non-superseded Deliverable requires an explicit `replace`/`split` mapping and
+`--apply-migrations`; the first effective migration also requires an
+authorized human Actor and reason. The old Deliverable remains as a state-only
+`superseded` node with preserved evidence/reviews and `replacement` plus full
+`replacements` metadata. New targets remain `planned` and receive no copied
+evidence, reviews, or approval. Missing or ambiguous mappings fail closed.
+The same fail-closed boundary applies to in-place semantic changes of any
+Deliverable with governed lifecycle history: a new ID plus explicit migration
+is required. Ordinary re-tailoring also rejects changes to a Phase with an
+approved Gate or an already closed Phase, including checkpoint criteria, while
+leaving preview available and all authority files unchanged. The only upgrade
+exception is first-time deterministic schema `1.0` enrichment with core
+provenance, maturity, and canonical readiness criteria.
+
+A refinement requirement declares a Deliverable root, its initial concrete or
+placeholder definition state, an `all_of` trigger over accepted Deliverables
+or approved Gates, and `all_children_accepted` completion. A reviewed plan uses
+`mode: expand` and the current process fingerprint. Applying it changes the
+root to an abstract aggregate and adds same-Phase child Activities and
+Deliverables. `refines` is acyclic structural ancestry and does not affect
+dependency order. Gate readiness replaces abstract roots with their concrete
+leaf closure. A changed closure invalidates approval and advances the Gate's
+`review_epoch` without deleting prior evidence or reviews.
+Every concrete refined child requires a user-authored artifact Owner before
+Claim; placeholder and abstract nodes are structural and do not require one.
 
 When `verify` passes in the final `lifecycle` Phase and every Gate in that Phase
 is approved, `.ipd/agent_runtime.yaml` receives one `lifecycle_complete` event.

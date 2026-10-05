@@ -30,7 +30,7 @@ STATUSES = (
     "superseded",
 )
 NODE_TYPES = {"Phase", "TR", "DCP", "Gate", "Activity", "Deliverable"}
-RELATIONS = {"depends_on", "supports", "verifies", "supersedes"}
+RELATIONS = {"depends_on", "supports", "verifies", "supersedes", "refines"}
 SVG_NAMESPACE = {"svg": "http://www.w3.org/2000/svg"}
 HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
@@ -143,6 +143,7 @@ def process_fixture() -> dict:
         "dependencies": [
             {"source": "in_progress", "target": "accepted", "relation": "depends_on"},
             {"source": "planned", "target": "accepted", "relation": "supports"},
+            {"source": "planned", "target": "accepted", "relation": "refines"},
         ],
         "review_requirements": [
             {

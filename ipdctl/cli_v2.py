@@ -26,6 +26,7 @@ from .eligibility import (
     binding_eligibility,
     claim_protocol_readiness,
     deliverable_binding_status,
+    deliverable_refinement_status,
 )
 from .i18n import (
     DEFAULT_LOCALE,
@@ -44,9 +45,12 @@ from .project import (
     ProjectError,
     adopt_artifact_baseline,
     artifact_baseline_preview,
+    closed_phase_process_changes,
     context_snapshot,
+    governed_deliverable_rewrites,
     initialize_project,
     load_project,
+    project_consistency_issues,
     project_paths,
     refresh_project,
     sync_state_with_process,
@@ -58,8 +62,10 @@ from .runtime import (
     claim as claim_runtime,
     close_claim,
     expire_claims,
+    format_time,
     load_runtime,
     record_event,
+    record_process_refinement,
     save_runtime,
     utc_now,
 )
@@ -67,7 +73,7 @@ from .state import StateError, load_state, resolve_state_path, revised_copy, wri
 from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
 
-VERSION = "0.3.2-beta"
+VERSION = "0.4.0-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -151,7 +157,77 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
     _add_target(tailor, translator)
     tailor.add_argument("--profile", help=translator.text("cli.argument.profile.help"))
     tailor.add_argument("--output", help=translator.text("cli.argument.output.help"))
+    tailor.add_argument(
+        "--preview",
+        action="store_true",
+        help=translator.text("cli.argument.preview.help"),
+    )
+    tailor.add_argument(
+        "--json", action="store_true", help=translator.text("cli.argument.json.help")
+    )
+    tailor.add_argument(
+        "--apply-migrations",
+        action="store_true",
+        help=translator.text("cli.argument.apply_migrations.help"),
+    )
+    tailor.add_argument(
+        "--actor", help=translator.text("cli.argument.migration_actor.help")
+    )
+    tailor.add_argument(
+        "--actor-type",
+        choices=["human"],
+        help=translator.text("cli.argument.migration_actor_type.help"),
+    )
+    tailor.add_argument(
+        "--authorized",
+        action="store_true",
+        help=translator.text("cli.argument.migration_authorized.help"),
+    )
+    tailor.add_argument(
+        "--reason", help=translator.text("cli.argument.migration_reason.help")
+    )
     tailor.set_defaults(handler=_cmd_tailor)
+
+    refine = commands.add_parser(
+        "refine",
+        help=translator.text("cli.command.refine.help"),
+        description=translator.text("cli.command.refine.help"),
+        translator=translator,
+    )
+    _add_target(refine, translator)
+    refine.add_argument(
+        "--plan",
+        required=True,
+        help=translator.text("cli.argument.plan.help"),
+    )
+    mode = refine.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--preview",
+        action="store_true",
+        help=translator.text("cli.argument.refine_preview.help"),
+    )
+    mode.add_argument(
+        "--apply",
+        action="store_true",
+        dest="apply_refinement",
+        help=translator.text("cli.argument.apply_refinement.help"),
+    )
+    refine.add_argument(
+        "--json", action="store_true", help=translator.text("cli.argument.json.help")
+    )
+    refine.add_argument("--actor", help=translator.text("cli.argument.refine_actor.help"))
+    refine.add_argument(
+        "--actor-type",
+        choices=["human"],
+        help=translator.text("cli.argument.refine_actor_type.help"),
+    )
+    refine.add_argument(
+        "--authorized",
+        action="store_true",
+        help=translator.text("cli.argument.refine_authorized.help"),
+    )
+    refine.add_argument("--reason", help=translator.text("cli.argument.refine_reason.help"))
+    refine.set_defaults(handler=_cmd_refine)
 
     context = commands.add_parser(
         "context",
@@ -359,6 +435,7 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
 _COMMAND_NAMES = {
     "init",
     "tailor",
+    "refine",
     "context",
     "adopt-baseline",
     "claim",
@@ -378,6 +455,7 @@ _PROJECT_ROOT_COMMANDS = {"claim", "close", "review", "approve", "reject"}
 _TRANSACTIONAL_COMMANDS = {
     "init",
     "tailor",
+    "refine",
     "context",
     "adopt-baseline",
     "claim",
@@ -397,6 +475,7 @@ _OPTIONS_WITH_VALUES = {
     "--locale",
     "--profile",
     "--output",
+    "--plan",
     "--project-root",
     "--actor",
     "--lease-minutes",
@@ -503,17 +582,24 @@ def _transaction_options(
         return None
     if args.command == "adopt-baseline" and args.preview:
         return None
+    if args.command == "tailor" and args.preview:
+        return None
+    if args.command == "refine" and not args.apply_refinement:
+        return None
     paths = project_paths(root)
     extras: tuple[Path, ...] = ()
     include_dashboard = False
     if args.command == "init":
         extras = (
             paths["profile"],
+            paths["extensions"],
             paths["bindings"],
             paths["ipd"] / "project_state.yaml",
         )
     elif args.command == "tailor":
-        extras = (paths["process"], paths["bindings"])
+        extras = (paths["extensions"], paths["process"], paths["bindings"])
+    elif args.command == "refine":
+        extras = (paths["extensions"], paths["process"], paths["bindings"])
     elif args.command == "refresh":
         include_dashboard = True
     elif args.command == "verify":
@@ -555,30 +641,587 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
         raise ProjectError(
             translator.text("error.tailor_output_canonical", path=paths["process"])
         )
+    from .process_extensions import load_process_extension
     from .reconcile import load_artifact_bindings, sync_evidence_bindings
-    from .tailoring import load_profile, tailor_profile
+    from .tailoring import load_profile, preview_process_diff, tailor_profile
 
     # Compile and validate the entire bundle before replacing any authority
     # file.  A rejected re-tailor therefore leaves both process and state
     # untouched instead of publishing half of the new contract.
-    process = tailor_profile(load_profile(profile))
-    state = load_state(paths["state"])
-    state = sync_state_with_process(state, process)
+    extension_existed = paths["extensions"].is_file()
+    extension = load_process_extension(
+        paths["extensions"] if extension_existed else None
+    )
+    process = tailor_profile(load_profile(profile), extension)
+    current_process = (
+        load_state(paths["process"]) if paths["process"].is_file() else None
+    )
+    previous_state = load_state(paths["state"])
+    diff = preview_process_diff(current_process, process)
+    if args.preview:
+        if args.json:
+            print(_json(diff))
+        else:
+            print(translator.text("cli.tailor.preview_title"))
+            for field in ("added", "removed", "changed", "migrations", "ambiguous"):
+                print(
+                    translator.text(
+                        "cli.tailor.preview_count",
+                        field=field,
+                        count=len(diff.get(field, [])),
+                    )
+                )
+        return 0
+
+    closed_phase_changes = (
+        closed_phase_process_changes(
+            diff,
+            previous_state,
+            current_process,
+            process,
+        )
+        if current_process is not None
+        else []
+    )
+    if closed_phase_changes:
+        raise ProjectError(
+            translator.text(
+                "error.tailor_closed_phase_change",
+                issue="changes target closed phases: "
+                + ", ".join(closed_phase_changes),
+            )
+        )
+
+    refinement_changes = [
+        item
+        for field in ("added", "removed", "changed")
+        for item in diff.get(field, [])
+        if isinstance(item, dict) and item.get("collection") == "refinements"
+    ]
+    if refinement_changes:
+        raise ProjectError(
+            translator.text("error.tailor_refinement_requires_command")
+        )
+    if current_process is not None:
+        from .refinement import (
+            refinement_authority_projection,
+            refinement_children,
+        )
+
+        current_declared_roots = set(
+            refinement_authority_projection(current_process)["roots"]
+        )
+        candidate_declared_roots = set(
+            refinement_authority_projection(process)["roots"]
+        )
+        applied_roots = {
+            item.get("root")
+            for item in current_process.get("refinements", [])
+            if isinstance(item, dict) and isinstance(item.get("root"), str)
+        }
+        due_roots = {
+            root
+            for root in current_declared_roots
+            if deliverable_refinement_status(previous_state, root).get(
+                "refinement_status"
+            )
+            == "due"
+        }
+        protected_roots = applied_roots | due_roots
+        mutable_roots = (
+            current_declared_roots | candidate_declared_roots
+        ) - protected_roots
+        candidate_applied_roots = {
+            item.get("root")
+            for item in process.get("refinements", [])
+            if isinstance(item, dict) and isinstance(item.get("root"), str)
+        }
+        if any(
+            refinement_children(current_process, root)
+            or refinement_children(process, root)
+            or root in candidate_applied_roots
+            for root in mutable_roots
+        ):
+            raise ProjectError(
+                translator.text("error.tailor_refinement_requires_command")
+            )
+        current_authority = refinement_authority_projection(
+            current_process,
+            protected_roots=protected_roots,
+            mutable_requirement_roots=mutable_roots,
+        )
+        candidate_authority = refinement_authority_projection(
+            process,
+            protected_roots=protected_roots,
+            mutable_requirement_roots=mutable_roots,
+        )
+        if current_authority != candidate_authority:
+            raise ProjectError(
+                translator.text("error.tailor_refinement_requires_command")
+            )
+
+    governed_rewrites = governed_deliverable_rewrites(
+        diff,
+        previous_state,
+        current_process or {},
+        process,
+    )
+    if governed_rewrites:
+        detail = ", ".join(
+            f"{identifier} ({'/'.join(fields)})"
+            for identifier, fields in governed_rewrites.items()
+        )
+        raise ProjectError(
+            translator.text(
+                "error.tailor_governed_deliverable_rewrite",
+                deliverables=detail,
+            )
+        )
+
+    runtime = load_runtime(root)
+    active_claims = runtime.get("active_claims", {})
+    if active_claims:
+        raise ProjectError(
+            translator.text(
+                "error.tailor_active_claim",
+                claims=", ".join(sorted(active_claims)),
+            )
+        )
+    state = sync_state_with_process(
+        previous_state,
+        process,
+        apply_migrations=args.apply_migrations,
+    )
+    candidate_history_issues = phase_history_issues(state, process, runtime)
+    if candidate_history_issues:
+        raise ProjectError(
+            translator.text(
+                "error.tailor_closed_phase_change",
+                issue=candidate_history_issues[0],
+            )
+        )
     bindings = sync_evidence_bindings(
         load_artifact_bindings(paths["bindings"]), process
     )
+    process_ids = {
+        item.get("id")
+        for item in process.get("deliverables", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    previous_ids = {
+        item.get("id")
+        for item in previous_state.get("deliverables", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    previous_statuses = {
+        item.get("id"): item.get("status")
+        for item in previous_state.get("deliverables", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    migrated_state_ids = {
+        item.get("id")
+        for item in state.get("deliverables", [])
+        if isinstance(item, dict) and item.get("status") == "superseded"
+    }
+    applied_migrations = [
+        migration
+        for migration in process.get("migrations", [])
+        if isinstance(migration, dict)
+        and migration.get("from") in previous_ids - process_ids
+        and migration.get("from") in migrated_state_ids
+        and previous_statuses.get(migration.get("from")) != "superseded"
+    ]
+    if applied_migrations:
+        if not isinstance(args.actor, str) or not args.actor.strip():
+            raise ProjectError(
+                translator.text("error.tailor_migration_actor_required")
+            )
+        if args.actor_type != "human":
+            raise ProjectError(
+                translator.text("error.tailor_migration_actor_type")
+            )
+        if args.authorized is not True:
+            raise ProjectError(
+                translator.text("error.tailor_migration_authorized")
+            )
+        if not isinstance(args.reason, str) or not args.reason.strip():
+            raise ProjectError(
+                translator.text("error.tailor_migration_reason_required")
+            )
+        runtime = record_event(
+            runtime,
+            "process_migration",
+            details={
+                "actor": args.actor.strip(),
+                "actor_type": args.actor_type,
+                "authorized": True,
+                "reason": args.reason.strip(),
+                "state_revision": state["revision"],
+                "previous_process_schema_version": (
+                    current_process.get("schema_version")
+                    if isinstance(current_process, dict)
+                    else None
+                ),
+                "process_schema_version": process.get("schema_version"),
+                "migrations": applied_migrations,
+            },
+        )
     with project_mutation_guard(
-        root, extra_files=(paths["process"], paths["bindings"])
+        root,
+        extra_files=(paths["extensions"], paths["process"], paths["bindings"]),
     ):
+        if not extension_existed:
+            write_state(paths["extensions"], extension)
         write_state(paths["process"], process)
         write_state(paths["state"], state)
         write_state(paths["bindings"], bindings)
+        save_runtime(root, runtime)
+    if args.json:
+        print(_json(diff))
+        return 0
     print(translator.text("cli.tailor.process", path=output))
     print(
         translator.text(
             "cli.tailor.deliverables", count=len(process.get("deliverables", []))
         )
     )
+    return 0
+
+
+def _cmd_refine(args: argparse.Namespace) -> int:
+    """Preview or apply one explicit, human-authorized refinement plan."""
+
+    translator = _translator(args)
+    root = Path(args.target).resolve()
+    paths = project_paths(root)
+    state, current_process = load_project(root)
+    if current_process is None:
+        raise ProjectError(translator.text("error.tailored_process_missing"))
+
+    from .process_extensions import load_process_extension
+    from .reconcile import (
+        load_artifact_bindings,
+        preview_refinement_binding_impact,
+        sync_evidence_bindings,
+    )
+    from .refinement import (
+        finalize_refinement_record,
+        load_refinement_plan,
+        merge_refinement_plan,
+        historical_dependency_rewrites,
+        historical_deliverable_id_reuse,
+        process_fingerprint,
+        refinement_plan_digest,
+    )
+    from .tailoring import load_profile, preview_process_diff, tailor_profile
+
+    extension = load_process_extension(paths["extensions"])
+    profile = load_profile(paths["profile"])
+    current_fingerprint = process_fingerprint(current_process)
+    # A refinement event may only add the reviewed plan to the exact process
+    # inputs that produced the governed baseline.  Without this check, an
+    # operator could edit process_extensions.yaml or task_profile.yaml and
+    # piggyback unrelated changes on an otherwise valid refinement plan.
+    compiled_baseline = tailor_profile(profile, extension)
+    if process_fingerprint(compiled_baseline) != current_fingerprint:
+        raise ProjectError(translator.text("error.refine_inputs_stale"))
+
+    plan = load_refinement_plan(Path(args.plan).resolve())
+    plan_digest = refinement_plan_digest(plan)
+    runtime = load_runtime(root)
+    bundle_issues = project_consistency_issues(state, current_process, runtime)
+    if bundle_issues:
+        raise ProjectError(
+            translator.text(
+                "error.refine_project_inconsistent", detail=bundle_issues[0]
+            )
+        )
+    previous = next(
+        (
+            item
+            for item in extension.get("refinements", [])
+            if isinstance(item, dict) and item.get("id") == plan["id"]
+        ),
+        None,
+    )
+    if previous is not None:
+        if previous.get("plan_digest") != plan_digest:
+            raise ProjectError(
+                f"refinement id {plan['id']!r} is already applied with a different digest"
+            )
+        matching_events = [
+            item
+            for item in runtime.get("events", [])
+            if isinstance(item, dict)
+            and item.get("action") == "process_refinement_applied"
+            and item.get("plan_id") == plan["id"]
+        ]
+        expected_replay = {
+            "plan_digest": plan_digest,
+            "base_process_fingerprint": plan["base_process_fingerprint"],
+            "root": plan["root"],
+            "children": [item["id"] for item in plan["deliverables"]],
+            "result_process_fingerprint": previous.get(
+                "result_process_fingerprint"
+            ),
+            "invalidated_gates": previous.get("invalidated_gates"),
+        }
+        if len(matching_events) != 1 or any(
+            matching_events[0].get(field) != value
+            for field, value in expected_replay.items()
+        ):
+            raise ProjectError(
+                translator.text("error.refine_replay_inconsistent")
+            )
+        result = {
+            "schema_version": "1.0",
+            "plan_id": plan["id"],
+            "plan_digest": plan_digest,
+            "root": plan["root"],
+            "base_process_fingerprint": plan["base_process_fingerprint"],
+            "current_process_fingerprint": current_fingerprint,
+            "result_process_fingerprint": current_fingerprint,
+            "refinement_status": "resolved",
+            "applicable": True,
+            "already_applied": True,
+            "applied": False,
+            "blockers": [],
+            "diff": {
+                "added": [],
+                "removed": [],
+                "changed": [],
+                "migrations": [],
+                "ambiguous": [],
+            },
+            "gate_impact": [],
+            "binding_impact": {
+                "schema_version": "1.0",
+                "eligible": True,
+                "status": "passed",
+                "new_concrete_children": [],
+                "issues": [],
+                "summary": {
+                    "new_concrete_children": 0,
+                    "binding_ready": 0,
+                    "managed_evidence_only": 0,
+                    "missing_owner": 0,
+                    "conflicts": 0,
+                    "errors": 0,
+                    "warnings": 0,
+                },
+            },
+        }
+        if args.json:
+            print(_json(result))
+        else:
+            print(translator.text("cli.refine.already_applied", plan=plan["id"]))
+        return 0
+
+    if plan["base_process_fingerprint"] != current_fingerprint:
+        raise ProjectError(translator.text("error.refine_stale_base"))
+    # Context-aware validation is deliberately after replay detection: a
+    # successful plan remains an idempotent no-op against its evolved process.
+    plan = load_refinement_plan(
+        plan, process=current_process, extension=extension
+    )
+    reused_historical_ids = historical_deliverable_id_reuse(
+        plan, state, current_process
+    )
+    if reused_historical_ids:
+        raise ProjectError(
+            translator.text(
+                "error.refine_historical_id_reuse",
+                deliverables=", ".join(reused_historical_ids),
+            )
+        )
+
+    root_deliverable = next(
+        (
+            item
+            for item in state.get("deliverables", [])
+            if isinstance(item, dict) and item.get("id") == plan["root"]
+        ),
+        None,
+    )
+    if root_deliverable is None:
+        raise ProjectError(f"unknown refinement root {plan['root']!r}")
+    refinement = deliverable_refinement_status(state, plan["root"])
+    blockers: list[dict[str, Any]] = []
+    if runtime.get("active_claims"):
+        blockers.append(
+            {
+                "code": "ACTIVE_CLAIM",
+                "message": translator.text(
+                    "error.refine_active_claim",
+                    claims=", ".join(sorted(runtime["active_claims"])),
+                ),
+            }
+        )
+    if root_deliverable.get("phase") != state["project"].get("phase"):
+        blockers.append(
+            {
+                "code": "CLOSED_PHASE",
+                "message": translator.text("error.refine_closed_phase"),
+            }
+        )
+    if refinement.get("refinement_status") != "due":
+        blockers.append(
+            {
+                "code": "REFINEMENT_TRIGGER_PENDING",
+                "message": translator.text("error.refine_trigger_pending"),
+            }
+        )
+
+    merged_extension, applied = merge_refinement_plan(
+        extension, plan, process=current_process
+    )
+    if not applied:
+        raise ProjectError("unexpected refinement replay state")
+    candidate_process = tailor_profile(profile, merged_extension)
+    diff = preview_process_diff(current_process, candidate_process)
+    dependency_rewrites = historical_dependency_rewrites(diff, state)
+    if dependency_rewrites:
+        raise ProjectError(
+            translator.text(
+                "error.refine_historical_dependency_rewrite",
+                deliverables=", ".join(dependency_rewrites),
+            )
+        )
+    candidate_state = sync_state_with_process(state, candidate_process)
+    existing_bindings = load_artifact_bindings(paths["bindings"])
+    candidate_bindings = sync_evidence_bindings(
+        existing_bindings, candidate_process
+    )
+    binding_impact = preview_refinement_binding_impact(
+        candidate_bindings, current_process, candidate_process, diff
+    )
+
+    old_gates = {
+        item["id"]: item
+        for item in state.get("gates", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    gate_impact: list[dict[str, Any]] = []
+    invalidated_gates: list[str] = []
+    for gate in candidate_state.get("gates", []):
+        if not isinstance(gate, dict) or not isinstance(gate.get("id"), str):
+            continue
+        prior = old_gates.get(gate["id"], {})
+        changed = prior.get("requirements_fingerprint") != gate.get(
+            "requirements_fingerprint"
+        )
+        invalidated = bool(
+            changed
+            and prior
+            and gate.get("stale") is True
+            and gate.get("review_epoch", 0) > prior.get("review_epoch", 0)
+        )
+        if changed:
+            gate_impact.append(
+                {
+                    "id": gate["id"],
+                    "previous_requirements_fingerprint": prior.get(
+                        "requirements_fingerprint"
+                    ),
+                    "requirements_fingerprint": gate.get(
+                        "requirements_fingerprint"
+                    ),
+                    "previous_review_epoch": prior.get("review_epoch", 0),
+                    "review_epoch": gate.get("review_epoch", 0),
+                    "invalidated": invalidated,
+                }
+            )
+        if invalidated:
+            invalidated_gates.append(gate["id"])
+
+    result_process_fingerprint = process_fingerprint(candidate_process)
+    merged_extension = finalize_refinement_record(
+        merged_extension,
+        plan_id=plan["id"],
+        result_process_fingerprint=result_process_fingerprint,
+        invalidated_gates=invalidated_gates,
+    )
+    candidate_process = tailor_profile(profile, merged_extension)
+    if process_fingerprint(candidate_process) != result_process_fingerprint:
+        raise ProjectError("refinement result fingerprint is not stable")
+    diff = preview_process_diff(current_process, candidate_process)
+
+    result = {
+        "schema_version": "1.0",
+        "plan_id": plan["id"],
+        "plan_digest": plan_digest,
+        "root": plan["root"],
+        "base_process_fingerprint": plan["base_process_fingerprint"],
+        "current_process_fingerprint": current_fingerprint,
+        "result_process_fingerprint": result_process_fingerprint,
+        "refinement_status": refinement.get("refinement_status"),
+        "applicable": not blockers,
+        "already_applied": False,
+        "applied": False,
+        "blockers": blockers,
+        "diff": diff,
+        "gate_impact": gate_impact,
+        "binding_impact": binding_impact,
+    }
+    if not args.apply_refinement:
+        if args.json:
+            print(_json(result))
+        else:
+            print(translator.text("cli.refine.preview_title", plan=plan["id"]))
+            for field in ("added", "removed", "changed", "ambiguous"):
+                print(
+                    translator.text(
+                        "cli.refine.preview_count",
+                        field=field,
+                        count=len(diff.get(field, [])),
+                    )
+                )
+        return 0
+
+    if blockers:
+        raise ProjectError(str(blockers[0]["message"]))
+    if not isinstance(args.actor, str) or not args.actor.strip():
+        raise ProjectError(translator.text("error.refine_actor_required"))
+    if args.actor_type != "human":
+        raise ProjectError(translator.text("error.refine_actor_type"))
+    if args.authorized is not True:
+        raise ProjectError(translator.text("error.refine_authorized"))
+    if not isinstance(args.reason, str) or not args.reason.strip():
+        raise ProjectError(translator.text("error.refine_reason_required"))
+
+    event = {
+        "action": "process_refinement_applied",
+        "at": format_time(utc_now()),
+        "plan_id": plan["id"],
+        "plan_digest": plan_digest,
+        "base_process_fingerprint": plan["base_process_fingerprint"],
+        "result_process_fingerprint": result["result_process_fingerprint"],
+        "actor": args.actor.strip(),
+        "actor_type": "human",
+        "authorized": True,
+        "reason": args.reason.strip(),
+        "state_revision": candidate_state["revision"],
+        "root": plan["root"],
+        "children": [item["id"] for item in plan["deliverables"]],
+        "invalidated_gates": sorted(invalidated_gates),
+    }
+    candidate_runtime, recorded = record_process_refinement(runtime, event)
+    if not recorded:
+        raise ProjectError("unexpected refinement runtime replay state")
+    with project_mutation_guard(
+        root,
+        extra_files=(paths["extensions"], paths["process"], paths["bindings"]),
+    ):
+        write_state(paths["extensions"], merged_extension)
+        write_state(paths["process"], candidate_process)
+        write_state(paths["state"], candidate_state)
+        write_state(paths["bindings"], candidate_bindings)
+        save_runtime(root, candidate_runtime)
+    result["applied"] = True
+    if args.json:
+        print(_json(result))
+    else:
+        print(translator.text("cli.refine.applied", plan=plan["id"]))
     return 0
 
 
@@ -782,6 +1425,24 @@ def _cmd_claim(args: argparse.Namespace) -> int:
             translator.text("error.unknown_subject", subject=args.deliverable)
         )
     active = runtime.get("active_claims", {}).get(args.deliverable)
+    # Surface the target's concrete artifact/refinement blocker before the
+    # generic verification-freshness gate. Both checks are read-only and
+    # fail-closed, but this order tells the user what must be fixed before a
+    # newly refined Deliverable can ever become verifiable or claimable.
+    eligibility = binding_eligibility(
+        root,
+        state,
+        runtime,
+        bindings_path=paths["bindings"],
+        target_deliverable=args.deliverable,
+    )
+    binding_status = deliverable_binding_status(eligibility, args.deliverable)
+    if not binding_status["eligible"]:
+        issue_codes = binding_status.get("issue_codes", [])
+        reason = issue_codes[0] if issue_codes else "BINDING_READINESS_UNAVAILABLE"
+        raise TransitionError(
+            f"claim preflight failed for {args.deliverable!r}: {reason}"
+        )
     recovering = False
     if deliverable.get("status") == "in_progress":
         _require_workflow_step(
@@ -832,20 +1493,6 @@ def _cmd_claim(args: argparse.Namespace) -> int:
             )
         updated_state = claim_deliverable(state, args.deliverable)
     updated_state = _set_workflow_step(updated_state, "work")
-    eligibility = binding_eligibility(
-        root,
-        state,
-        runtime,
-        bindings_path=paths["bindings"],
-        target_deliverable=args.deliverable,
-    )
-    binding_status = deliverable_binding_status(eligibility, args.deliverable)
-    if not binding_status["eligible"]:
-        issue_codes = binding_status.get("issue_codes", [])
-        reason = issue_codes[0] if issue_codes else "BINDING_READINESS_UNAVAILABLE"
-        raise TransitionError(
-            f"claim preflight failed for {args.deliverable!r}: {reason}"
-        )
     from .reconcile import (
         create_claim_binding_window,
         recover_claim_binding_window,
