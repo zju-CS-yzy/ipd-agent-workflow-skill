@@ -459,6 +459,38 @@ def _assemble(
                     ] = deepcopy(provenance)
         deliverable["depends_on"] = expanded_dependencies
 
+    for correction in extension["dependency_corrections"]:
+        identifier = correction["deliverable"]
+        deliverable = deliverable_by_id.get(identifier)
+        if deliverable is None:
+            raise TailoringError(
+                "$.dependency_corrections: Deliverable "
+                f"{identifier!r} does not exist in the candidate process"
+            )
+        unknown = sorted(set(correction["after"]) - set(deliverable_by_id))
+        if unknown:
+            raise TailoringError(
+                f"$.dependency_corrections: {identifier!r} has unknown after "
+                f"dependencies {unknown!r}"
+            )
+        abstract = sorted(
+            dependency
+            for dependency in correction["after"]
+            if deliverable_by_id[dependency].get("definition_state") == "abstract"
+        )
+        if abstract:
+            raise TailoringError(
+                f"$.dependency_corrections: {identifier!r} after dependencies must "
+                f"reference executable leaves, not abstract Deliverables {abstract!r}"
+            )
+        prior_dependencies = set(deliverable["depends_on"])
+        deliverable["depends_on"] = list(correction["after"])
+        for dependency in correction["after"]:
+            if dependency not in prior_dependencies:
+                explicit_dependency_provenance[
+                    (identifier, dependency, "depends_on")
+                ] = _provenance("project", extension_id)
+
     criteria_by_checkpoint: dict[str, list[dict[str, Any]]] = {
         f"{prefix}.{phase['id']}": _core_checkpoint_criteria(prefix, phase)
         for prefix in ("tr", "dcp")
@@ -515,10 +547,41 @@ def _assemble(
         for phase in process_phases
     ]
 
+    project_gates_by_phase: dict[str, list[dict[str, Any]]] = {
+        phase["id"]: [] for phase in process_phases
+    }
+    for item in extension["gates"]:
+        rendered = {
+            **deepcopy(item),
+            "kind": "Gate",
+            "required_deliverables": effective_gate_requirements(
+                item["required_deliverables"], deliverables
+            ),
+            "review_required": True,
+            "final_approval": "authorized_human",
+            "provenance": _provenance("project", extension_id),
+            "maturity": PHASE_MATURITY[item["phase"]],
+        }
+        project_gates_by_phase[item["phase"]].append(rendered)
+
     gates: list[dict[str, Any]] = []
     for tr, dcp in zip(technical_reviews, decision_checkpoints):
         gates.append(_gate(tr, "TR"))
         gates.append(_gate(dcp, "DCP"))
+        gates.extend(
+            sorted(
+                project_gates_by_phase[tr["phase"]],
+                key=lambda item: item["id"],
+            )
+        )
+
+    gate_ids = {item["id"] for item in gates}
+    for migration in extension["gate_migrations"]:
+        if migration["to"] not in gate_ids:
+            raise TailoringError(
+                "$.gate_migrations: target "
+                f"{migration['to']!r} must reference a candidate Gate"
+            )
 
     dependencies = [
         {
@@ -587,6 +650,8 @@ def _assemble(
         "dependencies": dependencies,
         "review_requirements": review_requirements,
         "migrations": deepcopy(extension["migrations"]),
+        "gate_migrations": deepcopy(extension["gate_migrations"]),
+        "dependency_corrections": deepcopy(extension["dependency_corrections"]),
         "refinements": deepcopy(extension["refinements"]),
     }
 
@@ -700,6 +765,8 @@ def validate_process(value: Any) -> list[str]:
     # An empty field is tolerated in a mechanically projected legacy process;
     # schema 1.0 still cannot carry applied refinement facts.
     top_fields.add("refinements")
+    top_fields.add("gate_migrations")
+    top_fields.add("dependency_corrections")
     if is_v2:
         top_fields.add("migrations")
         required_top_fields.add("migrations")
@@ -1626,6 +1693,132 @@ def validate_process(value: Any) -> list[str]:
             issues.append(
                 f"$.migrations: target {target!r} has multiple sources; merge is unsupported"
             )
+
+    gate_migrations = value.get("gate_migrations", [])
+    if not is_v2 and gate_migrations not in (None, []):
+        issues.append("$.gate_migrations: schema 1.0 must not contain Gate migrations")
+        gate_migrations = []
+    elif gate_migrations is None:
+        gate_migrations = []
+    if is_v2 and not isinstance(gate_migrations, list):
+        issues.append("$.gate_migrations: must be an array")
+        gate_migrations = []
+    gate_migration_sources: set[str] = set()
+    gate_migration_targets: set[str] = set()
+    for index, migration in enumerate(gate_migrations):
+        path = f"$.gate_migrations[{index}]"
+        if not isinstance(migration, dict):
+            issues.append(f"{path}: must be an object")
+            continue
+        fields = {"from", "to", "reason", "preserve_history"}
+        for field in sorted(fields - migration.keys()):
+            issues.append(f"{path}.{field}: required field is missing")
+        for field in sorted(migration.keys() - fields):
+            issues.append(f"{path}.{field}: unknown field")
+        source = migration.get("from")
+        target = migration.get("to")
+        if not isinstance(source, str) or not _ID_PATTERN.fullmatch(source):
+            issues.append(f"{path}.from: must be a valid lowercase identifier")
+        elif source in gate_migration_sources:
+            issues.append(
+                f"{path}.from: source {source!r} must appear in exactly one gate migration"
+            )
+        else:
+            gate_migration_sources.add(source)
+        if not isinstance(target, str) or not _ID_PATTERN.fullmatch(target):
+            issues.append(f"{path}.to: must be a valid lowercase identifier")
+        elif target not in gate_ids:
+            issues.append(f"{path}.to: references unknown target Gate {target!r}")
+        elif target in gate_migration_targets:
+            issues.append(
+                f"{path}.to: target {target!r} must appear in exactly one gate migration"
+            )
+        else:
+            gate_migration_targets.add(target)
+        if isinstance(source, str) and source == target:
+            issues.append(f"{path}: source and target must differ")
+        if not isinstance(migration.get("reason"), str) or not migration.get(
+            "reason", ""
+        ).strip():
+            issues.append(f"{path}.reason: must be a non-empty string")
+        if migration.get("preserve_history") is not True:
+            issues.append(f"{path}.preserve_history: must equal true")
+
+    dependency_corrections = value.get("dependency_corrections", [])
+    if not is_v2 and dependency_corrections not in (None, []):
+        issues.append(
+            "$.dependency_corrections: schema 1.0 must not contain dependency corrections"
+        )
+        dependency_corrections = []
+    elif dependency_corrections is None:
+        dependency_corrections = []
+    if is_v2 and not isinstance(dependency_corrections, list):
+        issues.append("$.dependency_corrections: must be an array")
+        dependency_corrections = []
+    corrected_deliverables: set[str] = set()
+    for index, correction in enumerate(dependency_corrections):
+        path = f"$.dependency_corrections[{index}]"
+        if not isinstance(correction, dict):
+            issues.append(f"{path}: must be an object")
+            continue
+        fields = {
+            "deliverable",
+            "before",
+            "after",
+            "reason",
+            "preserve_history",
+            "require_reapproval",
+        }
+        for field in sorted(fields - correction.keys()):
+            issues.append(f"{path}.{field}: required field is missing")
+        for field in sorted(correction.keys() - fields):
+            issues.append(f"{path}.{field}: unknown field")
+        deliverable = correction.get("deliverable")
+        if not isinstance(deliverable, str) or not _ID_PATTERN.fullmatch(deliverable):
+            issues.append(f"{path}.deliverable: must be a valid lowercase identifier")
+        elif deliverable not in deliverable_ids:
+            issues.append(
+                f"{path}.deliverable: references unknown Deliverable {deliverable!r}"
+            )
+        elif deliverable in corrected_deliverables:
+            issues.append(
+                f"{path}.deliverable: {deliverable!r} must have exactly one dependency correction"
+            )
+        else:
+            corrected_deliverables.add(deliverable)
+        normalized_lists: dict[str, list[str]] = {}
+        for field in ("before", "after"):
+            dependencies_value = correction.get(field)
+            if not isinstance(dependencies_value, list) or not all(
+                isinstance(dependency, str) and _ID_PATTERN.fullmatch(dependency)
+                for dependency in dependencies_value
+            ):
+                issues.append(f"{path}.{field}: must be an array of identifiers")
+                continue
+            if len(dependencies_value) != len(set(dependencies_value)):
+                issues.append(f"{path}.{field}: must not contain duplicates")
+            normalized_lists[field] = dependencies_value
+        before = normalized_lists.get("before")
+        after = normalized_lists.get("after")
+        if before is not None and after is not None and set(before) == set(after):
+            issues.append(f"{path}: before and after must describe different dependencies")
+        if after is not None:
+            unknown = sorted(set(after) - deliverable_ids)
+            if unknown:
+                issues.append(f"{path}.after: references unknown Deliverables {unknown!r}")
+            candidate = deliverable_by_id.get(deliverable, {})
+            if candidate and candidate.get("depends_on") != after:
+                issues.append(
+                    f"{path}.after: must equal candidate Deliverable dependencies"
+                )
+        if not isinstance(correction.get("reason"), str) or not correction.get(
+            "reason", ""
+        ).strip():
+            issues.append(f"{path}.reason: must be a non-empty string")
+        if correction.get("preserve_history") is not True:
+            issues.append(f"{path}.preserve_history: must equal true")
+        if correction.get("require_reapproval") is not True:
+            issues.append(f"{path}.require_reapproval: must equal true")
     return sorted(set(issues))
 
 

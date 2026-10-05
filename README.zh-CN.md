@@ -4,7 +4,7 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-当前预发布目标：`v0.4.0-beta`（Python 包 `0.4.0b1`）。
+当前预发布目标：`v0.4.1-beta`（Python 包 `0.4.1b1`）。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 
@@ -26,6 +26,8 @@
 - 只读检查 Git/SVN 的 branch、revision、dirty 和 remote 信息，并根据显式绑定核对变更。
 - 对 Critical Artifact 执行单一 Owner、逐轮 Claim Window 与已有 Dirty 项目的人工授权迁移基线约束。
 - 区分能够授权 Claim 的唯一 Binding Owner 与可供多个 Deliverable 引用、但不授权 Claim 的非 Critical `shared_evidence`。
+- Re-tailor 时保留 Claim 追溯关系，在 Preview 中显示追溯新增、删除与重定向，并在无法解释的 Claim Link 丢失前 Fail-closed。
+- 支持把旧 Generic Gate 显式迁移到 Canonical 或项目 Gate，也支持经授权的精确同 ID 依赖修正；两者都保留历史，并要求受影响工作重新评审。
 - 原子化持久化 YAML 事实文件，使生成视图与事实来源保持分离。
 
 此 Beta 版本不提供托管服务、企业身份认证或可写 Web UI，也不会自动执行 Git/SVN 的提交、打标签、推送、拉取、抓取或更新操作。
@@ -87,7 +89,8 @@ Phase，并把 Workflow 留在 `refresh`；继续 Claim 或 Gate 评审前必须
 
 完整 CLI 命令面是 `init`、`tailor`、`refine`、`context`、`status`、`adopt-baseline`、`claim`、
 `close`、`review`、`approve`、`reject`、`refresh`、`verify`、
-`advance-phase`、`repository`、`reconcile` 和 `validate`。精确参数请运行
+`advance-phase`、`repository`、`reconcile` 和 `validate`。`validate --json`
+输出稳定的机器可读结果；普通 CLI 与 Dashboard 文案继续遵循项目 Locale。精确参数请运行
 `ipdctl COMMAND --help`，规范摘要见
 [references/state-contract.md](references/state-contract.md)。
 
@@ -104,7 +107,9 @@ capability_patterns:
 
 `ipdctl init` 会创建空的规范 `.ipd/process_extensions.yaml`，作为项目拥有的
 第四层。该文件可追加 Activity、必须评审的 Deliverable、类型化关系（`depends_on`、`supports`、`verifies`、
-`supersedes`）、独立 TR/DCP Criteria，以及显式 `replace` 或 `split` 迁移映射。
+`supersedes`）、独立 TR/DCP Criteria、项目自有 Generic Gate、显式 `replace` 或
+`split` Deliverable 迁移、单对单 `gate_migrations` 以及精确的
+`dependency_corrections`。
 它不能删除或覆盖之前层的事实。重复 ID、依赖环、未知引用，以及早期 Phase 的
 Deliverable 依赖后期 Phase Deliverable 都会使验证失败。
 对于尚无该文件的 v0.4 之前项目，`tailor --preview` 仍保持零写入；首次成功的
@@ -112,7 +117,10 @@ Deliverable 依赖后期 Phase Deliverable 都会使验证失败。
 
 重新裁剪前先执行 `ipdctl tailor PATH --preview`。Preview 是纯只读操作；
 `--preview --json` 固定输出 `added`、`removed`、`changed`、`migrations` 和
-`ambiguous`。存在活动 Claim 时禁止任何实际 Re-tailor。如果改动会删除已有历史
+`ambiguous`。同一 Preview 还会显示 `state.traceability` 的新增、删除和重定向；
+没有完整迁移却会丢失 Claim Link 时，结果会在 `ambiguous` 中阻止写入。流程拥有
+的关系按新编译结果重建，两个端点仍存在的 Claim Link 则继续保留。存在活动
+Claim 时禁止任何实际 Re-tailor。如果改动会删除已有历史
 且尚未 `superseded` 的 Deliverable，项目扩展必须提供显式迁移映射；首次应用时
 还需由人类明确授权执行：
 
@@ -124,6 +132,13 @@ ipdctl tailor PATH --apply-migrations --actor HUMAN \
 旧状态节点转为 `superseded` 并原位保留 Evidence 与 Review History；新目标节点
 保持 `planned`，不得继承 Acceptance、Evidence 或 Review。纯追加变更及已应用
 迁移保持幂等，不要求重复授权。
+
+旧 Generic Gate 只能通过单对单 `gate_migrations` 转移到候选流程中存在的目标
+Gate，并保留历史。对有历史 Deliverable 做同 ID 依赖修正时，必须声明精确的
+`before` 与 `after` 集合、保留历史并要求重新批准。首次有效应用复用同一条人工
+授权 `--apply-migrations` 边界：受影响工作变为 `blocked`，未批准的相关 Gate
+失效，Evidence 与 Review 全部保留；若相关 Gate 已获批准，则 Fail-closed，而
+不会隐式重新打开。
 
 普通 Re-tailor 不能在保留同一 ID 的同时，改写已经具有受治理 Status、Evidence
 或 Review 的 Deliverable 语义；应创建新的 Deliverable ID，并使用显式 Migration
@@ -227,6 +242,9 @@ Deliverable Owner。新 Claim 事件会记录精确 Binding Window；旧的历�
 设置 `critical: false`；它只记录多个 Deliverable 对同一证据的引用关系。
 Shared Evidence 不能授权 Claim，不能满足 Critical Path 所需的 Owner，也不会
 削弱 Owner 冲突检查。
+
+Artifact Binding 的 Glob 以项目根目录为锚点。例如 `README.md` 只匹配根文件，
+`docs/*.md` 只匹配一层目录；只有完整的 `**` 路径段可以跨越零层或多层目录。
 
 升级已有项目时，如果受治理文件已经处于 Dirty 状态，应先验证显式单一 Owner
 规则，再使用 `ipdctl adopt-baseline` 预览并记录由人类授权的迁移基线。

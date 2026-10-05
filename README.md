@@ -4,7 +4,7 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-Current prerelease target: `v0.4.0-beta` (Python package `0.4.0b1`).
+Current prerelease target: `v0.4.1-beta` (Python package `0.4.1b1`).
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 
@@ -26,6 +26,12 @@ The runtime enforces a hard boundary: an AI agent can prepare and validate a gat
 - Inspect Git or SVN branch/revision/dirty/remote metadata and reconcile changed paths without mutating the repository.
 - Enforce single-owner critical artifact bindings, per-iteration Claim windows, and explicitly authorized migration baselines for existing dirty projects.
 - Distinguish the one Binding Owner that authorizes a Claim from non-critical `shared_evidence` references that may support several Deliverables.
+- Preserve Claim traceability across re-tailoring, expose trace additions,
+  removals, and redirects in preview, and fail closed before an unexplained
+  Claim link can disappear.
+- Support explicit migration from legacy generic Gates to canonical or
+  project-owned Gates, plus authorized exact dependency corrections that
+  preserve history and require affected work to be reviewed again.
 - Persist YAML fact sources atomically and keep generated dashboards separate from source state.
 
 This beta does not provide a hosted service, authenticated enterprise approval, or a writable web UI. It never commits, tags, pushes, pulls, fetches, updates, or otherwise mutates Git/SVN state.
@@ -88,8 +94,9 @@ cannot skip governance.
 
 The full CLI command surface is `init`, `tailor`, `refine`, `context`, `status`, `adopt-baseline`, `claim`,
 `close`, `review`, `approve`, `reject`, `refresh`, `verify`, `advance-phase`,
-`repository`, `reconcile`, and `validate`. Run `ipdctl COMMAND --help` for the
-exact options; the normative summary is in
+`repository`, `reconcile`, and `validate`. `validate --json` emits a stable
+machine-readable result while normal CLI and Dashboard presentation remains
+locale-aware. Run `ipdctl COMMAND --help` for the exact options; the normative summary is in
 [references/state-contract.md](references/state-contract.md).
 
 ## Layered process compilation
@@ -107,7 +114,9 @@ capability_patterns:
 `ipdctl init` creates an empty canonical `.ipd/process_extensions.yaml` as the
 project-owned fourth layer. It may add Activities, review-required Deliverables, typed relations
 (`depends_on`, `supports`, `verifies`, `supersedes`), independent TR/DCP
-criteria, and explicit `replace` or `split` migration mappings. It cannot
+criteria, project-owned generic Gates, explicit `replace` or `split`
+Deliverable migration mappings, one-to-one `gate_migrations`, and exact
+`dependency_corrections`. It cannot
 delete or override facts from earlier layers. Duplicate IDs, dependency
 cycles, unknown references, and an earlier-Phase Deliverable depending on a
 later-Phase Deliverable fail validation.
@@ -118,6 +127,11 @@ canonical empty extension before publishing the schema `2.0` process.
 Run `ipdctl tailor PATH --preview` before re-tailoring. Preview is read-only;
 `--preview --json` returns the stable keys `added`, `removed`, `changed`,
 `migrations`, and `ambiguous`. An active Claim blocks every actual re-tailor.
+The same preview reports additions, removals, and redirects in
+`state.traceability`; losing a Claim-linked relationship without a complete
+migration is an `ambiguous` blocker. Process-owned relations are rebuilt from
+the compiled process, while Claim-linked relations survive whenever both
+endpoints still exist.
 If a change removes a historical, non-superseded Deliverable, the project
 extension must provide an explicit mapping and the first application requires
 an explicitly authorized human command:
@@ -131,6 +145,15 @@ The old state node remains as `superseded` with its evidence and review
 history; new target nodes remain `planned` and do not inherit acceptance,
 evidence, or reviews. Additive and already-applied changes stay idempotent and
 do not require repeated authorization.
+
+A legacy generic Gate may move only through a one-to-one `gate_migrations`
+record whose target exists in the candidate process and whose history is
+preserved. A same-ID dependency correction for a historical Deliverable must
+declare the exact `before` and `after` sets, preserve history, and require
+reapproval. Its first effective application uses the same authorized-human
+`--apply-migrations` boundary, moves the affected work to `blocked`, invalidates
+affected unapproved Gate readiness, and keeps all evidence and reviews. An
+approved affected Gate fails closed instead of being reopened implicitly.
 
 Ordinary re-tailoring cannot change the process meaning of an existing
 Deliverable that already has governed status, evidence, or reviews while
@@ -238,6 +261,10 @@ contract and uses one `deliverable`. `role: shared_evidence` instead uses a
 evidence relationships only. Shared evidence cannot authorize a Claim, cannot
 satisfy the Owner required for a critical path, and does not weaken owner
 conflict checks.
+
+Artifact-binding globs are rooted at the project root. For example,
+`README.md` matches only the root file, `docs/*.md` matches one directory
+level, and a full `**` path segment may cross zero or more directories.
 
 When upgrading an existing project whose governed files are already dirty,
 first validate explicit single-owner rules, then preview and record an

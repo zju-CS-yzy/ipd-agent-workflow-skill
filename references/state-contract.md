@@ -27,8 +27,9 @@ history but cannot prove ownership for new path changes. Authorized migration
 baselines are append-only `artifact_baseline_adopted` events.
 An applied process migration appends one `process_migration` event with its
 authorized human Actor, reason, state revision, old/new process schema
-versions, and explicit mappings. Re-running an already-applied migration does
-not duplicate this event.
+versions, and one or more explicit Deliverable `migrations`,
+`gate_migrations`, or `dependency_corrections`. Re-running an already-applied
+migration does not duplicate this event.
 An applied progressive refinement appends one strict
 `process_refinement_applied` event containing its plan ID/digest, base and
 result process fingerprints, authorized human Actor and reason, root, child
@@ -38,7 +39,9 @@ reuse with a changed digest or base is a conflict.
 The tailored process is a separate contract. New compilation emits process
 schema `2.0`, where Phase, Activity, Deliverable, TR, DCP, and Gate nodes carry
 `provenance` and `maturity`, TR/DCP contain independent criteria, and the
-top-level `migrations` list records explicit replacement/split intent. The
+top-level `migrations` list records explicit replacement/split intent;
+`gate_migrations` records one-to-one legacy Gate redirects and
+`dependency_corrections` records exact same-ID dependency repair intent. The
 runtime can continue to read schema `1.0` when its semantic projection matches
 a profile without capabilities and an empty project extension.
 
@@ -67,7 +70,7 @@ ipdctl verify [TARGET] [--json]
 ipdctl advance-phase [TARGET]
 ipdctl repository [TARGET] [--json]
 ipdctl reconcile [TARGET] [--bindings PATH] [--json]
-ipdctl validate [TARGET] [--policy PATH]
+ipdctl validate [TARGET] [--policy PATH] [--json]
 ```
 
 `status` is an alias for `context`. `init` refuses to replace existing state
@@ -79,6 +82,11 @@ before writing. `context` refuses to summarize invalid state. `verify` exits
 non-zero for state, process, runtime, evidence, Dashboard, or reconciliation
 errors. `repository` and repository inspection within reconciliation are
 read-only and degrade to `kind: none` when neither Git nor SVN is available.
+`validate --json` writes one stable English-keyed result to standard output for
+both valid and invalid input; it includes status, scope, target, state metadata,
+checks, and issues. Human-readable output remains locale-aware. The Windows CLI
+configures its real console streams for UTF-8 so Chinese text remains intact
+when redirected or captured.
 
 `refine` defaults to preview unless `--apply` is explicit. Preview is
 zero-write and returns the plan/base/result fingerprints, semantic diff, Gate
@@ -143,8 +151,9 @@ cannot authorize a Claim or satisfy the required Owner of a critical path.
 Tailoring itself compiles `core -> task_type -> capability -> project`.
 `task_profile.capability_patterns` selects reusable capability policies; the
 canonical `.ipd/process_extensions.yaml` adds project Activities,
-review-required Deliverables, typed relations, TR/DCP criteria, and process
-migration mappings plus declared/applied refinements. Layers are additive and cannot override duplicate entity
+review-required Deliverables, generic Gates, typed relations, TR/DCP criteria,
+and explicit Deliverable, Gate, and dependency-correction migrations plus
+declared/applied refinements. Layers are additive and cannot override duplicate entity
 or criterion IDs. Dependencies must be acyclic and phase-monotonic.
 
 Any actual re-tailor is rejected while a Claim is active. Removing a historical
@@ -161,6 +170,21 @@ approved Gate or an already closed Phase, including checkpoint criteria, while
 leaving preview available and all authority files unchanged. The only upgrade
 exception is first-time deterministic schema `1.0` enrichment with core
 provenance, maturity, and canonical readiness criteria.
+
+Candidate traceability starts from compiled process relations and preserves
+state-owned Claim links whenever both endpoints survive. Explicit
+`gate_migrations` may redirect one legacy Gate endpoint to one candidate Gate.
+Preview reports trace additions/removals through `added`/`removed`, redirects
+through `changed`, and unexplained Claim-link loss through `ambiguous`; apply
+fails closed while any such blocker remains.
+
+An exact same-ID dependency correction is permitted only when its declared
+`before` set matches the current state and its `after` set matches the compiled
+candidate. It requires `preserve_history: true`, `require_reapproval: true`,
+`--apply-migrations`, and an authorized human Actor and reason on first apply.
+Evidence and reviews remain attached, the affected Deliverable becomes
+`blocked`, affected unapproved Gates become stale with a new review epoch, and
+an affected approved Gate rejects the change instead of reopening implicitly.
 
 A refinement requirement declares a Deliverable root, its initial concrete or
 placeholder definition state, an `all_of` trigger over accepted Deliverables

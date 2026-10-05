@@ -150,11 +150,13 @@ does not contain vendor, robot, sensor, project path, or Owner data.
 The canonical project layer is `.ipd/process_extensions.yaml`. It may add:
 
 - Activities and review-required Deliverables;
+- project-owned generic Gates that follow their phase's canonical TR and DCP;
 - typed `depends_on`, `supports`, `verifies`, or `supersedes` relations;
 - independent evidence-required criteria for a named `tr.<phase>` or
   `dcp.<phase>` checkpoint; and
 - explicit `replace` or `split` migration mappings with
   `preserve_history: true`; and
+- one-to-one `gate_migrations` and exact same-ID `dependency_corrections`; and
 - explicit refinement requirements and the applied refinement lineage.
 
 It cannot delete or override an earlier-layer entity. Duplicate IDs, unknown
@@ -168,7 +170,9 @@ retain separate criteria rather than sharing one generic Gate checklist.
 
 Use `ipdctl tailor --preview` before changing an existing process. Preview is
 zero-write and `--json` returns `added`, `removed`, `changed`, `migrations`,
-and `ambiguous`. Any actual re-tailor fails while a Claim is active. Removing a
+and `ambiguous`. The same fixed keys expose `state.traceability` additions,
+removals, and redirects; a Claim link that cannot be preserved or explicitly
+migrated appears as an `ambiguous` blocker. Any actual re-tailor fails while a Claim is active. Removing a
 historical non-superseded Deliverable requires an explicit mapping and
 `--apply-migrations`; the first effective migration additionally requires an
 authorized human Actor and reason. The old node remains in state as
@@ -184,6 +188,16 @@ criteria—also fail closed before any authority file is written; inspect them
 through the zero-write preview. A schema `1.0` process may receive only the
 deterministic core provenance, maturity, and canonical readiness-criteria
 enrichment needed for schema `2.0`.
+
+A legacy generic Gate requires one unambiguous `gate_migrations` mapping to a
+candidate canonical or project Gate. The first effective redirect uses the
+same authorized-human migration command and preserves Gate and Claim-link
+history. A historical Deliverable may receive a same-ID dependency repair only
+through `dependency_corrections` whose exact `before` set matches state and
+whose `after` set matches the candidate process. `preserve_history` and
+`require_reapproval` must both be true. The correction retains evidence and
+reviews, blocks the Deliverable for rework, and invalidates affected unapproved
+Gates; an approved affected Gate makes the change fail closed.
 
 ## Progressive refinement
 

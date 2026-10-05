@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.4.0b1"
-PUBLIC_VERSION = "0.4.0-beta"
+PACKAGE_VERSION = "0.4.1b1"
+PUBLIC_VERSION = "0.4.1-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -29,6 +29,7 @@ REQUIRED_FILES = (
     "MANIFEST.in",
     "scripts/verify_v031_upgrade.py",
     "scripts/verify_v032_upgrade.py",
+    "scripts/verify_v040_upgrade.py",
     "scripts/simulate_progressive_refinement.py",
     "pyproject.toml",
     "agents/openai.yaml",
@@ -255,7 +256,17 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         (
             ".github/workflows/release.yml",
             r"python -B scripts/verify_v032_upgrade\.py",
-            "release workflow must qualify the direct v0.3.2 in-place upgrade",
+            "release workflow must qualify the published v0.3.2 in-place upgrade",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"python -B scripts/verify_v040_upgrade\.py",
+            "release workflow must qualify the direct v0.4.0 in-place upgrade",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r'ipdctl"\s+validate\s+"\$project"\s+--json',
+            "release artifact smoke tests must exercise validate --json",
         ),
         (
             ".github/workflows/test.yml",
@@ -265,17 +276,32 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         (
             ".github/workflows/test.yml",
             r"upgrade-v032:.*?fetch-depth:\s*0.*?python -B scripts/verify_v032_upgrade\.py",
-            "CI must fetch release history and qualify the direct v0.3.2 upgrade",
+            "CI must fetch release history and qualify the published v0.3.2 upgrade",
         ),
         (
             ".github/workflows/test.yml",
-            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$",
+            r"upgrade-v040:.*?fetch-depth:\s*0.*?python -B scripts/verify_v040_upgrade\.py",
+            "CI must fetch release history and qualify the direct v0.4.0 upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$.*?-\s+upgrade-v040\s*$",
             "CI must expose the stable governance-gate over all release-contract jobs",
         ),
         (
             ".github/workflows/test.yml",
             r"UPGRADE_V032_RESULT:\s*\$\{\{\s*needs\.upgrade-v032\.result\s*\}\}.*?test \"\$UPGRADE_V032_RESULT\" = \"success\"",
             "governance-gate must explicitly require the v0.3.2 upgrade result",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"UPGRADE_V040_RESULT:\s*\$\{\{\s*needs\.upgrade-v040\.result\s*\}\}.*?test \"\$UPGRADE_V040_RESULT\" = \"success\"",
+            "governance-gate must explicitly require the v0.4.0 upgrade result",
+        ),
+        (
+            "scripts/verify_v040_upgrade.py",
+            r'^RELEASE_TAG\s*=\s*"v0\.4\.0-beta"\s*$',
+            "direct upgrade qualification must use the published v0.4.0-beta tag",
         ),
         (
             ".github/workflows/test.yml",
@@ -309,12 +335,12 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             "docs/deployment.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.3\.2-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.0-beta`',
             "deployment guide must identify the release and direct upgrade baseline",
         ),
         (
             "docs/deployment.zh-CN.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.3\.2-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.0-beta`',
             "Chinese deployment guide must identify the release and direct upgrade baseline",
         ),
         (

@@ -124,9 +124,12 @@ def validate_process_extension(value: Any) -> list[str]:
         "extension_id",
         "activities",
         "deliverables",
+        "gates",
         "dependencies",
         "checkpoint_criteria",
         "migrations",
+        "gate_migrations",
+        "dependency_corrections",
         "refinement_requirements",
         "refinements",
     }
@@ -237,6 +240,67 @@ def validate_process_extension(value: Any) -> list[str]:
         ) is not bool:
             issues.append(f"{path}.requires_artifact_owner: must be a boolean")
         _validate_definition_fields(item, path=path, issues=issues)
+
+    gates = value.get("gates", [])
+    if not isinstance(gates, list):
+        issues.append("$.gates: must be an array")
+        gates = []
+    canonical_gate_ids = {
+        f"gate.{prefix}.{phase}"
+        for phase in _PHASE_IDS
+        for prefix in ("tr", "dcp")
+    }
+    for index, raw in enumerate(gates):
+        path = f"$.gates[{index}]"
+        item = _validate_entity_common(
+            raw,
+            path=path,
+            required_fields={
+                "id",
+                "title",
+                "phase",
+                "checkpoint_id",
+                "required_deliverables",
+            },
+            allowed_fields={
+                "id",
+                "title",
+                "phase",
+                "checkpoint_id",
+                "required_deliverables",
+            },
+            issues=issues,
+        )
+        if item is None:
+            continue
+        identifier = item.get("id")
+        if isinstance(identifier, str):
+            if identifier in seen_ids:
+                issues.append(f"{path}.id: duplicate extension entity id {identifier!r}")
+            seen_ids.add(identifier)
+            if identifier in canonical_gate_ids:
+                issues.append(
+                    f"{path}.id: canonical TR/DCP gate id {identifier!r} is reserved"
+                )
+        checkpoint_id = item.get("checkpoint_id")
+        if not isinstance(checkpoint_id, str) or not re.fullmatch(
+            r"(?:tr|dcp)\.(?:concept|plan|develop|qualify|launch|lifecycle)",
+            checkpoint_id,
+        ):
+            issues.append(
+                f"{path}.checkpoint_id: must reference a canonical TR or DCP"
+            )
+        elif checkpoint_id.rsplit(".", 1)[-1] != item.get("phase"):
+            issues.append(f"{path}.checkpoint_id: checkpoint phase must match gate phase")
+        required_deliverables = item.get("required_deliverables")
+        if not isinstance(required_deliverables, list) or not required_deliverables or not all(
+            _valid_id(deliverable) for deliverable in required_deliverables
+        ):
+            issues.append(
+                f"{path}.required_deliverables: must be a non-empty array of identifiers"
+            )
+        elif len(required_deliverables) != len(set(required_deliverables)):
+            issues.append(f"{path}.required_deliverables: must not contain duplicates")
 
     dependencies = value.get("dependencies", [])
     if not isinstance(dependencies, list):
@@ -363,6 +427,122 @@ def validate_process_extension(value: Any) -> list[str]:
             issues.append(
                 f"$.migrations: target {target!r} has multiple sources; merge is unsupported"
             )
+
+    gate_migrations = value.get("gate_migrations", [])
+    if not isinstance(gate_migrations, list):
+        issues.append("$.gate_migrations: must be an array")
+        gate_migrations = []
+    gate_migration_sources: set[str] = set()
+    gate_migration_targets: set[str] = set()
+    for index, migration in enumerate(gate_migrations):
+        path = f"$.gate_migrations[{index}]"
+        if not isinstance(migration, dict):
+            issues.append(f"{path}: must be an object")
+            continue
+        fields = {"from", "to", "reason", "preserve_history"}
+        for field in sorted(fields - migration.keys()):
+            issues.append(f"{path}.{field}: required field is missing")
+        for field in sorted(migration.keys() - fields):
+            issues.append(f"{path}.{field}: unknown field")
+        source = migration.get("from")
+        target = migration.get("to")
+        if not _valid_id(source):
+            issues.append(f"{path}.from: must be a valid lowercase identifier")
+        elif source in gate_migration_sources:
+            issues.append(
+                f"{path}.from: source {source!r} must appear in exactly one gate migration"
+            )
+        else:
+            gate_migration_sources.add(source)
+        if not _valid_id(target):
+            issues.append(f"{path}.to: must be a valid lowercase identifier")
+        elif target in gate_migration_targets:
+            issues.append(
+                f"{path}.to: target {target!r} must appear in exactly one gate migration"
+            )
+        else:
+            gate_migration_targets.add(target)
+        if isinstance(source, str) and source == target:
+            issues.append(f"{path}: source and target must differ")
+        if not isinstance(migration.get("reason"), str) or not migration.get(
+            "reason", ""
+        ).strip():
+            issues.append(f"{path}.reason: must be a non-empty string")
+        if migration.get("preserve_history") is not True:
+            issues.append(f"{path}.preserve_history: must equal true")
+
+    dependency_corrections = value.get("dependency_corrections", [])
+    if not isinstance(dependency_corrections, list):
+        issues.append("$.dependency_corrections: must be an array")
+        dependency_corrections = []
+    corrected_deliverables: set[str] = set()
+    for index, correction in enumerate(dependency_corrections):
+        path = f"$.dependency_corrections[{index}]"
+        if not isinstance(correction, dict):
+            issues.append(f"{path}: must be an object")
+            continue
+        fields = {
+            "deliverable",
+            "before",
+            "after",
+            "reason",
+            "preserve_history",
+            "require_reapproval",
+        }
+        for field in sorted(fields - correction.keys()):
+            issues.append(f"{path}.{field}: required field is missing")
+        for field in sorted(correction.keys() - fields):
+            issues.append(f"{path}.{field}: unknown field")
+        deliverable = correction.get("deliverable")
+        if not _valid_id(deliverable):
+            issues.append(f"{path}.deliverable: must be a valid lowercase identifier")
+        elif deliverable in corrected_deliverables:
+            issues.append(
+                f"{path}.deliverable: {deliverable!r} must have exactly one dependency correction"
+            )
+        else:
+            corrected_deliverables.add(deliverable)
+        normalized_lists: dict[str, list[str]] = {}
+        for field in ("before", "after"):
+            dependencies_value = correction.get(field)
+            if not isinstance(dependencies_value, list) or not all(
+                _valid_id(dependency) for dependency in dependencies_value
+            ):
+                issues.append(f"{path}.{field}: must be an array of identifiers")
+                continue
+            if len(dependencies_value) != len(set(dependencies_value)):
+                issues.append(f"{path}.{field}: must not contain duplicates")
+            normalized_lists[field] = dependencies_value
+        if (
+            "before" in normalized_lists
+            and "after" in normalized_lists
+            and set(normalized_lists["before"]) == set(normalized_lists["after"])
+        ):
+            issues.append(f"{path}: before and after must describe different dependencies")
+        if not isinstance(correction.get("reason"), str) or not correction.get(
+            "reason", ""
+        ).strip():
+            issues.append(f"{path}.reason: must be a non-empty string")
+        if correction.get("preserve_history") is not True:
+            issues.append(f"{path}.preserve_history: must equal true")
+        if correction.get("require_reapproval") is not True:
+            issues.append(f"{path}.require_reapproval: must equal true")
+
+    conflicting_dependency_sources = sorted(
+        corrected_deliverables
+        & {
+            dependency.get("source")
+            for dependency in dependencies
+            if isinstance(dependency, dict)
+            and dependency.get("relation") == "depends_on"
+            and isinstance(dependency.get("source"), str)
+        }
+    )
+    for deliverable in conflicting_dependency_sources:
+        issues.append(
+            "$.dependency_corrections: corrected Deliverable "
+            f"{deliverable!r} cannot also declare additive depends_on relations"
+        )
 
     requirements = value.get("refinement_requirements", [])
     if not isinstance(requirements, list):
@@ -579,9 +759,12 @@ def load_process_extension(
     for field in (
         "activities",
         "deliverables",
+        "gates",
         "dependencies",
         "checkpoint_criteria",
         "migrations",
+        "gate_migrations",
+        "dependency_corrections",
         "refinement_requirements",
         "refinements",
     ):

@@ -348,7 +348,11 @@ def set_gate_ready(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
         gate["blockers"] = [
             item
             for item in gate["blockers"]
-            if item != "GATE_REQUIREMENTS_CHANGED"
+            if item
+            not in {
+                "GATE_REQUIREMENTS_CHANGED",
+                "DEPENDENCY_CONTRACT_CHANGED",
+            }
         ]
     return _finalize(updated)
 

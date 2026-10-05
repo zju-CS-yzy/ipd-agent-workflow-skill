@@ -1,23 +1,23 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.4.0b1` and public label `v0.4.0-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.4.1b1` and public label `v0.4.1-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
 
 ## Repository baseline
 
 - [x] Public capability claims map to implemented modules and behavior tests.
 - [x] `SKILL.md` has valid frontmatter, a discriminating description, reference routing, and an explicit human-approval boundary.
-- [x] Package, Skill, changelog, workflow, and intended release label consistently use `0.4.0b1` and `v0.4.0-beta`.
+- [x] Package, Skill, changelog, workflow, and intended release label consistently use `0.4.1b1` and `v0.4.1-beta`.
 - [x] State and policy schemas reject unknown fields and document semantic checks performed by `ipdctl`.
 - [x] Deliverable acceptance and final TR/DCP approval require an authorized human record; agents cannot finalize approval.
 - [x] English and Simplified Chinese README, architecture, and deployment files are present and cross-linked.
 - [x] The single package includes `ipdctl/messages.yaml`; no locale-specific package or long-lived language branch is required.
-- [x] CI covers Python 3.10 and 3.14, both locales, clean package installation, v0.3.1 compatibility, and the direct v0.3.2 in-place upgrade.
-- [x] From the final source, `python -B -m unittest discover -s tests -v` passes with no skipped release-critical checks (224/224 in 1274.065 seconds on 2026-10-05).
-- [x] From the final source, the Skill validator, compile check, CLI version, and `python -B -m ipdctl --help` pass (`ipdctl 0.4.0-beta`).
-- [x] Wheel and sdist build into an isolated temporary directory, contain the message catalog, Capability Policy, process-extension template, and all schemas, and each passes installed progressive-refinement simulation plus capability-enabled smoke tests in both locales with the exact 15-file Dashboard inventory (four artifact/locale combinations passed on 2026-10-05).
-- [x] `python -B scripts/release_check.py .` passes after generated caches and build metadata are removed (119 text files scanned on 2026-10-05).
+- [x] CI covers Python 3.10 and 3.14, both locales, clean package installation, v0.3.1 and v0.3.2 compatibility, and the direct v0.4.0 in-place upgrade.
+- [x] From the final source, `python -B -m unittest discover -s tests -v` passes with no skipped release-critical checks (255/255 in 975.527 seconds on 2026-10-06).
+- [x] From the final source, the Skill validator, compile check, CLI version, and `python -B -m ipdctl --help` pass (`ipdctl 0.4.1-beta`).
+- [x] Wheel and sdist build into an isolated temporary directory, contain the message catalog, Capability Policy, process-extension template, and all schemas, and each passes installed progressive-refinement simulation plus capability-enabled smoke tests in both locales with the exact 15-file Dashboard inventory.
+- [x] `python -B scripts/release_check.py .` passes after generated caches and build metadata are removed.
 - [x] `git diff --check` passes and `git status --short` contains only intended release source; line-ending notices are configuration warnings, not whitespace errors.
-- [x] Review the final diff, untracked-file inventory, and recent repository history for credentials or unintended project data before publishing; no credentials, project-instance data, generated Dashboard output, screenshots, caches, or unexpected binaries were found.
+- [x] Review the final diff, untracked-file inventory, and recent repository history for credentials or unintended project data before publishing; confirm no credentials, project-instance data, generated Dashboard output, screenshots, caches, or unexpected binaries are present.
 
 ## Artifact binding and Claim provenance
 
@@ -54,6 +54,20 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 - [x] Final context and Dashboard eligibility are true, reconciliation and the latest verification pass, and all 15 Dashboard files exist.
 - [x] Recorded result on 2026-10-02: stale S1 plus exact S2 adoption, 3 Claims (1 legacy, 2 windowed), 1 Claim expiry, 2 passed verifications, unchanged profile/process hashes, and 15 Dashboard files.
 
+## v0.4.0 to v0.4.1 in-place upgrade gate
+
+- [x] Build the fixture from the actual published `v0.4.0-beta` Tag and open it with v0.4.1 without rerunning `init`.
+- [x] Prove `tailor --preview --json` is byte-for-byte zero-write and reports `state.traceability` additions, removals, and redirects through the existing five diff keys.
+- [x] Preserve every Claim-linked relation whose endpoints survive; any unexplained Claim-link loss must appear in `ambiguous` and block application.
+- [x] Migrate legacy generic Gate history only through an explicit one-to-one `gate_migrations` record; reject a missing, self, unknown, or ambiguous mapping.
+- [x] Apply one evidence-bearing same-ID dependency correction only when exact `before` and `after` sets match, and only with an identified authorized human Actor and reason.
+- [x] Preserve evidence and all review history, set corrected work to `blocked`, invalidate affected unapproved Gate readiness, require reapproval, and fail closed if an affected Gate is already approved.
+- [x] Prove idempotent replay creates no duplicate `process_migration` event and changes no state on the second run.
+- [x] Confirm root-anchored Binding globs, Windows UTF-8 Chinese output, and stable valid/invalid `validate --json` contracts.
+- [x] Finish with `refresh`, `verify`, and all 15 Dashboard outputs present; record the exact assertion count and result here.
+
+Recorded on 2026-10-06 from the actual `v0.4.0-beta` Tag: all 15/15 qualification result fields matched; 10 Deliverables and 5 Claim-linked relations were preserved; preview reported 1 addition, 1 removal, and 3 redirects without writes; 3 generic Gates migrated; illegal Claim-link deletion failed closed; the evidence-bearing dependency correction preserved history and required reapproval; replay was idempotent; final validation and verification passed with all 15 Dashboard files.
+
 ## v0.3.2 to v0.4 in-place upgrade gate
 
 - [x] Build the fixture from the actual published `v0.3.2-beta` Tag and open it with v0.4 without rerunning `init`.
@@ -86,27 +100,34 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 - [x] Confirm exactly two strict `process_refinement_applied` events, exact replay no-op, plan-ID conflict rejection, ordinary `tailor` lineage-bypass rejection, and verification fingerprint invalidation.
 - [x] After each round, run `refresh` and `verify`; confirm all 15 Dashboard outputs, hierarchy/status/impact details, graph relations, matrices, and machine projections are present and consistent.
 
-Recorded on 2026-10-05 from source, installed wheel, and installed sdist: two authorized refinement events, two nested leaf closures, Gate review epoch 2, parent/intermediate history preserved, deterministic replay, all four preflight failures, plan-ID conflict, input/runtime tamper, duplicate event, ordinary-tailor bypass, historical ID/dependency rewrite, downstream Claim, and missing Owner protections all behaved fail-closed; each successful round regenerated all 15 Dashboard files and ended with a passed verification.
+Recorded again on 2026-10-06 from final source, installed wheel, and installed sdist: two authorized refinement events, two nested leaf closures, Gate review epoch 2, parent/intermediate history preserved, deterministic replay, all four preflight failures, plan-ID conflict, input/runtime tamper, duplicate event, ordinary-tailor bypass, historical ID/dependency rewrite, downstream Claim, and missing Owner protections all behaved fail-closed; each successful round regenerated all 15 Dashboard files and ended with a passed verification. The installed wheel and sdist also passed capability-enabled smoke tests in `en` and `zh-CN`; explicit full-lifecycle locale runs passed 2/2 in 670.865 seconds and 678.754 seconds respectively.
 
 ## Version and release content
 
-- [x] Source version references are prepared for `0.4.0b1` / `v0.4.0-beta`; confirm no conflicting release Tag at freeze time.
+- [x] Source version references are prepared for `0.4.1b1` / `v0.4.1-beta`; no conflicting remote release Tag existed at freeze time on 2026-10-06.
 - [x] Release notes document upgrade behavior, beta compatibility, approval boundaries, Python support, process migration, and known limitations.
-- [x] Freeze the reviewed release commit and create a new annotated `v0.4.0-beta` Tag; never reuse or move a published Tag.
-- [x] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
-- [x] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
+- [ ] Freeze the reviewed release commit and create a new annotated `v0.4.1-beta` Tag; never reuse or move a published Tag.
+- [ ] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
+- [ ] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
 
 ## GitHub and publication
 
 - [x] Use `zju-CS-yzy/ipd-agent-workflow-skill` as the canonical GitHub repository and include its URLs in project metadata and documentation.
 - [x] Confirm the canonical remote repository exists and is reachable.
-- [x] Push the reviewed default branch and `v0.4.0-beta` Tag.
+- [ ] Push the reviewed default branch and `v0.4.1-beta` Tag.
 - [x] Require pull requests, the current `governance-gate`, an up-to-date branch, and resolved conversations on the default branch; restrict default-branch deletion and force pushes and published `v*` Tag mutation.
 - [ ] Require one independent approving review after a second trusted maintainer is appointed; until then, keep the owner bypass limited to pull requests so a single maintainer cannot push directly to the protected default branch.
 - [x] Enable private vulnerability reporting and point `SECURITY.md` to the canonical private security advisory process.
 - [x] Set the repository description and topics; confirm the Apache-2.0 license display, read-only default Actions permissions, immutable Action revisions, and public prerelease visibility.
-- [x] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
-- [x] After publication, install the public Skill ZIP, wheel, and sdist and run the capability-enabled `init` → `tailor` → `context` → `validate` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+- [ ] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
+- [ ] After publication, install the public Skill ZIP, wheel, and sdist and run the capability-enabled `init` → `tailor` → `context` → `validate --json` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+
+## v0.4.1-beta publication record
+
+- [ ] Record the immutable release commit and annotated Tag object after publication.
+- [ ] Record the successful default-branch, Tag-test, and Tag-release workflow runs.
+- [ ] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
+- [ ] Record all six public artifact/locale smoke results, the direct v0.4.0 upgrade qualification, and removal of the temporary download root.
 
 ## v0.4.0-beta publication record
 

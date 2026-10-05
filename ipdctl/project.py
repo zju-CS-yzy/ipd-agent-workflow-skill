@@ -478,6 +478,8 @@ def _legacy_process_projection(process: dict[str, Any]) -> dict[str, Any]:
     projected = deepcopy(process)
     projected["schema_version"] = "1.0"
     projected.pop("migrations", None)
+    projected.pop("gate_migrations", None)
+    projected.pop("dependency_corrections", None)
     projected.pop("refinements", None)
     profile = projected.get("profile")
     if isinstance(profile, dict):
@@ -512,7 +514,14 @@ def _process_matches_compilation(
     """Compare a process to its deterministic source compilation."""
 
     if current.get("schema_version") == "1.0":
-        return current == _legacy_process_projection(candidate)
+        # ``validate_tailored_process`` intentionally accepts mechanically
+        # projected schema 1.0 documents that retain the newer optional
+        # collections as empty arrays.  Normalize both sides so those harmless
+        # empty compatibility fields cannot make an otherwise deterministic
+        # legacy process appear stale.
+        return _legacy_process_projection(current) == _legacy_process_projection(
+            candidate
+        )
     return current == candidate
 
 
@@ -620,7 +629,7 @@ def _gate_records(process: dict[str, Any]) -> list[dict[str, Any]]:
     return records
 
 
-def _deliverable_has_history(item: dict[str, Any]) -> bool:
+def deliverable_has_history(item: Mapping[str, Any]) -> bool:
     """Return whether removing a Deliverable would discard governed facts."""
 
     return bool(
@@ -630,6 +639,22 @@ def _deliverable_has_history(item: dict[str, Any]) -> bool:
         or item.get("blocked_reason")
         or item.get("replacement")
         or item.get("replacements")
+    )
+
+
+def _gate_has_history(item: Mapping[str, Any]) -> bool:
+    """Return whether removing or replacing a Gate would discard governed facts."""
+
+    review_epoch = item.get("review_epoch", 0)
+    return bool(
+        item.get("status", "planned") != "planned"
+        or item.get("reviews")
+        or item.get("evidence")
+        or item.get("blockers")
+        or item.get("approval")
+        or item.get("stale") is True
+        or item.get("stale_reason")
+        or (type(review_epoch) is int and review_epoch > 0)
     )
 
 
@@ -673,7 +698,7 @@ def governed_deliverable_rewrites(
             continue
         identifier = change["id"]
         prior = state_deliverables.get(identifier)
-        if not isinstance(prior, dict) or not _deliverable_has_history(prior):
+        if not isinstance(prior, dict) or not deliverable_has_history(prior):
             continue
         before = current_deliverables.get(identifier, {})
         after = candidate_deliverables.get(identifier, {})
@@ -938,6 +963,399 @@ def _migration_targets(
     return targets
 
 
+def _trace_key(edge: Mapping[str, Any]) -> tuple[str, str, str] | None:
+    source = edge.get("source")
+    target = edge.get("target")
+    relation = edge.get("relation")
+    if not all(isinstance(value, str) and value for value in (source, target, relation)):
+        return None
+    return source, relation, target
+
+
+def _trace_record(key: tuple[str, str, str]) -> dict[str, str]:
+    source, relation, target = key
+    return {"source": source, "target": target, "relation": relation}
+
+
+def _claim_linked_entity_ids(state: Mapping[str, Any]) -> set[str]:
+    """Return non-Claim endpoints governed by at least one Claim trace link."""
+
+    claim_ids = {
+        item.get("id")
+        for item in state.get("claims", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    linked: set[str] = set()
+    for edge in state.get("traceability", []):
+        if not isinstance(edge, Mapping):
+            continue
+        key = _trace_key(edge)
+        if key is None:
+            continue
+        source, _, target = key
+        if source in claim_ids and target not in claim_ids:
+            linked.add(target)
+        if target in claim_ids and source not in claim_ids:
+            linked.add(source)
+    return linked
+
+
+def _gate_migration_redirects(
+    state: Mapping[str, Any], process: Mapping[str, Any]
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """Validate explicit one-to-one Gate endpoint redirects.
+
+    A migration whose source is absent is an idempotent no-op after the first
+    successful re-tailor.  A source that is referenced by traceability but is
+    not an existing Gate is still invalid and therefore blocked below.
+    """
+
+    state_gate_ids = {
+        item.get("id")
+        for item in state.get("gates", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    candidate_gate_ids = {
+        item.get("id")
+        for item in process.get("gates", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    trace_endpoints = {
+        endpoint
+        for edge in state.get("traceability", [])
+        if isinstance(edge, Mapping)
+        for endpoint in (edge.get("source"), edge.get("target"))
+        if isinstance(endpoint, str)
+    }
+    redirects: dict[str, str] = {}
+    targets: dict[str, str] = {}
+    blocked: list[dict[str, Any]] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    rows = process.get("gate_migrations", [])
+    if not isinstance(rows, list):
+        return {}, [{"kind": "invalid_gate_migrations", "path": "$.gate_migrations"}]
+    for index, row in enumerate(rows):
+        path = f"$.gate_migrations[{index}]"
+        if not isinstance(row, Mapping):
+            blocked.append({"kind": "invalid_gate_migration", "path": path})
+            continue
+        source = row.get("from")
+        target = row.get("to")
+        reason = row.get("reason")
+        if (
+            not isinstance(source, str)
+            or not source
+            or not isinstance(target, str)
+            or not target
+            or not isinstance(reason, str)
+            or not reason.strip()
+            or row.get("preserve_history") is not True
+        ):
+            blocked.append({"kind": "invalid_gate_migration", "path": path})
+            continue
+        pair = (source, target)
+        if pair in seen_pairs:
+            blocked.append(
+                {
+                    "kind": "duplicate_gate_migration",
+                    "path": path,
+                    "from": source,
+                    "to": target,
+                }
+            )
+            continue
+        seen_pairs.add(pair)
+        if source == target:
+            blocked.append(
+                {
+                    "kind": "self_gate_migration",
+                    "path": path,
+                    "from": source,
+                    "to": target,
+                }
+            )
+            continue
+        if target not in candidate_gate_ids:
+            blocked.append(
+                {
+                    "kind": "unknown_gate_migration_target",
+                    "path": path,
+                    "from": source,
+                    "to": target,
+                }
+            )
+            continue
+        if source in candidate_gate_ids:
+            blocked.append(
+                {
+                    "kind": "gate_migration_source_still_present",
+                    "path": path,
+                    "from": source,
+                    "to": target,
+                }
+            )
+            continue
+        if source in redirects and redirects[source] != target:
+            blocked.append(
+                {
+                    "kind": "ambiguous_gate_migration_source",
+                    "path": path,
+                    "from": source,
+                    "targets": sorted({redirects[source], target}),
+                }
+            )
+            continue
+        if target in targets and targets[target] != source:
+            blocked.append(
+                {
+                    "kind": "ambiguous_gate_migration_target",
+                    "path": path,
+                    "to": target,
+                    "sources": sorted({targets[target], source}),
+                }
+            )
+            continue
+        if source in trace_endpoints and source not in state_gate_ids:
+            blocked.append(
+                {
+                    "kind": "unknown_gate_migration_source",
+                    "path": path,
+                    "from": source,
+                    "to": target,
+                }
+            )
+            continue
+        redirects[source] = target
+        targets[target] = source
+    return redirects, sorted(blocked, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def project_traceability_projection(
+    state: Mapping[str, Any],
+    process: Mapping[str, Any],
+    *,
+    preserved_history: Mapping[str, tuple[str, ...]] | None = None,
+) -> tuple[list[dict[str, str]], dict[str, list[dict[str, Any]]]]:
+    """Project candidate state traceability and describe its semantic impact.
+
+    Process dependencies remain authoritative for process-owned relationships.
+    State-owned relationships with at least one Claim endpoint survive when
+    both endpoints still exist.  Gate endpoint changes require an explicit,
+    unambiguous ``gate_migrations`` record; unexplained Claim-link loss is
+    reported as a blocker instead of being silently discarded.
+    """
+
+    existing_deliverables = {
+        item.get("id"): item
+        for item in state.get("deliverables", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    process_deliverable_ids = {
+        item.get("id")
+        for item in process.get("deliverables", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    claim_ids = {
+        item.get("id")
+        for item in state.get("claims", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    candidate_gate_ids = {
+        item.get("id")
+        for item in process.get("gates", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    if preserved_history is None:
+        migration_targets = _migration_targets(dict(process), process_deliverable_ids)
+        claim_linked = _claim_linked_entity_ids(state)
+        derived_history: dict[str, tuple[str, ...]] = {}
+        for identifier, item in existing_deliverables.items():
+            if identifier in process_deliverable_ids:
+                continue
+            replacements = _historical_replacements(dict(item))
+            if (
+                item.get("status") == "superseded"
+                and replacements
+                and all(target in process_deliverable_ids for target in replacements)
+            ):
+                derived_history[identifier] = replacements
+            elif identifier in migration_targets and (
+                deliverable_has_history(item) or identifier in claim_linked
+            ):
+                derived_history[identifier] = migration_targets[identifier]
+        preserved_history = derived_history
+    history = {
+        identifier: tuple(targets)
+        for identifier, targets in preserved_history.items()
+    }
+    candidate_entity_ids = (
+        claim_ids
+        | process_deliverable_ids
+        | candidate_gate_ids
+        | set(history)
+    )
+    state_entity_ids = claim_ids | set(existing_deliverables) | {
+        item.get("id")
+        for item in state.get("gates", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    redirects, blocked = _gate_migration_redirects(state, process)
+
+    projected_keys: set[tuple[str, str, str]] = set()
+    for edge in process.get("dependencies", []):
+        if not isinstance(edge, Mapping):
+            continue
+        source = edge.get("source")
+        target = edge.get("target")
+        relation = edge.get("relation", "depends_on")
+        if (
+            isinstance(source, str)
+            and isinstance(target, str)
+            and isinstance(relation, str)
+            and source in candidate_entity_ids
+            and target in candidate_entity_ids
+        ):
+            projected_keys.add((source, relation, target))
+    for source, replacements in history.items():
+        for target in replacements:
+            projected_keys.add((source, "supersedes", target))
+
+    old_keys: set[tuple[str, str, str]] = set()
+    redirected_rows: list[dict[str, Any]] = []
+    for index, edge in enumerate(state.get("traceability", [])):
+        if not isinstance(edge, Mapping):
+            blocked.append(
+                {
+                    "kind": "invalid_existing_traceability",
+                    "path": f"$.traceability[{index}]",
+                }
+            )
+            continue
+        key = _trace_key(edge)
+        if key is None:
+            blocked.append(
+                {
+                    "kind": "invalid_existing_traceability",
+                    "path": f"$.traceability[{index}]",
+                }
+            )
+            continue
+        old_keys.add(key)
+        source, relation, target = key
+        missing_before = sorted({source, target} - state_entity_ids)
+        if missing_before:
+            blocked.append(
+                {
+                    "kind": "dangling_existing_traceability",
+                    "edge": _trace_record(key),
+                    "missing": missing_before,
+                }
+            )
+            continue
+        if source not in claim_ids and target not in claim_ids:
+            continue
+        redirected_source = redirects.get(source, source)
+        redirected_target = redirects.get(target, target)
+        redirected_key = (redirected_source, relation, redirected_target)
+        missing_after = sorted(
+            {redirected_source, redirected_target} - candidate_entity_ids
+        )
+        if missing_after:
+            blocked.append(
+                {
+                    "kind": "claim_traceability_removal",
+                    "edge": _trace_record(key),
+                    "missing": missing_after,
+                }
+            )
+            continue
+        projected_keys.add(redirected_key)
+        if redirected_key != key:
+            fields = []
+            if redirected_source != source:
+                fields.append("source")
+            if redirected_target != target:
+                fields.append("target")
+            redirected_rows.append(
+                {
+                    "before": _trace_record(key),
+                    "after": _trace_record(redirected_key),
+                    "fields": fields,
+                }
+            )
+
+    redirected_before = {
+        _trace_key(item["before"])
+        for item in redirected_rows
+        if isinstance(item.get("before"), Mapping)
+    }
+    redirected_after = {
+        _trace_key(item["after"])
+        for item in redirected_rows
+        if isinstance(item.get("after"), Mapping)
+    }
+    added_keys = projected_keys - old_keys - {
+        key for key in redirected_after if key is not None
+    }
+    removed_keys = old_keys - projected_keys - {
+        key for key in redirected_before if key is not None
+    }
+    projected = [_trace_record(key) for key in sorted(projected_keys)]
+    impact = {
+        "added": [_trace_record(key) for key in sorted(added_keys)],
+        "removed": [_trace_record(key) for key in sorted(removed_keys)],
+        "redirected": sorted(
+            redirected_rows,
+            key=lambda item: json.dumps(item, sort_keys=True),
+        ),
+        "blocked": sorted(
+            blocked,
+            key=lambda item: json.dumps(item, sort_keys=True),
+        ),
+    }
+    return projected, impact
+
+
+def effective_dependency_corrections(
+    state: Mapping[str, Any], process: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Return exact same-ID dependency corrections not yet reflected in state.
+
+    A declaration is replay-safe only when state is already at ``after``.  Any
+    other value must match ``before`` exactly; otherwise the declaration was
+    authored against another process revision and fails closed.
+    """
+
+    state_deliverables = {
+        item.get("id"): item
+        for item in state.get("deliverables", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    corrections = process.get("dependency_corrections", [])
+    if not isinstance(corrections, list):
+        raise ProjectError("process dependency_corrections must be an array")
+    effective: list[dict[str, Any]] = []
+    for index, correction in enumerate(corrections):
+        if not isinstance(correction, Mapping):
+            raise ProjectError(f"dependency correction {index} must be an object")
+        identifier = correction.get("deliverable")
+        before = correction.get("before")
+        after = correction.get("after")
+        prior = state_deliverables.get(identifier)
+        if prior is None:
+            continue
+        prior_dependencies = prior.get("depends_on", [])
+        if prior_dependencies == after:
+            continue
+        if prior_dependencies != before:
+            raise ProjectError(
+                f"dependency correction for {identifier!r} expected before "
+                f"{before!r}, but state contains {prior_dependencies!r}"
+            )
+        effective.append(deepcopy(dict(correction)))
+    return sorted(effective, key=lambda item: str(item.get("deliverable", "")))
+
+
 def sync_state_with_process(
     state: dict[str, Any],
     process: dict[str, Any],
@@ -953,6 +1371,25 @@ def sync_state_with_process(
         if isinstance(item, dict) and item.get("id")
     }
     migration_targets = _migration_targets(process, process_ids)
+    dependency_corrections = effective_dependency_corrections(state, process)
+    historical_corrections = [
+        correction
+        for correction in dependency_corrections
+        if deliverable_has_history(
+            existing_deliverables.get(correction.get("deliverable"), {})
+        )
+    ]
+    if historical_corrections and not apply_migrations:
+        raise ProjectError(
+            "re-tailoring requires explicit --apply-migrations for dependency "
+            "corrections: "
+            + ", ".join(
+                str(item["deliverable"]) for item in historical_corrections
+            )
+        )
+    corrected_history_ids = {
+        str(item["deliverable"]) for item in historical_corrections
+    }
     removed_ids = {
         identifier
         for identifier, item in existing_deliverables.items()
@@ -981,11 +1418,15 @@ def sync_state_with_process(
             "state-only superseded history has invalid replacements or trace links: "
             + ", ".join(invalid_superseded_history)
         )
+    claim_linked_entities = _claim_linked_entity_ids(state)
     newly_removed_history = [
         identifier
         for identifier in sorted(removed_ids)
         if identifier not in already_superseded_history
-        and _deliverable_has_history(existing_deliverables[identifier])
+        and (
+            deliverable_has_history(existing_deliverables[identifier])
+            or identifier in claim_linked_entities
+        )
     ]
     unmapped_removed = [
         identifier
@@ -1034,6 +1475,9 @@ def sync_state_with_process(
         ):
             if field in item:
                 generated[field] = deepcopy(item[field])
+        if identifier in corrected_history_ids:
+            generated["status"] = "blocked"
+            generated["blocked_reason"] = "DEPENDENCY_CONTRACT_CHANGED"
         deliverables.append(generated)
     preserved_history = {
         **already_superseded_history,
@@ -1064,19 +1508,70 @@ def sync_state_with_process(
         for item in process.get("gates", [])
         if isinstance(item, dict) and item.get("id") and item.get("checkpoint_id")
     }
+    gate_redirects, gate_migration_blockers = _gate_migration_redirects(state, process)
+    if gate_migration_blockers:
+        raise ProjectError(
+            "invalid or ambiguous gate migration: "
+            + json.dumps(gate_migration_blockers[0], sort_keys=True)
+        )
+    effective_gate_migrations = sorted(set(gate_redirects) & set(existing_gates))
+    if effective_gate_migrations and not apply_migrations:
+        raise ProjectError(
+            "re-tailoring requires explicit --apply-migrations for gates: "
+            + ", ".join(effective_gate_migrations)
+        )
+    explicit_gate_source = {
+        target: source for source, target in gate_redirects.items()
+    }
     migrated_checkpoint_ids: set[str] = set()
     gates = []
     for generated in _gate_records(process):
         prior = existing_gates.get(generated["id"], {})
-        legacy_id = checkpoint_by_gate.get(generated["id"])
+        checkpoint_id = checkpoint_by_gate.get(generated["id"])
+        implicit_legacy_id = (
+            checkpoint_id
+            if checkpoint_id
+            and generated["id"] == f"gate.{checkpoint_id}"
+            and checkpoint_id not in gate_redirects
+            else None
+        )
+        legacy_id = explicit_gate_source.get(
+            generated["id"], implicit_legacy_id
+        )
         legacy = existing_gates.get(legacy_id, {}) if legacy_id else {}
-        if legacy and legacy.get("status", "planned") != "planned":
+        if legacy and _gate_has_history(legacy):
             prior_status = prior.get("status", "planned")
             legacy_status = legacy.get("status", "planned")
-            if prior_status == "planned":
+            prior_approval = prior.get("approval")
+            legacy_approval = legacy.get("approval")
+            prior_has_history = _gate_has_history(prior)
+            if prior_has_history and (
+                prior_status != legacy_status
+                or (
+                    prior_approval is not None
+                    and legacy_approval is not None
+                    and prior_approval != legacy_approval
+                )
+            ):
+                raise ProjectError(
+                    f"gate migration {legacy_id!r} -> {generated['id']!r} "
+                    "has conflicting historical status or approval"
+                )
+            if not prior_has_history:
                 prior = legacy
                 migrated_checkpoint_ids.add(legacy_id)
             elif prior_status == legacy_status:
+                prior_stale_reason = prior.get("stale_reason")
+                legacy_stale_reason = legacy.get("stale_reason")
+                if (
+                    prior_stale_reason
+                    and legacy_stale_reason
+                    and prior_stale_reason != legacy_stale_reason
+                ):
+                    raise ProjectError(
+                        f"gate migration {legacy_id!r} -> {generated['id']!r} "
+                        "has conflicting historical stale reasons"
+                    )
                 merged = deepcopy(prior)
                 for field in ("reviews", "evidence", "blockers"):
                     values = list(merged.get(field, []))
@@ -1086,8 +1581,20 @@ def sync_state_with_process(
                     merged[field] = values
                 if merged.get("approval") is None and legacy.get("approval") is not None:
                     merged["approval"] = legacy.get("approval")
+                merged["review_epoch"] = max(
+                    int(prior.get("review_epoch", 0)),
+                    int(legacy.get("review_epoch", 0)),
+                )
+                merged["stale"] = bool(prior.get("stale")) or bool(
+                    legacy.get("stale")
+                )
+                merged["stale_reason"] = (
+                    prior_stale_reason or legacy_stale_reason
+                )
                 prior = merged
                 migrated_checkpoint_ids.add(legacy_id)
+        elif legacy and legacy_id in gate_redirects:
+            migrated_checkpoint_ids.add(legacy_id)
         old_fingerprint = prior.get("requirements_fingerprint")
         if old_fingerprint is None and prior:
             old_fingerprint = requirements_fingerprint(
@@ -1116,6 +1623,28 @@ def sync_state_with_process(
             if "GATE_REQUIREMENTS_CHANGED" not in blockers:
                 blockers.append("GATE_REQUIREMENTS_CHANGED")
             generated["blockers"] = blockers
+        corrected_requirements = sorted(
+            corrected_history_ids & set(generated.get("required_deliverables", []))
+        )
+        if corrected_requirements:
+            if generated.get("status") == "approved":
+                raise ProjectError(
+                    f"dependency correction cannot invalidate approved gate "
+                    f"{generated['id']!r}"
+                )
+            generated["status"] = "planned"
+            generated["approval"] = None
+            generated["review_epoch"] = int(prior.get("review_epoch", 0)) + 1
+            generated["stale"] = True
+            generated["stale_reason"] = "DEPENDENCY_CONTRACT_CHANGED"
+            blockers = [
+                value
+                for value in generated.get("blockers", [])
+                if value != "GATE_REQUIREMENTS_CHANGED"
+            ]
+            if "DEPENDENCY_CONTRACT_CHANGED" not in blockers:
+                blockers.append("DEPENDENCY_CONTRACT_CHANGED")
+            generated["blockers"] = blockers
         gates.append(generated)
     new_gate_ids = {gate["id"] for gate in gates}
     unsafe_gates = [
@@ -1123,7 +1652,10 @@ def sync_state_with_process(
         for identifier, item in existing_gates.items()
         if identifier not in new_gate_ids
         and identifier not in migrated_checkpoint_ids
-        and item.get("status") != "planned"
+        and (
+            _gate_has_history(item)
+            or identifier in claim_linked_entities
+        )
     ]
     if unsafe_gates:
         raise ProjectError(
@@ -1141,25 +1673,16 @@ def sync_state_with_process(
     updated["project"]["name"] = profile.get("name") or updated["project"]["name"]
     apply_phase_pointers(updated, process)
 
-    entity_ids = {item["id"] for item in deliverables} | {item["id"] for item in gates}
-    traceability: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for edge in process.get("dependencies", []):
-        source = edge.get("source")
-        target = edge.get("target")
-        relation = edge.get("relation", "depends_on")
-        key = (source, target, relation)
-        if source in entity_ids and target in entity_ids and key not in seen:
-            traceability.append({"source": source, "target": target, "relation": relation})
-            seen.add(key)
-    for source in sorted(preserved_history):
-        for target in preserved_history[source]:
-            key = (source, target, "supersedes")
-            if key not in seen:
-                traceability.append(
-                    {"source": source, "target": target, "relation": "supersedes"}
-                )
-                seen.add(key)
+    traceability, traceability_impact = project_traceability_projection(
+        state,
+        process,
+        preserved_history=preserved_history,
+    )
+    if traceability_impact["blocked"]:
+        raise ProjectError(
+            "re-tailoring would remove or ambiguously redirect Claim traceability: "
+            + json.dumps(traceability_impact["blocked"][0], sort_keys=True)
+        )
     updated["traceability"] = traceability
     problems = validate_state(updated)
     if problems:

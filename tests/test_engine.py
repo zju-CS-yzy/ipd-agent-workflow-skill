@@ -233,6 +233,34 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(state["gates"][0]["status"], "approved")
         self.assertEqual(len(state["gates"][0]["reviews"]), 2)
 
+    def test_gate_ready_clears_process_contract_staleness_blockers(self) -> None:
+        state = create_initial_state("demo")
+        state["gates"] = [
+            {
+                "id": "dcp-1",
+                "title": "Concept decision",
+                "kind": "DCP",
+                "status": "planned",
+                "required_deliverables": [],
+                "reviews": [],
+                "blockers": [
+                    "GATE_REQUIREMENTS_CHANGED",
+                    "DEPENDENCY_CONTRACT_CHANGED",
+                    "EXTERNAL_DECISION_PENDING",
+                ],
+                "stale": True,
+                "stale_reason": "DEPENDENCY_CONTRACT_CHANGED",
+            }
+        ]
+
+        state = set_gate_ready(state, "dcp-1")
+
+        gate = state["gates"][0]
+        self.assertEqual(gate["status"], "ready")
+        self.assertFalse(gate["stale"])
+        self.assertIsNone(gate["stale_reason"])
+        self.assertEqual(gate["blockers"], ["EXTERNAL_DECISION_PENDING"])
+
 
 if __name__ == "__main__":
     unittest.main()

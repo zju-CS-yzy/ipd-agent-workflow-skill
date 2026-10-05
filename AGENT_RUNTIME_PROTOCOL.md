@@ -22,15 +22,19 @@ does not roll the committed facts back.
 `core -> task_type -> capability -> project`. `task_profile.yaml` selects
 `capability_patterns`; the final project layer is the canonical
 `.ipd/process_extensions.yaml`. All layers are additive.
-The project layer may add Activities, review-required Deliverables, typed
-relations, independent TR/DCP criteria, and explicit migration mappings, but
+The project layer may add Activities, review-required Deliverables,
+project-owned generic Gates, typed relations, independent TR/DCP criteria,
+and explicit Deliverable, Gate, or dependency-correction migrations, but
 cannot delete or override an earlier-layer entity. Compiled entities expose
 their `provenance` layer/source and phase-derived `maturity`. A Deliverable
 dependency must be acyclic and cannot point from an earlier Phase to a later
 Phase.
 
 `tailor --preview` performs no writes. With `--json`, it returns only the fixed
-diff keys `added`, `removed`, `changed`, `migrations`, and `ambiguous`. Any
+diff keys `added`, `removed`, `changed`, `migrations`, and `ambiguous`.
+Traceability changes use those same keys: Claim-linked relations survive when
+both endpoints survive, explicit Gate migration redirects appear in `changed`,
+and any unexplained Claim-link loss blocks the apply through `ambiguous`. Any
 actual re-tailor fails while a Claim is active. Removing a historical,
 non-superseded Deliverable requires an explicit `replace` or `split` mapping
 plus `--apply-migrations`. On the first effective migration, an authorized
@@ -46,6 +50,16 @@ targets a Phase with an approved Gate or an already closed Phase, including
 TR/DCP criteria, also fails before writes. The only upgrade exception is
 deterministic schema `1.0` enrichment with core provenance, maturity, and
 canonical readiness criteria.
+
+Legacy generic Gate history moves only through an explicit one-to-one
+`gate_migrations` entry with a candidate Gate target. An exact same-ID
+Deliverable dependency repair uses `dependency_corrections` with matching
+`before` and `after` sets, `preserve_history: true`, and
+`require_reapproval: true`. Their first effective application shares the
+authorized-human `--apply-migrations` boundary and the append-only
+`process_migration` event. Dependency correction preserves evidence and review
+history, marks the affected Deliverable `blocked`, and invalidates affected
+unapproved Gate readiness. An already approved affected Gate fails closed.
 
 ## Progressive refinement
 
@@ -163,6 +177,10 @@ new claim until `refresh` and `verify` complete.
 - `.ipd/agent_runtime.yaml` records temporary Agent claims and runtime events.
 - `.ipd/artifact_bindings.yaml` maps repository paths to deliverables.
 - `.ipd/dashboard/` is generated output and must not be edited as a fact source.
+
+Artifact Binding globs are evaluated from the project root. A bare filename
+matches only that root file, `*` never crosses a path separator, and a complete
+`**` segment is the recursive operator.
 
 `tailor` preserves user-authored artifact rules and regenerates a framework-
 managed `evidence/<deliverable-id>/**` rule for every current deliverable. It

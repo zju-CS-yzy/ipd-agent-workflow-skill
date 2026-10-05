@@ -214,14 +214,40 @@ def process_migration_event_issues(event: Any) -> list[str]:
         )
     if event.get("process_schema_version") != "2.0":
         issues.append("field 'process_schema_version' must be '2.0'")
-    migrations = event.get("migrations")
-    if not isinstance(migrations, list) or not migrations:
-        issues.append("field 'migrations' must be a non-empty array")
+    migrations = event.get("migrations", [])
+    gate_migrations = event.get("gate_migrations", [])
+    dependency_corrections = event.get("dependency_corrections", [])
+    for field, values in (
+        ("migrations", migrations),
+        ("gate_migrations", gate_migrations),
+        ("dependency_corrections", dependency_corrections),
+    ):
+        if not isinstance(values, list):
+            issues.append(f"field {field!r} must be an array")
+    if not any(
+        isinstance(values, list) and values
+        for values in (migrations, gate_migrations, dependency_corrections)
+    ):
+        issues.append(
+            "at least one of 'migrations', 'gate_migrations', or "
+            "'dependency_corrections' must be a non-empty array"
+        )
+    if not isinstance(migrations, list):
         migrations = []
+    seen_migration_records: list[dict[str, Any]] = []
+    seen_migration_pairs: set[tuple[str, str]] = set()
+    migration_targets_by_source: dict[str, set[str]] = {}
+    migration_sources_by_target: dict[str, set[str]] = {}
+    migration_strategies_by_source: dict[str, set[str]] = {}
     for index, migration in enumerate(migrations):
         if not isinstance(migration, dict):
             issues.append(f"field 'migrations[{index}]' must be an object")
             continue
+        if migration in seen_migration_records:
+            issues.append(
+                f"field 'migrations[{index}]' duplicates an earlier migration entry"
+            )
+        seen_migration_records.append(migration)
         expected = {"from", "to", "strategy", "reason", "preserve_history"}
         if set(migration) != expected:
             issues.append(f"field 'migrations[{index}]' has invalid fields")
@@ -234,9 +260,145 @@ def process_migration_event_issues(event: Any) -> list[str]:
             issues.append(
                 f"field 'migrations[{index}].strategy' must be 'replace' or 'split'"
             )
+        source = migration.get("from")
+        target = migration.get("to")
+        strategy = migration.get("strategy")
+        if isinstance(source, str) and isinstance(target, str) and source == target:
+            issues.append(
+                f"field 'migrations[{index}]' must not map a Deliverable to itself"
+            )
+        if isinstance(source, str) and source and isinstance(target, str) and target:
+            pair = (source, target)
+            if pair in seen_migration_pairs:
+                issues.append(
+                    f"field 'migrations[{index}]' duplicates migration mapping {pair!r}"
+                )
+            seen_migration_pairs.add(pair)
+            migration_targets_by_source.setdefault(source, set()).add(target)
+            migration_sources_by_target.setdefault(target, set()).add(source)
+            if isinstance(strategy, str) and strategy:
+                migration_strategies_by_source.setdefault(source, set()).add(strategy)
         if migration.get("preserve_history") is not True:
             issues.append(
                 f"field 'migrations[{index}].preserve_history' must be true"
+            )
+    for source, targets in sorted(migration_targets_by_source.items()):
+        strategies = migration_strategies_by_source.get(source, set())
+        if len(strategies) > 1:
+            issues.append(
+                f"field 'migrations' source {source!r} must use exactly one strategy"
+            )
+        if len(targets) > 1 and strategies != {"split"}:
+            issues.append(
+                f"field 'migrations' source {source!r} with multiple targets must use split"
+            )
+    for target, sources in sorted(migration_sources_by_target.items()):
+        if len(sources) > 1:
+            issues.append(
+                f"field 'migrations' target {target!r} has multiple sources; merge is unsupported"
+            )
+    if not isinstance(gate_migrations, list):
+        gate_migrations = []
+    gate_sources: set[str] = set()
+    gate_targets: set[str] = set()
+    for index, migration in enumerate(gate_migrations):
+        if not isinstance(migration, dict):
+            issues.append(f"field 'gate_migrations[{index}]' must be an object")
+            continue
+        expected = {"from", "to", "reason", "preserve_history"}
+        if set(migration) != expected:
+            issues.append(f"field 'gate_migrations[{index}]' has invalid fields")
+        for field in ("from", "to", "reason"):
+            if not isinstance(migration.get(field), str) or not migration[field].strip():
+                issues.append(
+                    f"field 'gate_migrations[{index}].{field}' must be a non-empty string"
+                )
+        source = migration.get("from")
+        target = migration.get("to")
+        if isinstance(source, str) and isinstance(target, str) and source == target:
+            issues.append(
+                f"field 'gate_migrations[{index}]' must not map a Gate to itself"
+            )
+        if isinstance(source, str) and source:
+            if source in gate_sources:
+                issues.append(
+                    f"field 'gate_migrations[{index}].from' duplicates source {source!r}"
+                )
+            gate_sources.add(source)
+        if isinstance(target, str) and target:
+            if target in gate_targets:
+                issues.append(
+                    f"field 'gate_migrations[{index}].to' duplicates target {target!r}"
+                )
+            gate_targets.add(target)
+        if migration.get("preserve_history") is not True:
+            issues.append(
+                f"field 'gate_migrations[{index}].preserve_history' must be true"
+            )
+    if not isinstance(dependency_corrections, list):
+        dependency_corrections = []
+    corrected_deliverables: set[str] = set()
+    for index, correction in enumerate(dependency_corrections):
+        if not isinstance(correction, dict):
+            issues.append(
+                f"field 'dependency_corrections[{index}]' must be an object"
+            )
+            continue
+        expected = {
+            "deliverable",
+            "before",
+            "after",
+            "reason",
+            "preserve_history",
+            "require_reapproval",
+        }
+        if set(correction) != expected:
+            issues.append(
+                f"field 'dependency_corrections[{index}]' has invalid fields"
+            )
+        for field in ("deliverable", "reason"):
+            if not isinstance(correction.get(field), str) or not correction[field].strip():
+                issues.append(
+                    f"field 'dependency_corrections[{index}].{field}' must be a non-empty string"
+                )
+        deliverable = correction.get("deliverable")
+        if isinstance(deliverable, str) and deliverable.strip():
+            if deliverable in corrected_deliverables:
+                issues.append(
+                    f"field 'dependency_corrections[{index}].deliverable' "
+                    f"{deliverable!r} must have exactly one dependency correction"
+                )
+            corrected_deliverables.add(deliverable)
+        for field in ("before", "after"):
+            values = correction.get(field)
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) or not value for value in values
+            ):
+                issues.append(
+                    f"field 'dependency_corrections[{index}].{field}' must be an array of non-empty strings"
+                )
+            elif len(values) != len(set(values)):
+                issues.append(
+                    f"field 'dependency_corrections[{index}].{field}' must not contain duplicates"
+                )
+        before = correction.get("before")
+        after = correction.get("after")
+        if (
+            isinstance(before, list)
+            and isinstance(after, list)
+            and all(isinstance(value, str) for value in before + after)
+            and set(before) == set(after)
+        ):
+            issues.append(
+                f"field 'dependency_corrections[{index}]' must change dependencies"
+            )
+        if correction.get("preserve_history") is not True:
+            issues.append(
+                f"field 'dependency_corrections[{index}].preserve_history' must be true"
+            )
+        if correction.get("require_reapproval") is not True:
+            issues.append(
+                f"field 'dependency_corrections[{index}].require_reapproval' must be true"
             )
     return issues
 

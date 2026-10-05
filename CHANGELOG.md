@@ -1,8 +1,46 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.4.0-beta` maps to package version `0.4.0b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.4.1-beta` maps to package version `0.4.1b1`.
 
 ## [Unreleased]
+
+## [0.4.1b1] - 2026-10-06
+
+### Added
+
+- Added project-owned generic Gates, explicit one-to-one
+  `gate_migrations`, and exact same-ID `dependency_corrections` to the process
+  extension, compiled process, schema, and runtime audit contracts.
+- Added stable machine-readable `ipdctl validate --json` output for valid,
+  invalid, policy-invalid, and malformed state inputs.
+
+### Fixed
+
+- Re-tailoring now preserves state-owned Claim traceability whenever both
+  endpoints survive. Preview exposes `state.traceability` additions, removals,
+  and redirects through its existing five keys and fails closed before an
+  unexplained Claim-linked relationship can disappear.
+- Authorized dependency correction now requires exact `before` and `after`
+  sets, preserves evidence and review history, blocks the corrected work for
+  reapproval, invalidates affected unapproved Gate readiness, and rejects an
+  implicit rewrite of an approved Gate.
+- Artifact-binding globs are now project-root anchored: a bare filename no
+  longer matches an arbitrary nested file, `*` does not cross directories, and
+  a complete `**` segment supplies recursive matching on both POSIX and Windows
+  paths.
+- The Windows CLI configures real standard streams for UTF-8 so Chinese output
+  remains intact when redirected or captured.
+
+### Compatibility
+
+- v0.4.0 projects upgrade in place without rerunning `init`. Existing state,
+  Claim links, evidence, reviews, process/refinement history, and Dashboard
+  sources remain readable.
+- A normal additive re-tailor remains authorization-free. Only a first
+  effective Deliverable, Gate, or dependency-correction migration requires
+  `--apply-migrations` with an identified authorized human Actor and reason.
+- The serialized single-Claim model, authorized-human final approval boundary,
+  public schemas, and read-only Git/SVN behavior remain unchanged.
 
 ## [0.4.0b1] - 2026-10-05
 

@@ -9,6 +9,7 @@ import os
 import re
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
@@ -618,21 +619,40 @@ def normalize_relative_path(path: str | Path) -> str:
 
 
 def path_matches(path: str, pattern: str) -> bool:
-    """Match normalized project paths, including directory-wide ``/**``."""
+    """Match a repository-rooted path against a segment-aware glob.
+
+    Every pattern is anchored at the repository root.  ``*``, ``?``, and
+    character classes match within one path segment; a segment consisting of
+    exactly ``**`` matches zero or more complete segments.  Consequently a
+    literal such as ``README.md`` cannot also bind ``docs/README.md``.
+    """
 
     normalized_path = normalize_relative_path(path)
     normalized_pattern = normalize_relative_path(pattern)
-    if fnmatch.fnmatchcase(normalized_path, normalized_pattern):
-        return True
-    try:
-        if PurePosixPath(normalized_path).match(normalized_pattern):
-            return True
-    except ValueError:
-        pass
-    if normalized_pattern.endswith("/**"):
-        prefix = normalized_pattern[:-3].rstrip("/")
-        return normalized_path == prefix or normalized_path.startswith(prefix + "/")
-    return False
+    path_parts = tuple(normalized_path.split("/")) if normalized_path else ()
+    pattern_parts = (
+        tuple(normalized_pattern.split("/")) if normalized_pattern else ()
+    )
+
+    @lru_cache(maxsize=None)
+    def match_from(path_index: int, pattern_index: int) -> bool:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            return match_from(path_index, pattern_index + 1) or (
+                path_index < len(path_parts)
+                and match_from(path_index + 1, pattern_index)
+            )
+
+        return (
+            path_index < len(path_parts)
+            and fnmatch.fnmatchcase(path_parts[path_index], pattern_part)
+            and match_from(path_index + 1, pattern_index + 1)
+        )
+
+    return match_from(0, 0)
 
 
 def _rule_patterns(rule: Mapping[str, Any]) -> list[str]:

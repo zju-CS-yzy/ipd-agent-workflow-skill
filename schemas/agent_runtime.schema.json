@@ -57,6 +57,45 @@
         "reason": { "type": "string", "minLength": 1 },
         "preserve_history": { "const": true }
       }
+    },
+    "gateMigration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason", "preserve_history"],
+      "properties": {
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true }
+      }
+    },
+    "dependencyCorrection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deliverable",
+        "before",
+        "after",
+        "reason",
+        "preserve_history",
+        "require_reapproval"
+      ],
+      "properties": {
+        "deliverable": { "type": "string", "minLength": 1 },
+        "before": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "after": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "reason": { "type": "string", "minLength": 1 },
+        "preserve_history": { "const": true },
+        "require_reapproval": { "const": true }
+      }
     }
   },
   "type": "object",
@@ -113,6 +152,16 @@
             "type": "array",
             "minItems": 1,
             "items": { "$ref": "#/$defs/processMigration" }
+          },
+          "gate_migrations": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/gateMigration" }
+          },
+          "dependency_corrections": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/dependencyCorrection" }
           },
           "plan_id": { "type": "string", "minLength": 1 },
           "plan_digest": {
@@ -195,8 +244,12 @@
                 "reason",
                 "state_revision",
                 "previous_process_schema_version",
-                "process_schema_version",
-                "migrations"
+                "process_schema_version"
+              ],
+              "anyOf": [
+                { "required": ["migrations"] },
+                { "required": ["gate_migrations"] },
+                { "required": ["dependency_corrections"] }
               ],
               "properties": {
                 "actor_type": { "const": "human" },
