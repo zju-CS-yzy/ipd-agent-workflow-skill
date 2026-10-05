@@ -147,7 +147,7 @@ def _read_text(path: Path) -> str | None:
     if len(data) > 1_000_000 or b"\0" in data:
         return None
     try:
-        return data.decode("utf-8")
+        return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     except UnicodeDecodeError:
         return None
 
