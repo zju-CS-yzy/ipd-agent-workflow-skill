@@ -106,28 +106,36 @@ Recorded again on 2026-10-06 from final source, installed wheel, and installed s
 
 - [x] Source version references are prepared for `0.4.1b1` / `v0.4.1-beta`; no conflicting remote release Tag existed at freeze time on 2026-10-06.
 - [x] Release notes document upgrade behavior, beta compatibility, approval boundaries, Python support, process migration, and known limitations.
-- [ ] Freeze the reviewed release commit and create a new annotated `v0.4.1-beta` Tag; never reuse or move a published Tag.
-- [ ] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
-- [ ] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
+- [x] Freeze the reviewed release commit and create a new annotated `v0.4.1-beta` Tag; never reuse or move a published Tag.
+- [x] Attach one bilingual Skill ZIP, one wheel, one sdist, and checksums; do not commit build or generated project output.
+- [x] Install the published ZIP, wheel, and sdist in clean temporary locations and run both locale smoke tests.
 
 ## GitHub and publication
 
 - [x] Use `zju-CS-yzy/ipd-agent-workflow-skill` as the canonical GitHub repository and include its URLs in project metadata and documentation.
 - [x] Confirm the canonical remote repository exists and is reachable.
-- [ ] Push the reviewed default branch and `v0.4.1-beta` Tag.
+- [x] Push the reviewed default branch and `v0.4.1-beta` Tag.
 - [x] Require pull requests, the current `governance-gate`, an up-to-date branch, and resolved conversations on the default branch; restrict default-branch deletion and force pushes and published `v*` Tag mutation.
 - [ ] Require one independent approving review after a second trusted maintainer is appointed; until then, keep the owner bypass limited to pull requests so a single maintainer cannot push directly to the protected default branch.
 - [x] Enable private vulnerability reporting and point `SECURITY.md` to the canonical private security advisory process.
 - [x] Set the repository description and topics; confirm the Apache-2.0 license display, read-only default Actions permissions, immutable Action revisions, and public prerelease visibility.
-- [ ] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
-- [ ] After publication, install the public Skill ZIP, wheel, and sdist and run the capability-enabled `init` → `tailor` → `context` → `validate --json` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
+- [x] Confirm GitHub Actions passes for the pushed commit and Tag, and verify the published README, Skill files, license, workflow, and source archive.
+- [x] After publication, install the public Skill ZIP, wheel, and sdist and run the capability-enabled `init` → `tailor` → `context` → `validate --json` → `refresh` → `verify` smoke test in both locales; each run must produce 15 Dashboard files and a passed verification report.
 
 ## v0.4.1-beta publication record
 
-- [ ] Record the immutable release commit and annotated Tag object after publication.
-- [ ] Record the successful default-branch, Tag-test, and Tag-release workflow runs.
-- [ ] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
-- [ ] Record all six public artifact/locale smoke results, the direct v0.4.0 upgrade qualification, and removal of the temporary download root.
+- [x] Record the immutable release commit and annotated Tag object after publication.
+- [x] Record the successful default-branch, Tag-test, and Tag-release workflow runs.
+- [x] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
+- [x] Record all six public artifact/locale smoke results, the direct v0.4.0 upgrade qualification, and removal of the temporary download root.
+
+- Release commit: `3637b6af183140413385b4fc77034792f80c96e3`.
+- Annotated Tag object: `d8ad5680adfa3a59e8f314042a298aa3f8892954`; the Tag resolves to the release commit above.
+- GitHub Actions: default-branch test run [`37377369656`](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37377369656), Tag test run [`37377922904`](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37377922904), and Tag release run [`37377922878`](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37377922878) all completed successfully on 2026-10-06.
+- The public [`v0.4.1-beta` prerelease](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases/tag/v0.4.1-beta) exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`. Published SHA-256 values match all three downloads: Skill ZIP `3cb411814e03eade9cd7ba702b02ff0e3b4694b86ae5665c20cf3443e8b77e1c`, wheel `0b0e8b4ff4e2c326c4b4ebabf0927b28f4a02fc50aee218fbf56768f75a91a52`, and sdist `0edc25e9a82efa2d2735d1db7e79394369a29bffdf7b9edfbc5e8cafdd206981`.
+- Public-download qualification passed all six artifact/locale combinations (`skill-zip`, wheel, and sdist × `en` and `zh-CN`) plus the progressive-refinement simulation for every artifact. Every smoke run reported `ipdctl 0.4.1-beta`, passed `validate --json` and `verify --json`, and generated the exact 15-file Dashboard inventory; every progressive simulation passed with cleanup confirmed and 15 Dashboard files.
+- Direct `v0.4.0-beta` in-place upgrade qualification matched all 15/15 result fields and preserved the audited process history described in the upgrade-gate record above. The public Tag source archive contains the expected README, Skill contract, Apache-2.0 license, and pinned workflows.
+- The public-download and source-inspection temporary roots were removed after verification, and the repository remained clean with no generated project or build output.
 
 ## v0.4.0-beta publication record
 
