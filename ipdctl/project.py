@@ -6,14 +6,16 @@ import json
 import hashlib
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .dependencies import unmet_dependencies
 from .eligibility import (
     binding_eligibility,
     claim_protocol_readiness,
     deliverable_binding_status,
+    deliverable_refinement_status,
     eligibility_fingerprint,
+    requirements_fingerprint,
 )
 from .governance import apply_phase_pointers, phase_history_issues, phase_pointers
 from .i18n import get_translator, load_project_locale, normalize_locale
@@ -96,12 +98,41 @@ def project_consistency_issues(
         for item in state.get("deliverables", [])
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    if set(process_deliverables) != set(state_deliverables):
-        issues.append("process and state deliverable IDs differ; run ipdctl tailor")
+    missing_state_ids = set(process_deliverables) - set(state_deliverables)
+    if missing_state_ids:
+        issues.append("process deliverables are absent from state; run ipdctl tailor")
+    historical_state_ids = set(state_deliverables) - set(process_deliverables)
+    for identifier in sorted(historical_state_ids):
+        historical = state_deliverables[identifier]
+        replacements = list(historical.get("replacements", []))
+        if not replacements and historical.get("replacement"):
+            replacements = [historical["replacement"]]
+        if historical.get("status") != "superseded":
+            issues.append(
+                f"state-only deliverable {identifier!r} must be superseded history"
+            )
+        elif not replacements or any(
+            replacement not in process_deliverables for replacement in replacements
+        ):
+            issues.append(
+                f"state-only deliverable {identifier!r} has invalid process replacements"
+            )
     for identifier in sorted(set(process_deliverables) & set(state_deliverables)):
         expected = process_deliverables[identifier]
         actual = state_deliverables[identifier]
-        for field in ("title", "phase", "activity_id", "review_required"):
+        for field in (
+            "title",
+            "phase",
+            "activity_id",
+            "review_required",
+            "provenance",
+            "maturity",
+            "definition_state",
+            "refinement_required",
+            "refinement_trigger",
+            "refines",
+            "requires_artifact_owner",
+        ):
             if actual.get(field) != expected.get(field):
                 issues.append(
                     f"deliverable {identifier!r} field {field!r} differs from the tailored process"
@@ -195,6 +226,59 @@ def project_consistency_issues(
             issues.append("workflow_step 'work' requires one active claim")
         events = runtime.get("events", [])
         if isinstance(events, list):
+            process_refinements = {
+                item.get("id"): item
+                for item in process.get("refinements", [])
+                if isinstance(item, dict) and isinstance(item.get("id"), str)
+            }
+            refinement_event_rows: dict[str, list[dict[str, Any]]] = {}
+            for event in events:
+                if (
+                    isinstance(event, dict)
+                    and event.get("action") == "process_refinement_applied"
+                    and isinstance(event.get("plan_id"), str)
+                ):
+                    refinement_event_rows.setdefault(event["plan_id"], []).append(
+                        event
+                    )
+            for identifier, rows in sorted(refinement_event_rows.items()):
+                if len(rows) != 1:
+                    issues.append(
+                        f"runtime refinement plan {identifier!r} must have exactly one authorized event"
+                    )
+            refinement_events = {
+                identifier: rows[0]
+                for identifier, rows in refinement_event_rows.items()
+                if len(rows) == 1
+            }
+            for identifier, refinement in sorted(process_refinements.items()):
+                event = refinement_events.get(identifier)
+                if event is None:
+                    issues.append(
+                        f"process refinement {identifier!r} has no authorized runtime event"
+                    )
+                    continue
+                for process_field, event_field in (
+                    ("plan_digest", "plan_digest"),
+                    ("base_process_fingerprint", "base_process_fingerprint"),
+                    (
+                        "result_process_fingerprint",
+                        "result_process_fingerprint",
+                    ),
+                    ("root", "root"),
+                    ("children", "children"),
+                    ("invalidated_gates", "invalidated_gates"),
+                ):
+                    if refinement.get(process_field) != event.get(event_field):
+                        issues.append(
+                            f"process refinement {identifier!r} differs from its runtime event field {event_field!r}"
+                        )
+            for identifier in sorted(
+                set(refinement_events) - set(process_refinements)
+            ):
+                issues.append(
+                    f"runtime refinement event {identifier!r} is absent from the tailored process"
+                )
             current_revision = state.get("revision")
             for index, event in enumerate(events):
                 if not isinstance(event, dict) or event.get("action") != "claim":
@@ -228,7 +312,7 @@ def verification_input_snapshot(
     runtime = runtime if runtime is not None else load_runtime(root)
     file_hashes = {
         name: _file_hash(paths[name])
-        for name in ("profile", "process", "state", "bindings")
+        for name in ("profile", "extensions", "process", "state", "bindings")
     }
 
     evidence_references: set[str] = set()
@@ -345,6 +429,31 @@ def verification_input_snapshot(
             for event in runtime.get("events", [])
             if isinstance(event, dict) and event.get("action") == "advance_phase"
         ],
+        "refinement_history": [
+            {
+                key: event.get(key)
+                for key in (
+                    "action",
+                    "at",
+                    "plan_id",
+                    "plan_digest",
+                    "base_process_fingerprint",
+                    "result_process_fingerprint",
+                    "actor",
+                    "actor_type",
+                    "authorized",
+                    "reason",
+                    "state_revision",
+                    "root",
+                    "children",
+                    "invalidated_gates",
+                )
+                if key in event
+            }
+            for event in runtime.get("events", [])
+            if isinstance(event, dict)
+            and event.get("action") == "process_refinement_applied"
+        ],
         "evidence": evidence,
         "dashboard": dashboard,
         "repository": repository_record,
@@ -363,6 +472,50 @@ def verification_input_fingerprint(
     )
 
 
+def _legacy_process_projection(process: dict[str, Any]) -> dict[str, Any]:
+    """Project a v0.4 compilation onto the readable v0.3 process contract."""
+
+    projected = deepcopy(process)
+    projected["schema_version"] = "1.0"
+    projected.pop("migrations", None)
+    projected.pop("refinements", None)
+    profile = projected.get("profile")
+    if isinstance(profile, dict):
+        profile.pop("capability_patterns", None)
+    for field in (
+        "phases",
+        "activities",
+        "deliverables",
+        "technical_reviews",
+        "decision_checkpoints",
+        "gates",
+        "dependencies",
+        "review_requirements",
+    ):
+        for item in projected.get(field, []):
+            if not isinstance(item, dict):
+                continue
+            item.pop("provenance", None)
+            item.pop("maturity", None)
+            item.pop("criteria", None)
+            item.pop("definition_state", None)
+            item.pop("refinement_required", None)
+            item.pop("refinement_trigger", None)
+            item.pop("refines", None)
+            item.pop("requires_artifact_owner", None)
+    return projected
+
+
+def _process_matches_compilation(
+    current: dict[str, Any], candidate: dict[str, Any]
+) -> bool:
+    """Compare a process to its deterministic source compilation."""
+
+    if current.get("schema_version") == "1.0":
+        return current == _legacy_process_projection(candidate)
+    return current == candidate
+
+
 def project_paths(project_root: str | Path) -> dict[str, Path]:
     root = Path(project_root).resolve()
     ipd = root / ".ipd"
@@ -370,6 +523,7 @@ def project_paths(project_root: str | Path) -> dict[str, Path]:
         "root": root,
         "ipd": ipd,
         "profile": ipd / "task_profile.yaml",
+        "extensions": ipd / "process_extensions.yaml",
         "process": ipd / "tailored_process.yaml",
         "state": resolve_state_path(root),
         "runtime": ipd / "agent_runtime.yaml",
@@ -391,7 +545,12 @@ def initialize_project(
     locale = normalize_locale(locale)
     paths = project_paths(project_root)
     state_path = paths["root"] / ".ipd" / "project_state.yaml"
-    protected = [state_path, paths["profile"], paths["runtime"]]
+    protected = [
+        state_path,
+        paths["profile"],
+        paths["extensions"],
+        paths["runtime"],
+    ]
     existing = [path for path in protected if path.exists()]
     if existing and not force:
         raise ProjectError(
@@ -411,10 +570,14 @@ def initialize_project(
         "schema_version": "1.0",
         "project_name": name,
         "task_types": list(task_types),
+        "capability_patterns": [],
         "presentation": {"locale": locale},
     }
     write_state(paths["profile"], profile)
     write_state(state_path, create_initial_state(name, task_types))
+    from .process_extensions import load_process_extension
+
+    write_state(paths["extensions"], load_process_extension(None))
     write_state(paths["runtime"], create_runtime_state())
     try:
         from .reconcile import default_artifact_bindings
@@ -433,6 +596,7 @@ def _gate_records(process: dict[str, Any]) -> list[dict[str, Any]]:
     for item in process.get("gates", []):
         if not isinstance(item, dict) or not item.get("id"):
             continue
+        required = list(item.get("required_deliverables", []))
         records.append(
             {
                 "id": item["id"],
@@ -440,18 +604,345 @@ def _gate_records(process: dict[str, Any]) -> list[dict[str, Any]]:
                 "kind": item.get("kind", "Gate"),
                 "status": "planned",
                 "phase": item.get("phase"),
-                "required_deliverables": list(item.get("required_deliverables", [])),
+                "required_deliverables": required,
                 "reviews": [],
                 "evidence": [],
                 "blockers": [],
                 "approval": None,
+                "requirements_fingerprint": requirements_fingerprint(
+                    required, process
+                ),
+                "review_epoch": 0,
+                "stale": False,
+                "stale_reason": None,
             }
         )
     return records
 
 
+def _deliverable_has_history(item: dict[str, Any]) -> bool:
+    """Return whether removing a Deliverable would discard governed facts."""
+
+    return bool(
+        item.get("status", "planned") != "planned"
+        or item.get("evidence")
+        or item.get("reviews")
+        or item.get("blocked_reason")
+        or item.get("replacement")
+        or item.get("replacements")
+    )
+
+
+def governed_deliverable_rewrites(
+    diff: Mapping[str, Any],
+    state: Mapping[str, Any],
+    current_process: Mapping[str, Any],
+    candidate_process: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    """Return in-place semantic rewrites of Deliverables with governed facts.
+
+    Removing a historical Deliverable is already handled through explicit
+    process migrations.  Reusing the same identifier while changing its
+    process contract is equally unsafe: preserving the old status, evidence,
+    and reviews would make them appear to approve a different artifact.  The
+    caller must therefore require a new identifier plus an explicit migration.
+    """
+
+    state_deliverables = {
+        item.get("id"): item
+        for item in state.get("deliverables", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    current_deliverables = {
+        item.get("id"): item
+        for item in current_process.get("deliverables", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    candidate_deliverables = {
+        item.get("id"): item
+        for item in candidate_process.get("deliverables", [])
+        if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+    }
+    rewrites: dict[str, list[str]] = {}
+    for change in diff.get("changed", []):
+        if (
+            not isinstance(change, Mapping)
+            or change.get("collection") != "deliverables"
+            or not isinstance(change.get("id"), str)
+        ):
+            continue
+        identifier = change["id"]
+        prior = state_deliverables.get(identifier)
+        if not isinstance(prior, dict) or not _deliverable_has_history(prior):
+            continue
+        before = current_deliverables.get(identifier, {})
+        after = candidate_deliverables.get(identifier, {})
+        fields = []
+        for field in sorted(
+            {
+                value
+                for value in change.get("fields", [])
+                if isinstance(value, str) and value
+            }
+        ):
+            # Schema 2.0 deterministically enriches legacy schema 1.0 nodes
+            # with these derived facts.  Only first-time enrichment is safe;
+            # changing an already recorded value remains a governed rewrite.
+            if (
+                field in {"provenance", "maturity"}
+                and field not in before
+                and field in after
+            ):
+                continue
+            fields.append(field)
+        if fields:
+            rewrites[identifier] = fields
+    return dict(sorted(rewrites.items()))
+
+
+def closed_phase_process_changes(
+    diff: Mapping[str, Any],
+    state: Mapping[str, Any],
+    current_process: Mapping[str, Any],
+    candidate_process: Mapping[str, Any],
+) -> list[str]:
+    """Return semantic process changes that target an already closed Phase.
+
+    Gate requirement fingerprints deliberately describe Deliverable closure,
+    not the complete TR/DCP criteria contract.  This direct semantic guard is
+    therefore required in addition to ``phase_history_issues`` so a criteria,
+    activity, review rule, or trace edge cannot be added to a closed Phase
+    while retaining its historical approval.
+    """
+
+    phase_rows = sorted(
+        [
+            item
+            for item in candidate_process.get("phases", [])
+            if isinstance(item, Mapping)
+            and isinstance(item.get("id"), str)
+        ],
+        key=lambda item: (item.get("sequence", 0), item["id"]),
+    )
+    phase_ids = [item["id"] for item in phase_rows]
+    current_phase = state.get("project", {}).get("phase")
+    if current_phase not in phase_ids:
+        return []
+    protected_phases = set(phase_ids[: phase_ids.index(current_phase)])
+    protected_phases.update(
+        item.get("phase")
+        for item in state.get("gates", [])
+        if isinstance(item, Mapping)
+        and item.get("status") == "approved"
+        and isinstance(item.get("phase"), str)
+    )
+    if not protected_phases:
+        return []
+
+    phase_collections = {
+        "activities",
+        "deliverables",
+        "technical_reviews",
+        "decision_checkpoints",
+        "gates",
+    }
+
+    def indexed(process: Mapping[str, Any], collection: str) -> dict[str, Mapping[str, Any]]:
+        return {
+            item["id"]: item
+            for item in process.get(collection, [])
+            if isinstance(item, Mapping) and isinstance(item.get("id"), str)
+        }
+
+    before_indexes = {
+        collection: indexed(current_process, collection)
+        for collection in phase_collections | {"review_requirements"}
+    }
+    after_indexes = {
+        collection: indexed(candidate_process, collection)
+        for collection in phase_collections | {"review_requirements"}
+    }
+    before_entity_phases = {
+        identifier: item.get("phase")
+        for collection in phase_collections
+        for identifier, item in before_indexes[collection].items()
+    }
+    after_entity_phases = {
+        identifier: item.get("phase")
+        for collection in phase_collections
+        for identifier, item in after_indexes[collection].items()
+    }
+
+    def dependency_index(process: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+        result: dict[str, Mapping[str, Any]] = {}
+        for item in process.get("dependencies", []):
+            if not isinstance(item, Mapping):
+                continue
+            source = item.get("source")
+            target = item.get("target")
+            relation = item.get("relation")
+            if all(isinstance(value, str) for value in (source, target, relation)):
+                result[f"{source}|{relation}|{target}"] = item
+        return result
+
+    before_dependencies = dependency_index(current_process)
+    after_dependencies = dependency_index(candidate_process)
+    legacy_schema_enrichment = (
+        current_process.get("schema_version") == "1.0"
+        and candidate_process.get("schema_version") == "2.0"
+    )
+
+    def canonical_checkpoint_criteria(
+        collection: str,
+        identifier: str,
+        before_item: Mapping[str, Any],
+        after_item: Mapping[str, Any],
+    ) -> bool:
+        if (
+            not legacy_schema_enrichment
+            or collection not in {"technical_reviews", "decision_checkpoints"}
+            or "criteria" in before_item
+        ):
+            return False
+        criteria = after_item.get("criteria")
+        return bool(
+            isinstance(criteria, list)
+            and len(criteria) == 1
+            and isinstance(criteria[0], Mapping)
+            and criteria[0].get("id") == f"criterion.{identifier}.readiness"
+            and criteria[0].get("evidence_required") is True
+        )
+
+    affected: set[str] = set()
+    for bucket in ("added", "removed", "changed"):
+        for change in diff.get(bucket, []):
+            if not isinstance(change, Mapping):
+                continue
+            collection = change.get("collection")
+            identifier = change.get("id")
+            if not isinstance(collection, str) or not isinstance(identifier, str):
+                continue
+            if bucket == "changed":
+                before_item: Mapping[str, Any] = {}
+                after_item: Mapping[str, Any] = {}
+                if collection in before_indexes:
+                    before_item = before_indexes[collection].get(identifier, {})
+                    after_item = after_indexes[collection].get(identifier, {})
+                elif collection == "dependencies":
+                    before_item = before_dependencies.get(identifier, {})
+                    after_item = after_dependencies.get(identifier, {})
+                semantic_fields = {
+                    field
+                    for field in change.get("fields", [])
+                    if isinstance(field, str)
+                    and not (
+                        field in {"provenance", "maturity"}
+                        and field not in before_item
+                        and field in after_item
+                    )
+                    and not (
+                        field == "criteria"
+                        and canonical_checkpoint_criteria(
+                            collection,
+                            identifier,
+                            before_item,
+                            after_item,
+                        )
+                    )
+                }
+                if not semantic_fields:
+                    continue
+            phases: set[str] = set()
+            if collection in phase_collections:
+                for index in (before_indexes, after_indexes):
+                    phase = index[collection].get(identifier, {}).get("phase")
+                    if isinstance(phase, str):
+                        phases.add(phase)
+            elif collection == "review_requirements":
+                for index, entity_phases in (
+                    (before_indexes, before_entity_phases),
+                    (after_indexes, after_entity_phases),
+                ):
+                    subject = index[collection].get(identifier, {}).get("subject_id")
+                    phase = entity_phases.get(subject)
+                    if isinstance(phase, str):
+                        phases.add(phase)
+            elif collection == "dependencies":
+                parts = identifier.split("|", 2)
+                if len(parts) == 3:
+                    for endpoint in (parts[0], parts[2]):
+                        for entity_phases in (
+                            before_entity_phases,
+                            after_entity_phases,
+                        ):
+                            phase = entity_phases.get(endpoint)
+                            if isinstance(phase, str):
+                                phases.add(phase)
+            if phases & protected_phases:
+                affected.add(f"{collection}:{identifier}")
+    return sorted(affected)
+
+
+def _historical_replacements(item: dict[str, Any]) -> tuple[str, ...]:
+    replacements = item.get("replacements", [])
+    if isinstance(replacements, list) and replacements:
+        return tuple(
+            value for value in replacements if isinstance(value, str) and value
+        )
+    replacement = item.get("replacement")
+    return (replacement,) if isinstance(replacement, str) and replacement else ()
+
+
+def _has_supersedes_trace(
+    state: dict[str, Any], source: str, target: str
+) -> bool:
+    return any(
+        isinstance(link, dict)
+        and link.get("relation") == "supersedes"
+        and (
+            (link.get("source") == source and link.get("target") == target)
+            or (link.get("source") == target and link.get("target") == source)
+        )
+        for link in state.get("traceability", [])
+    )
+
+
+def _migration_targets(
+    process: dict[str, Any], process_ids: set[str]
+) -> dict[str, tuple[str, ...]]:
+    """Return validated Deliverable replacement targets keyed by old ID."""
+
+    targets: dict[str, tuple[str, ...]] = {}
+    for index, migration in enumerate(process.get("migrations", [])):
+        if not isinstance(migration, dict):
+            raise ProjectError(f"process migration {index} must be an object")
+        source = migration.get("from")
+        raw_targets = migration.get("to")
+        if not isinstance(source, str) or not source:
+            raise ProjectError(f"process migration {index} has an invalid source")
+        if isinstance(raw_targets, str):
+            raw_targets = [raw_targets]
+        if not isinstance(raw_targets, list) or not raw_targets or any(
+            not isinstance(item, str) or not item for item in raw_targets
+        ):
+            raise ProjectError(f"process migration {source!r} has invalid targets")
+        normalized = tuple(dict.fromkeys(raw_targets))
+        unknown = sorted(set(normalized) - process_ids)
+        if unknown:
+            raise ProjectError(
+                f"process migration {source!r} references unknown targets: "
+                + ", ".join(unknown)
+            )
+        previous = targets.get(source, ())
+        targets[source] = tuple(dict.fromkeys(previous + normalized))
+    return targets
+
+
 def sync_state_with_process(
-    state: dict[str, Any], process: dict[str, Any]
+    state: dict[str, Any],
+    process: dict[str, Any],
+    *,
+    apply_migrations: bool = False,
 ) -> dict[str, Any]:
     """Merge a deterministic tailored process into state without losing facts."""
 
@@ -461,15 +952,55 @@ def sync_state_with_process(
         for item in process.get("deliverables", [])
         if isinstance(item, dict) and item.get("id")
     }
-    unsafe_removed = [
+    migration_targets = _migration_targets(process, process_ids)
+    removed_ids = {
         identifier
         for identifier, item in existing_deliverables.items()
-        if identifier not in process_ids and item.get("status") != "planned"
-    ]
-    if unsafe_removed:
+        if identifier not in process_ids
+    }
+    already_superseded_history: dict[str, tuple[str, ...]] = {}
+    invalid_superseded_history: list[str] = []
+    for identifier in sorted(removed_ids):
+        item = existing_deliverables[identifier]
+        if item.get("status") != "superseded":
+            continue
+        replacements = _historical_replacements(item)
+        if (
+            replacements
+            and all(target in process_ids for target in replacements)
+            and all(
+                _has_supersedes_trace(state, identifier, target)
+                for target in replacements
+            )
+        ):
+            already_superseded_history[identifier] = replacements
+        else:
+            invalid_superseded_history.append(identifier)
+    if invalid_superseded_history:
         raise ProjectError(
-            "re-tailoring would remove active or historical deliverables: "
-            + ", ".join(sorted(unsafe_removed))
+            "state-only superseded history has invalid replacements or trace links: "
+            + ", ".join(invalid_superseded_history)
+        )
+    newly_removed_history = [
+        identifier
+        for identifier in sorted(removed_ids)
+        if identifier not in already_superseded_history
+        and _deliverable_has_history(existing_deliverables[identifier])
+    ]
+    unmapped_removed = [
+        identifier
+        for identifier in newly_removed_history
+        if identifier not in migration_targets
+    ]
+    if unmapped_removed:
+        raise ProjectError(
+            "re-tailoring would remove unmapped historical deliverables: "
+            + ", ".join(sorted(unmapped_removed))
+        )
+    if newly_removed_history and not apply_migrations:
+        raise ProjectError(
+            "re-tailoring requires explicit --apply-migrations for historical "
+            "deliverables: " + ", ".join(newly_removed_history)
         )
 
     updated = revised_copy(state)
@@ -477,21 +1008,54 @@ def sync_state_with_process(
     for item in process.get("deliverables", []):
         identifier = item["id"]
         prior = existing_deliverables.get(identifier, {})
-        deliverables.append(
-            {
-                "id": identifier,
-                "title": item.get("title") or identifier,
-                "status": prior.get("status", "planned"),
-                "phase": item.get("phase"),
-                "activity_id": item.get("activity_id"),
-                "review_required": bool(item.get("review_required", True)),
-                "depends_on": list(item.get("depends_on", [])),
-                "evidence": list(prior.get("evidence", [])),
-                "reviews": list(prior.get("reviews", [])),
-                "blocked_reason": prior.get("blocked_reason"),
-                "replacement": prior.get("replacement"),
-            }
-        )
+        generated = {
+            "id": identifier,
+            "title": item.get("title") or identifier,
+            "status": prior.get("status", "planned"),
+            "phase": item.get("phase"),
+            "activity_id": item.get("activity_id"),
+            "review_required": bool(item.get("review_required", True)),
+            "depends_on": list(item.get("depends_on", [])),
+            "evidence": list(prior.get("evidence", [])),
+            "reviews": list(prior.get("reviews", [])),
+            "blocked_reason": prior.get("blocked_reason"),
+            "replacement": prior.get("replacement"),
+        }
+        if prior.get("replacements"):
+            generated["replacements"] = list(prior["replacements"])
+        for field in (
+            "provenance",
+            "maturity",
+            "definition_state",
+            "refinement_required",
+            "refinement_trigger",
+            "refines",
+            "requires_artifact_owner",
+        ):
+            if field in item:
+                generated[field] = deepcopy(item[field])
+        deliverables.append(generated)
+    preserved_history = {
+        **already_superseded_history,
+        **{
+            identifier: migration_targets[identifier]
+            for identifier in newly_removed_history
+        },
+    }
+    for identifier in sorted(preserved_history):
+        prior = deepcopy(existing_deliverables[identifier])
+        replacements = list(preserved_history[identifier])
+        if identifier in newly_removed_history:
+            prior["status"] = "superseded"
+            prior["blocked_reason"] = None
+            prior["replacement"] = replacements[0]
+            prior["replacements"] = replacements
+        prior["depends_on"] = [
+            dependency
+            for dependency in prior.get("depends_on", [])
+            if dependency in process_ids or dependency in preserved_history
+        ]
+        deliverables.append(prior)
     updated["deliverables"] = deliverables
 
     existing_gates = {item["id"]: item for item in state.get("gates", [])}
@@ -524,9 +1088,34 @@ def sync_state_with_process(
                     merged["approval"] = legacy.get("approval")
                 prior = merged
                 migrated_checkpoint_ids.add(legacy_id)
-        for field in ("status", "reviews", "evidence", "blockers", "approval"):
+        old_fingerprint = prior.get("requirements_fingerprint")
+        if old_fingerprint is None and prior:
+            old_fingerprint = requirements_fingerprint(
+                prior.get("required_deliverables", []), state
+            )
+        for field in (
+            "status",
+            "reviews",
+            "evidence",
+            "blockers",
+            "approval",
+            "review_epoch",
+            "stale",
+            "stale_reason",
+        ):
             if field in prior:
                 generated[field] = deepcopy(prior[field])
+        new_fingerprint = generated["requirements_fingerprint"]
+        if prior and old_fingerprint != new_fingerprint:
+            generated["status"] = "planned"
+            generated["approval"] = None
+            generated["review_epoch"] = int(prior.get("review_epoch", 0)) + 1
+            generated["stale"] = True
+            generated["stale_reason"] = "GATE_REQUIREMENTS_CHANGED"
+            blockers = list(generated.get("blockers", []))
+            if "GATE_REQUIREMENTS_CHANGED" not in blockers:
+                blockers.append("GATE_REQUIREMENTS_CHANGED")
+            generated["blockers"] = blockers
         gates.append(generated)
     new_gate_ids = {gate["id"] for gate in gates}
     unsafe_gates = [
@@ -563,10 +1152,22 @@ def sync_state_with_process(
         if source in entity_ids and target in entity_ids and key not in seen:
             traceability.append({"source": source, "target": target, "relation": relation})
             seen.add(key)
+    for source in sorted(preserved_history):
+        for target in preserved_history[source]:
+            key = (source, target, "supersedes")
+            if key not in seen:
+                traceability.append(
+                    {"source": source, "target": target, "relation": "supersedes"}
+                )
+                seen.add(key)
     updated["traceability"] = traceability
     problems = validate_state(updated)
     if problems:
         raise ProjectError(f"tailored state is invalid: {problems[0]}")
+    unchanged = deepcopy(updated)
+    unchanged["revision"] = state.get("revision")
+    if unchanged == state:
+        return state
     return updated
 
 
@@ -676,12 +1277,26 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     if process is not None:
         consistency = sorted(
             set(
-                project_consistency_issues(state, process)
+                project_consistency_issues(state, process, runtime)
                 + phase_history_issues(state, process, runtime)
             )
         )
-        if consistency:
-            raise ProjectError(f"inconsistent project bundle: {consistency[0]}")
+        recoverable = {
+            "workflow_step 'work' requires one active claim",
+        }
+        fatal_consistency = [
+            issue
+            for issue in consistency
+            if issue not in recoverable
+            and not (
+                issue.startswith("in-progress deliverable ")
+                and issue.endswith(" has no active claim; recover it before verify")
+            )
+        ]
+        if fatal_consistency:
+            raise ProjectError(
+                f"inconsistent project bundle: {fatal_consistency[0]}"
+            )
     current_phase = state["project"]["phase"]
     eligibility = binding_eligibility(
         paths["root"], state, runtime, bindings_path=paths["bindings"]
@@ -691,7 +1306,17 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     graph = {item["id"]: item.get("depends_on", []) for item in state["deliverables"]}
     available: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
+    refinements: list[dict[str, Any]] = []
     for item in state["deliverables"]:
+        refinement = deliverable_refinement_status(state, item["id"])
+        if refinement.get("refinement_status") != "not_required":
+            refinements.append(
+                {
+                    "id": item["id"],
+                    "title": item["title"],
+                    **refinement,
+                }
+            )
         if item.get("phase") not in {None, current_phase}:
             continue
         unmet = list(unmet_dependencies(item["id"], graph, status_by_id))
@@ -754,6 +1379,8 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
                 }
             )
     repo = inspect_repository(paths["root"])
+    from .refinement import process_fingerprint
+
     return {
         "project": state["project"]["name"],
         "phase": state["project"]["phase"],
@@ -762,6 +1389,15 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         "gate": state["project"].get("current_gate"),
         "workflow_step": state["project"]["workflow_step"],
         "state_revision": state["revision"],
+        "process_fingerprint": (
+            process_fingerprint(process) if process is not None else None
+        ),
+        "refinements": sorted(refinements, key=lambda item: item["id"]),
+        "refinement_due": sorted(
+            item["id"]
+            for item in refinements
+            if item.get("refinement_status") == "due"
+        ),
         "available_tasks": available,
         "blocked_items": blocked,
         "active_claims": runtime["active_claims"],
@@ -783,7 +1419,7 @@ def refresh_project(project_root: str | Path) -> dict[str, Any]:
     current_runtime, _ = expire_claims(load_runtime(paths["root"]))
     consistency = sorted(
         set(
-            project_consistency_issues(state, process)
+            project_consistency_issues(state, process, current_runtime)
             + phase_history_issues(state, process, current_runtime)
         )
     )
@@ -870,12 +1506,56 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
         )
     else:
         try:
-            from .tailoring import validate_tailored_process
+            from .process_extensions import load_process_extension
+            from .tailoring import (
+                load_profile,
+                tailor_profile,
+                validate_tailored_process,
+            )
 
             for message in validate_tailored_process(process):
                 issue_rows.append({"path": "$.process", "message": message})
-        except ImportError:
-            pass
+            extension_source = (
+                paths["extensions"] if paths["extensions"].is_file() else None
+            )
+            extension = load_process_extension(extension_source)
+            compiled = tailor_profile(load_profile(paths["profile"]), extension)
+            legacy_with_v2_inputs = process.get("schema_version") == "1.0" and (
+                bool(compiled.get("profile", {}).get("capability_patterns"))
+                or any(
+                    extension.get(field)
+                    for field in (
+                        "activities",
+                        "deliverables",
+                        "dependencies",
+                        "checkpoint_criteria",
+                        "migrations",
+                        "refinement_requirements",
+                        "refinements",
+                    )
+                )
+            )
+            if legacy_with_v2_inputs or not _process_matches_compilation(
+                process, compiled
+            ):
+                issue_rows.append(
+                    {
+                        "path": "$.process",
+                        "code": "tailored_process_stale",
+                        "message": (
+                            "tailored process does not match task_profile.yaml and "
+                            "process_extensions.yaml; run ipdctl tailor"
+                        ),
+                    }
+                )
+        except (ImportError, OSError, TypeError, ValueError) as exc:
+            issue_rows.append(
+                {
+                    "path": "$.tailoring_inputs",
+                    "code": "tailoring_input_invalid",
+                    "message": str(exc),
+                }
+            )
         for message in project_consistency_issues(state, process, runtime):
             issue_rows.append(
                 {

@@ -28,7 +28,7 @@ GATE_KINDS = ("TR", "DCP", "Gate")
 GATE_STATUSES = ("planned", "ready", "approved", "rejected")
 REVIEWER_TYPES = ("human", "agent")
 REVIEW_DECISIONS = ("approve", "reject")
-TRACE_RELATIONS = ("supports", "depends_on", "verifies", "supersedes")
+TRACE_RELATIONS = ("supports", "depends_on", "verifies", "supersedes", "refines")
 
 DELIVERABLE_TRANSITIONS = {
     "planned": {"in_progress", "blocked", "superseded"},

@@ -82,6 +82,11 @@ bindings:
 ```
 
 Every actually changed critical path must resolve to exactly one Deliverable.
+An omitted Binding `role` or explicit `role: owner` maps exactly one
+`deliverable` and is the only role that authorizes a Claim. A
+`role: shared_evidence` rule must use a `deliverables` list and
+`critical: false`; it records evidence shared by several Deliverables but does
+not authorize their Claims or satisfy a critical path's required Owner.
 For a reviewed dirty working tree that predates v0.3.2, use
 `adopt-baseline --preview` and then an explicitly authorized-human
 `adopt-baseline` decision instead of fabricating a historical Claim. Each
@@ -133,7 +138,93 @@ duplicate the event.
 
 ## Tailoring
 
-Tailoring may add deliverables or reviewers, merge non-final reviews, and tighten evidence requirements. It must not remove traceability, accept work without evidence, close work with unmet dependencies, or delegate final gate approval to an agent. Re-tailoring regenerates only framework-managed evidence rules; user-authored source and test bindings remain intact.
+Tailoring compiles four additive layers in one fixed order:
+
+`core -> task_type -> capability -> project`
+
+`task_profile.yaml` selects task types and optional `capability_patterns`. The
+built-in `sourced_component_integration` pack is deliberately generic and adds
+candidate validation, selection decision, and integration baseline stages. It
+does not contain vendor, robot, sensor, project path, or Owner data.
+
+The canonical project layer is `.ipd/process_extensions.yaml`. It may add:
+
+- Activities and review-required Deliverables;
+- typed `depends_on`, `supports`, `verifies`, or `supersedes` relations;
+- independent evidence-required criteria for a named `tr.<phase>` or
+  `dcp.<phase>` checkpoint; and
+- explicit `replace` or `split` migration mappings with
+  `preserve_history: true`; and
+- explicit refinement requirements and the applied refinement lineage.
+
+It cannot delete or override an earlier-layer entity. Duplicate IDs, unknown
+references, cycles, and an earlier-Phase Deliverable depending on a
+later-Phase Deliverable fail validation. Compiled Phase, Activity,
+Deliverable, TR, DCP, and Gate nodes record `provenance.layer` and
+`provenance.source_id`; phase-derived `maturity` provides a stable lifecycle
+projection: `concept=defined`, `plan=selected`, `develop=integrated`,
+`qualify=verified`, `launch=released`, and `lifecycle=monitored`. TR and DCP
+retain separate criteria rather than sharing one generic Gate checklist.
+
+Use `ipdctl tailor --preview` before changing an existing process. Preview is
+zero-write and `--json` returns `added`, `removed`, `changed`, `migrations`,
+and `ambiguous`. Any actual re-tailor fails while a Claim is active. Removing a
+historical non-superseded Deliverable requires an explicit mapping and
+`--apply-migrations`; the first effective migration additionally requires an
+authorized human Actor and reason. The old node remains in state as
+`superseded`, preserving evidence and reviews, while replacement nodes remain
+`planned` without copied evidence or acceptance. A migration must never be
+inferred from similar names or content.
+
+An ordinary re-tailor cannot reinterpret an existing Deliverable with governed
+status, evidence, or reviews under the same ID. Model the replacement with a
+new ID and the explicit migration contract. Changes targeting a Phase with an
+approved Gate or a Phase earlier than the current Phase—including TR/DCP
+criteria—also fail closed before any authority file is written; inspect them
+through the zero-write preview. A schema `1.0` process may receive only the
+deterministic core provenance, maturity, and canonical readiness-criteria
+enrichment needed for schema `2.0`.
+
+## Progressive refinement
+
+Use progressive refinement when accepted project evidence determines a
+same-Phase module, function, or work-package structure that could not be known
+from the reusable template. The project extension declares the root and
+trigger; it must not embed a guessed decomposition in a task-type policy.
+
+First inspect `context --json`. When the root is `due`, prepare a separate
+schema `1.0` plan with `mode: expand`, the exact current
+`base_process_fingerprint`, an auditable reason and evidence basis, Activities,
+review-required child Deliverables, and explicit relations. Run
+`refine --preview --json` and review its process diff, Gate impact, and Binding
+impact. Preview must not modify any authority file or runtime event.
+
+Only an authorized human may apply the reviewed plan. Application is blocked
+by any active Claim, a pending trigger, a stale base fingerprint, or a root
+outside the current Phase. The parent becomes `abstract` but retains all prior
+evidence and reviews. Children start `planned` with empty evidence and review
+history. A child can itself declare a later refinement trigger, allowing
+multiple controlled rounds; each plan ID is append-only and replay-safe.
+
+Treat `refines` as structural ancestry only. It must be same-Phase and acyclic,
+and it never satisfies or creates an execution dependency. Use `depends_on`
+explicitly for execution order. Gate readiness uses concrete leaf closure. If
+that closure changes, preserve old Gate evidence but invalidate approval and
+require a current review epoch. Do not copy or split an Owner Binding: each new
+concrete child that requires ownership remains unclaimable until a human has
+provided an explicit user-authored Owner rule. Placeholder and abstract nodes
+are structural and do not require an Owner until concrete work is materialized.
+
+Tailoring may add deliverables or reviewers, merge non-final reviews, and
+tighten evidence requirements. It must not remove traceability, accept work
+without evidence, close work with unmet dependencies, or delegate final gate
+approval to an agent. Re-tailoring regenerates only framework-managed evidence
+rules; user-authored source and test bindings remain intact.
+
+Newly compiled process files use schema `2.0`. A schema `1.0` process remains
+readable only while it semantically matches a profile without enabled
+capabilities and an empty project extension. Preview and re-tailor before
+enabling either layer.
 
 Record a tailored choice in project documentation or policy evidence so that another reviewer can understand why the default flow changed.
 

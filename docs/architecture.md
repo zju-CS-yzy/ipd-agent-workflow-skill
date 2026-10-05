@@ -12,7 +12,9 @@ The repository has two coordinated surfaces: `SKILL.md` guides Agent decisions, 
 | `ipdctl.state` | Create, load, and atomically persist state | Accept partial writes or silently repair invalid state |
 | `ipdctl.validation` | Enforce structure, cross-references, evidence, closure, and gate invariants | Mutate state |
 | `ipdctl.engine` | Return revised copies for legal transitions | Finalize a gate without recorded authorized-human approval |
-| `ipdctl.process_model` / `tailoring` | Compile generic task profiles into stable IPD process facts | Embed project-instance data |
+| `ipdctl.process_model` / `tailoring` | Compile `core -> task_type -> capability -> project` into stable IPD process facts and pure diffs | Embed project-instance data in reusable policies or infer migrations |
+| `ipdctl.process_extensions` | Load and validate additive `.ipd/process_extensions.yaml` Activities, Deliverables, relations, criteria, and migrations | Delete or override earlier-layer entities |
+| `ipdctl.refinement` | Validate fingerprinted `expand` plans, derive structural leaf closure, and merge reviewed additions into the project layer | Infer decomposition, mutate runtime state, or treat `refines` as execution order |
 | `ipdctl.dependencies` | Find cycles and unmet deliverable dependencies | Infer missing dependencies |
 | `ipdctl.runtime` | Record Agent claims, leases, and command events | Authenticate human identities or provide distributed locking |
 | `ipdctl.transaction` | Serialize one project's CLI mutations and recover interrupted multi-file writes | Coordinate different clones or replace VCS locking |
@@ -30,7 +32,31 @@ The repository has two coordinated surfaces: `SKILL.md` guides Agent decisions, 
 
 ## Data flow
 
-An Agent initializes a project, tailors a process from the task profile, reads context, claims eligible work, attaches evidence, and submits it for review. Claim preflight and every read surface consume one binding-eligibility projection. Each new Claim records an exact binding window; successful verification carries an exact artifact baseline into the next iteration. Existing dirty projects use an append-only, explicitly human-authorized baseline-adoption event rather than a fabricated Claim or VCS mutation. Deliverables and Gates are explicit review subjects. Authorized human decisions are appended rather than replaced; the latest authorized human decision governs the current outcome while the full history remains auditable. `advance-phase` succeeds only after the current phase's required Gate subjects satisfy their controls. Refresh derives dashboards from process/state facts. Verify checks process, state, evidence paths, output hashes, binding eligibility, and repository reconciliation. Final deliverable and TR/DCP approval never comes from an Agent identity.
+An Agent initializes a project, compiles a process from the task profile and project extension, reads context, claims eligible work, attaches evidence, and submits it for review. Compilation is deterministic and additive in the fixed order `core -> task_type -> capability -> project`; every process node carries its layer/source provenance and phase-derived maturity, while TR and DCP keep independent criteria. Dependency validation rejects cycles and earlier-Phase Deliverables that depend on later-Phase Deliverables.
+
+`tailor --preview` computes a pure five-part diff without writing. An actual re-tailor is blocked by an active Claim. A first effective removal of a historical Deliverable requires an explicit project migration mapping plus an authorized human application. The old state-only node retains its evidence and reviews as `superseded`; new targets start `planned`, and one append-only `process_migration` event records the decision. No heuristic redistributes historical acceptance.
+
+The same boundary prevents an ordinary re-tailor from preserving old approval
+while changing an existing Deliverable's semantics under the same ID. Such a
+change requires a new ID and explicit migration. A semantic change that targets
+an approved or already closed Phase—including TR/DCP criteria—is rejected
+before writes; the preview remains available to design the controlled
+replacement. A schema `1.0` process may receive only the deterministic core
+provenance, maturity, and canonical readiness-criteria enrichment during its
+schema `2.0` upgrade.
+
+When an explicit project refinement trigger becomes due, `refine --preview`
+validates a fingerprinted `expand` plan without writing. Authorized application
+keeps the reviewed parent as an abstract historical aggregate and adds clean
+planned children. Structural `refines` links are rendered and audited but do
+not enter the `depends_on` graph. Gate readiness resolves abstract requirements
+to concrete leaves; a changed leaf set invalidates the old approval, increments
+the review epoch, and retains the earlier evidence as history. Binding impact
+is reported, but Owner rules are never inferred or reassigned. Concrete
+refined children require explicit user-authored Owners; placeholder and
+abstract nodes remain non-claimable structural facts without Owner rules.
+
+Claim preflight and every read surface consume one binding-eligibility projection. Each new Claim records an exact binding window; successful verification carries an exact artifact baseline into the next iteration. Existing dirty projects use an append-only, explicitly human-authorized baseline-adoption event rather than a fabricated Claim or VCS mutation. Deliverables and Gates are explicit review subjects. Authorized human decisions are appended rather than replaced; the latest authorized human decision governs the current outcome while the full history remains auditable. `advance-phase` succeeds only after the current phase's required Gate subjects satisfy their controls. Refresh derives dashboards from process/state facts, including provenance, maturity, and checkpoint criteria for inspection. Verify recompiles the expected process, checks process extensions, state, evidence paths, output hashes, binding eligibility, and repository reconciliation. Final deliverable and TR/DCP approval never comes from an Agent identity.
 
 State writes use a temporary file in the destination directory followed by an atomic replacement. A successful engine operation increments `revision` exactly once and returns a new object, leaving the input unchanged. A crash-released operating-system mutex keyed by the resolved project path covers recovery and the complete command; its hashed lock file lives in the current user's system temporary directory and is not a project artifact. Mutating CLI commands then hold a project-local journal across their complete read, preflight, compute, and write cycle. The journal first acquires its canonical name, then snapshots authority files and generated outputs before mutation, restores them after an exception or terminated process, and atomically retires its active name before post-commit cleanup. A concurrent project command in the same local user environment fails explicitly and may be retried after the active command finishes. Different operating-system accounts or temporary-directory namespaces must not operate the same checkout concurrently. If the operating system cannot establish whether a journal owner is still running, recovery fails closed and leaves the journal untouched.
 
@@ -48,9 +74,18 @@ change state, evidence, reviews, claims, graph IDs, or topology.
 
 ## Contract boundaries
 
-[schemas/project_state.schema.json](../schemas/project_state.schema.json) and [schemas/artifact_bindings.schema.json](../schemas/artifact_bindings.schema.json) are portable structural contracts. Python validation adds global constraints that JSON Schema does not conveniently express, including dependency cycles, global entity-ID uniqueness, referential integrity, ordered authorized-human decision resolution, actual changed-path owner conflicts, Claim-window provenance, and phase-advance readiness.
+[schemas/project_state.schema.json](../schemas/project_state.schema.json), [schemas/tailored_process.schema.json](../schemas/tailored_process.schema.json), [schemas/process_extensions.schema.json](../schemas/process_extensions.schema.json), [schemas/refinement_plan.schema.json](../schemas/refinement_plan.schema.json), and [schemas/artifact_bindings.schema.json](../schemas/artifact_bindings.schema.json) are portable structural contracts. Python validation adds global constraints that JSON Schema does not conveniently express, including dependency and refinement cycles, phase monotonicity, global entity-ID uniqueness, referential integrity, ordered authorized-human decision resolution, explicit migration completeness, Gate leaf-closure epochs, actual changed-path owner conflicts, Claim-window provenance, and phase-advance readiness.
 
-[policies/default/tailoring_rules.yaml](../policies/default/tailoring_rules.yaml) preserves non-negotiable governance invariants. Generic task-type extensions live under `policies/task-types/`; PyYAML is used with safe loading and deterministic atomic writes.
+[policies/default/tailoring_rules.yaml](../policies/default/tailoring_rules.yaml) preserves non-negotiable governance invariants. Generic task-type extensions live under `policies/task-types/`; reusable, project-neutral capabilities live under `policies/capabilities/`. The sourced-component capability models candidate validation, selection decision, and integration baseline without instance paths or Owner inference. PyYAML is used with safe loading and deterministic atomic writes.
+
+Binding roles remain separate from process provenance. A missing role or
+`role: owner` maps one Deliverable and may authorize its Claim;
+`role: shared_evidence` is non-critical, may cite several Deliverables, and
+cannot authorize a Claim or satisfy a critical Owner requirement.
+
+New compilation emits process schema `2.0`. Schema `1.0` remains readable when
+its semantic projection still matches a profile without capabilities and an
+empty project extension; enabling either requires preview and re-tailoring.
 
 The runtime automatically records UTC timestamps for events and claim leases. It does not infer reviewer authority or capture personal checkout paths in state. Callers may record approved external identifiers or immutable VCS revisions as evidence.
 

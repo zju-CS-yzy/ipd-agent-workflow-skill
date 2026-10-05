@@ -1,6 +1,6 @@
 ---
 name: ipd-agent-workflow-skill
-description: Tailor and execute evidence-backed bilingual IPD workflows with TR/DCP gates, deliverable state, dashboards, Agent runtime, and read-only Git/SVN reconciliation. Use for engineering work governed by auditable IPD controls; do not use for generic task lists.
+description: Tailor, progressively refine, and execute evidence-backed bilingual IPD workflows with TR/DCP gates, deliverable state, dashboards, Agent runtime, and read-only Git/SVN reconciliation. Use for engineering work governed by auditable IPD controls; do not use for generic task lists.
 ---
 
 # IPD Agent Workflow
@@ -24,7 +24,7 @@ and `launch` are separate from this per-deliverable loop.
 
 ## Operating contract
 
-1. **Context:** Inspect the request, repository instructions, `.ipd/project_state.yaml`, `.ipd/tailored_process.yaml`, the applicable policy, active claims, and read-only Git/SVN status. Initialize state only when the task includes starting IPD tracking.
+1. **Context:** Inspect the request, repository instructions, `.ipd/project_state.yaml`, `.ipd/tailored_process.yaml`, `.ipd/process_extensions.yaml`, the applicable policies, active claims, progressive-refinement status, and read-only Git/SVN status. Initialize state only when the task includes starting IPD tracking. If `refinement_due` is non-empty, prepare and preview an explicit plan before claiming child work; applying it requires an authorized human.
 2. **Claim:** State the outcome to prove, its acceptance evidence, affected deliverables, and dependencies. Do not present an assumption as verified evidence.
 3. **Work:** Make the authorized change. Preserve existing trace links and add links when a claim, deliverable, or gate depends on another tracked entity.
 4. **Close:** Submit work with durable evidence as `ready_for_review`; closing never accepts it.
@@ -45,12 +45,14 @@ If validation fails, preserve the state file, report the exact paths returned by
 
 ## State and commands
 
-The project fact sources are `.ipd/task_profile.yaml`, `.ipd/tailored_process.yaml`, `.ipd/project_state.yaml`, `.ipd/agent_runtime.yaml`, and `.ipd/artifact_bindings.yaml`. Their structural contracts are under [schemas/](schemas/); the runtime also checks dependency cycles, transitions, review authority, trace links, dashboard freshness, and repository reconciliation.
+The project fact sources are `.ipd/task_profile.yaml`, `.ipd/process_extensions.yaml`, `.ipd/tailored_process.yaml`, `.ipd/project_state.yaml`, `.ipd/agent_runtime.yaml`, and `.ipd/artifact_bindings.yaml`. Their structural contracts are under [schemas/](schemas/); the runtime also checks dependency cycles, transitions, review authority, trace links, dashboard freshness, and repository reconciliation.
 
 ```bash
 python -m ipdctl init . --name PROJECT_NAME --task-type software --locale en
+python -m ipdctl tailor . --preview
 python -m ipdctl tailor .
 python -m ipdctl context .
+python -m ipdctl refine . --plan refinement-plan.yaml --preview --json
 python -m ipdctl adopt-baseline . --preview --json
 python -m ipdctl claim DELIVERABLE --project-root .
 python -m ipdctl close DELIVERABLE --project-root . --evidence evidence/DELIVERABLE/result.md
@@ -64,7 +66,7 @@ python -m ipdctl reconcile .
 python -m ipdctl validate .
 ```
 
-The full command surface is `init`, `tailor`, `context`, `adopt-baseline`, `claim`, `close`,
+The full command surface is `init`, `tailor`, `refine`, `context`, `adopt-baseline`, `claim`, `close`,
 `review`, `approve`, `reject`, `advance-phase`, `refresh`, `verify`,
 `repository`, `reconcile`, `validate`, and the `status` alias for `context`.
 Use `init` only when no state exists. Do not use `--force` unless replacement
@@ -73,12 +75,63 @@ is explicitly intended. Use `claim --recover` only to recover an orphaned
 another actor cannot be taken over. An Agent must never call final approval
 while impersonating a human.
 
+Tailoring compiles exactly four additive layers in order:
+`core -> task_type -> capability -> project`. Select reusable capability packs
+with `task_profile.yaml` at `capability_patterns`; use the canonical
+`.ipd/process_extensions.yaml` only for project-owned Activities,
+Deliverables, typed relations, TR/DCP criteria, and explicit process
+migrations. The project layer cannot delete or override an earlier entity.
+Every compiled Phase, Activity, Deliverable, TR, DCP, and Gate records its
+`provenance` layer/source and phase-derived `maturity`. Dependencies must be
+acyclic and phase-monotonic: an earlier-Phase Deliverable cannot depend on a
+later-Phase Deliverable.
+
+Always run `tailor --preview` before changing an existing process. Preview is
+read-only; `--json` returns `added`, `removed`, `changed`, `migrations`, and
+`ambiguous`. A re-tailor is forbidden while a Claim is active. Removing a
+historical, non-superseded Deliverable requires an explicit `replace` or
+`split` mapping, `--apply-migrations`, and an authorized human Actor and
+reason. The old state node becomes `superseded` and retains its evidence and
+reviews; replacement nodes start `planned` with no copied evidence or review
+decision. Ordinary re-tailoring cannot reinterpret a Deliverable that already
+has lifecycle history under the same ID; introduce a new ID and use the
+explicit migration path. It also cannot add or change process facts in an
+approved or already closed Phase, including TR/DCP criteria. The only upgrade
+exception is deterministic schema `1.0` enrichment with core provenance,
+maturity, and canonical readiness criteria. Do not infer a migration mapping
+or reopen a Phase implicitly.
+
+New compilation writes tailored-process schema `2.0`. A schema `1.0` process
+remains readable only while it semantically matches a profile without enabled
+capabilities and the canonical project extension is empty. Preview and
+re-tailor before enabling a capability or adding project extension content.
+
+Progressive refinement is a separate, additive project decision. A canonical
+`refinement_requirements` entry declares the root and trigger; the plan must
+use `mode: expand` and the current `process_fingerprint`. Always run
+`refine --preview --json` first. Apply only the reviewed plan, with an
+identified human Actor, `--authorized`, and a reason, while there is no active
+Claim and the root belongs to the current Phase. Never infer child modules,
+copy parent acceptance to children, or rewrite Owner bindings. Every new
+concrete child requires a user-authored artifact Owner; placeholder and
+abstract nodes do not become claimable artifacts. The parent
+becomes an abstract aggregate and retains its history; new children start
+`planned` with empty evidence and reviews. `refines` is structural ancestry,
+while only `depends_on` affects execution. If concrete Gate requirements
+change, treat old approval as stale and require the new review epoch.
+The applied process record and runtime event must agree on the plan, base and
+result SHA-256 values, root, children, and invalidated Gate set.
+
 `tailor` preserves user-authored artifact rules and regenerates one managed
 `evidence/<deliverable-id>/**` binding for every tailored deliverable. It does
 not infer ownership for real source, firmware, hardware, test, documentation,
 configuration, or tool paths. Add explicit user-authored rules in
 `.ipd/artifact_bindings.yaml` for those paths before relying on reconciliation.
 Every actually changed critical path must resolve to one Deliverable owner.
+An omitted Binding `role` retains this owner behavior; explicit `role: owner`
+also authorizes only its single `deliverable`. A `role: shared_evidence` rule
+must be non-critical and may reference several `deliverables`, but it neither
+authorizes a Claim nor satisfies the required owner for a critical path.
 New Claim events capture a binding window, so a historical Claim cannot
 authorize unrelated later changes.
 

@@ -75,6 +75,7 @@ _RULE_FIELDS = {
     "paths",
     "deliverable",
     "deliverables",
+    "role",
     "critical",
     "review_required",
     "description",
@@ -83,6 +84,7 @@ _RULE_FIELDS = {
 }
 _PATTERN_FIELDS = ("glob", "globs", "paths")
 _OWNER_FIELDS = ("deliverable", "deliverables")
+_BINDING_ROLES = {"owner", "shared_evidence"}
 
 DEFAULT_ARTIFACT_BINDINGS: dict[str, Any] = {
     "schema_version": "1.0",
@@ -304,6 +306,16 @@ def _validated_rule(rule: Mapping[str, Any], index: int) -> dict[str, Any]:
                 details={"rule_ids": [identifier]},
             )
 
+    role = rule.get("role")
+    if role is not None and (
+        not isinstance(role, str) or role not in _BINDING_ROLES
+    ):
+        raise _invalid_bindings(
+            "artifact binding rule role must be 'owner' or 'shared_evidence'",
+            path=f"{path}.role",
+            details={"rule_ids": [identifier]},
+        )
+
     present_owner_fields = [field for field in _OWNER_FIELDS if field in rule]
     if len(present_owner_fields) != 1:
         raise _invalid_bindings(
@@ -313,6 +325,19 @@ def _validated_rule(rule: Mapping[str, Any], index: int) -> dict[str, Any]:
             details={"rule_ids": [identifier]},
         )
     owner_field = present_owner_fields[0]
+    if role == "owner" and owner_field != "deliverable":
+        raise _invalid_bindings(
+            "owner artifact binding rule must use one 'deliverable'",
+            code="BINDING_CRITICAL_MULTIPLE_DELIVERABLES",
+            path=f"{path}.{owner_field}",
+            details={"rule_ids": [identifier]},
+        )
+    if role == "shared_evidence" and owner_field != "deliverables":
+        raise _invalid_bindings(
+            "shared_evidence artifact binding rule must use 'deliverables'",
+            path=f"{path}.{owner_field}",
+            details={"rule_ids": [identifier]},
+        )
     raw_owners = rule[owner_field]
     if owner_field == "deliverable":
         raw_owners = [raw_owners]
@@ -327,6 +352,12 @@ def _validated_rule(rule: Mapping[str, Any], index: int) -> dict[str, Any]:
             "critical artifact binding rule must have exactly one deliverable owner",
             code="BINDING_CRITICAL_MULTIPLE_DELIVERABLES",
             path=f"{path}.{owner_field}",
+            details={"rule_ids": [identifier]},
+        )
+    if role == "shared_evidence" and rule.get("critical") is not False:
+        raise _invalid_bindings(
+            "shared_evidence artifact binding rule must set critical to false",
+            path=f"{path}.critical",
             details={"rule_ids": [identifier]},
         )
     seen_owners: set[str] = set()
@@ -532,6 +563,12 @@ def _canonical_binding_contract(bindings: Mapping[str, Any]) -> dict[str, Any]:
             "deliverables": _rule_deliverables(rule),
             "critical": bool(rule.get("critical", True)),
         }
+        # An explicit owner role is semantically identical to the legacy
+        # role-less single-owner rule, so adding it must not invalidate an
+        # existing baseline or Claim binding window.  Shared evidence is a new
+        # semantic contract and therefore participates in the digest.
+        if rule.get("role") == "shared_evidence":
+            canonical["role"] = "shared_evidence"
         for field in (
             "review_required",
             "description",
@@ -616,6 +653,17 @@ def _rule_deliverables(rule: Mapping[str, Any]) -> list[str]:
     return sorted({str(item) for item in value if str(item).strip()})
 
 
+def _rule_is_shared_evidence(rule: Mapping[str, Any]) -> bool:
+    return rule.get("role") == "shared_evidence"
+
+
+def _rule_is_managed_evidence(rule: Mapping[str, Any]) -> bool:
+    return (
+        rule.get("managed_by") == _MANAGED_BINDING_OWNER
+        and rule.get("managed_kind") == _MANAGED_BINDING_KIND
+    )
+
+
 def map_paths_to_deliverables(
     paths: Sequence[str], bindings: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -624,6 +672,8 @@ def map_paths_to_deliverables(
     result: dict[str, Any] = {
         "paths": {},
         "deliverables": {},
+        "owner_deliverables": {},
+        "shared_evidence_deliverables": {},
         "unbound": [],
         "ignored": [],
     }
@@ -650,10 +700,21 @@ def map_paths_to_deliverables(
             deliverables = _rule_deliverables(rule)
             if not deliverables:
                 continue
+            shared_evidence = _rule_is_shared_evidence(rule)
+            owner_deliverables = [] if shared_evidence else deliverables
+            shared_evidence_deliverables = deliverables if shared_evidence else []
             matched.append(
                 {
                     "rule_id": rule.get("id"),
                     "deliverables": deliverables,
+                    "role": "shared_evidence" if shared_evidence else "owner",
+                    "owner_deliverable_id": (
+                        owner_deliverables[0]
+                        if len(owner_deliverables) == 1
+                        else None
+                    ),
+                    "owner_deliverable_ids": owner_deliverables,
+                    "shared_evidence_deliverable_ids": shared_evidence_deliverables,
                     "critical": bool(rule.get("critical", True)),
                     "review_required": rule.get("review_required"),
                     "description": rule.get("description"),
@@ -675,7 +736,224 @@ def map_paths_to_deliverables(
         )
         for deliverable_id in deliverable_ids:
             result["deliverables"].setdefault(deliverable_id, []).append(path)
+        owner_deliverable_ids = sorted(
+            {
+                deliverable
+                for rule_match in matched
+                for deliverable in rule_match["owner_deliverable_ids"]
+            }
+        )
+        for deliverable_id in owner_deliverable_ids:
+            result["owner_deliverables"].setdefault(deliverable_id, []).append(path)
+        shared_evidence_deliverable_ids = sorted(
+            {
+                deliverable
+                for rule_match in matched
+                for deliverable in rule_match["shared_evidence_deliverable_ids"]
+            }
+        )
+        for deliverable_id in shared_evidence_deliverable_ids:
+            result["shared_evidence_deliverables"].setdefault(
+                deliverable_id, []
+            ).append(path)
     return result
+
+
+def preview_refinement_binding_impact(
+    existing_bindings: Mapping[str, Any],
+    current_process: Mapping[str, Any],
+    candidate_process: Mapping[str, Any],
+    diff: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Describe binding work introduced by a refinement without mutating rules.
+
+    Framework-managed ``evidence/<id>/**`` rules prove only where review
+    evidence is stored.  They never infer ownership of project source,
+    firmware, hardware, tests, documentation, configuration, or tools.  The
+    returned parent rules are migration candidates for a human to inspect;
+    this function deliberately never rewrites them.
+    """
+
+    bindings = validate_artifact_bindings(existing_bindings)
+
+    def deliverable_index(process: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        raw = process.get("deliverables", [])
+        if not isinstance(raw, list):
+            return {}
+        return {
+            str(item["id"]): dict(item)
+            for item in raw
+            if isinstance(item, Mapping)
+            and isinstance(item.get("id"), str)
+            and str(item["id"]).strip()
+        }
+
+    current = deliverable_index(current_process)
+    candidate = deliverable_index(candidate_process)
+    added_ids = set(candidate) - set(current)
+    raw_added = diff.get("added_deliverables") if isinstance(diff, Mapping) else None
+    if isinstance(raw_added, list):
+        added_ids.update(str(item) for item in raw_added if str(item).strip())
+    raw_deliverables = diff.get("deliverables") if isinstance(diff, Mapping) else None
+    if isinstance(raw_deliverables, Mapping) and isinstance(
+        raw_deliverables.get("added"), list
+    ):
+        added_ids.update(
+            str(item) for item in raw_deliverables["added"] if str(item).strip()
+        )
+
+    rules = [dict(item) for item in bindings.get("bindings", [])]
+    rows: list[dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
+    for identifier in sorted(added_ids):
+        item = candidate.get(identifier)
+        if not item:
+            continue
+        definition_state = str(item.get("definition_state", "concrete")).strip().lower()
+        raw_parents = item.get("refines", [])
+        if isinstance(raw_parents, str):
+            raw_parents = [raw_parents]
+        parents = sorted(
+            {
+                str(parent)
+                for parent in raw_parents
+                if isinstance(parent, str) and parent.strip()
+            }
+        )
+        if definition_state != "concrete" or not parents:
+            continue
+
+        direct_rules = [
+            rule for rule in rules if identifier in _rule_deliverables(rule)
+        ]
+        user_owner_rules = [
+            rule
+            for rule in direct_rules
+            if not _rule_is_shared_evidence(rule)
+            and not _rule_is_managed_evidence(rule)
+        ]
+        shared_rules = [
+            rule
+            for rule in direct_rules
+            if _rule_is_shared_evidence(rule)
+            and not _rule_is_managed_evidence(rule)
+        ]
+        managed_rules = [
+            rule for rule in direct_rules if _rule_is_managed_evidence(rule)
+        ]
+        parent_rules = [
+            rule
+            for rule in rules
+            if not _rule_is_shared_evidence(rule)
+            and not _rule_is_managed_evidence(rule)
+            and any(parent in _rule_deliverables(rule) for parent in parents)
+        ]
+
+        child_patterns = {
+            pattern
+            for rule in user_owner_rules
+            for pattern in _rule_patterns(rule)
+        }
+        conflicts = [
+            rule
+            for rule in rules
+            if not _rule_is_shared_evidence(rule)
+            and not _rule_is_managed_evidence(rule)
+            and identifier not in _rule_deliverables(rule)
+            and child_patterns.intersection(_rule_patterns(rule))
+        ]
+        requires_owner = item.get("requires_artifact_owner") is True
+        missing_owner = not user_owner_rules
+        conflict = bool(conflicts)
+        row = {
+            "deliverable_id": identifier,
+            "definition_state": "concrete",
+            "refines": parents,
+            "requires_artifact_owner": requires_owner,
+            "owner_rule_ids": sorted(str(rule["id"]) for rule in user_owner_rules),
+            "shared_evidence_rule_ids": sorted(
+                str(rule["id"]) for rule in shared_rules
+            ),
+            "managed_evidence_rule_ids": sorted(
+                str(rule["id"]) for rule in managed_rules
+            ),
+            "managed_evidence_only": bool(managed_rules) and missing_owner,
+            "missing_owner": missing_owner,
+            "conflicting_owner_rule_ids": sorted(
+                str(rule["id"]) for rule in conflicts
+            ),
+            "parent_owner_candidate_rule_ids": sorted(
+                str(rule["id"]) for rule in parent_rules
+            ),
+            "parent_owner_candidates": [
+                {
+                    "parent_ids": sorted(
+                        set(parents).intersection(_rule_deliverables(rule))
+                    ),
+                    "rule_id": str(rule["id"]),
+                    "patterns": sorted(_rule_patterns(rule)),
+                    "critical": bool(rule.get("critical", True)),
+                }
+                for rule in sorted(parent_rules, key=lambda value: str(value["id"]))
+            ],
+            "binding_ready": not missing_owner and not conflict,
+        }
+        rows.append(row)
+        if requires_owner and missing_owner:
+            issues.append(
+                {
+                    "code": "REFINEMENT_OWNER_REQUIRED",
+                    "severity": "error",
+                    "deliverable_id": identifier,
+                    "message": "Refined concrete Deliverable requires a user-authored owner binding",
+                    "parent_owner_candidate_rule_ids": row[
+                        "parent_owner_candidate_rule_ids"
+                    ],
+                }
+            )
+        elif missing_owner:
+            issues.append(
+                {
+                    "code": "REFINEMENT_OWNER_MISSING",
+                    "severity": "warning",
+                    "deliverable_id": identifier,
+                    "message": "Refined concrete Deliverable has no user-authored owner binding",
+                    "parent_owner_candidate_rule_ids": row[
+                        "parent_owner_candidate_rule_ids"
+                    ],
+                }
+            )
+        if conflict:
+            issues.append(
+                {
+                    "code": "REFINEMENT_OWNER_CONFLICT",
+                    "severity": "error",
+                    "deliverable_id": identifier,
+                    "message": "Refined Deliverable owner patterns conflict with another Deliverable",
+                    "rule_ids": row["conflicting_owner_rule_ids"],
+                }
+            )
+
+    errors = sum(issue["severity"] == "error" for issue in issues)
+    warnings = sum(issue["severity"] == "warning" for issue in issues)
+    return {
+        "schema_version": "1.0",
+        "eligible": errors == 0,
+        "status": "failed" if errors else "warning" if warnings else "passed",
+        "new_concrete_children": rows,
+        "issues": issues,
+        "summary": {
+            "new_concrete_children": len(rows),
+            "binding_ready": sum(row["binding_ready"] for row in rows),
+            "managed_evidence_only": sum(
+                row["managed_evidence_only"] for row in rows
+            ),
+            "missing_owner": sum(row["missing_owner"] for row in rows),
+            "conflicts": sum(bool(row["conflicting_owner_rule_ids"]) for row in rows),
+            "errors": errors,
+            "warnings": warnings,
+        },
+    }
 
 
 def is_critical_path(path: str, bindings: Mapping[str, Any]) -> bool:
@@ -1186,23 +1464,47 @@ def _issue(
     return row
 
 
-def _path_owner_details(matches: Sequence[Mapping[str, Any]]) -> tuple[list[str], list[str]]:
+def _path_binding_details(matches: Sequence[Mapping[str, Any]]) -> dict[str, list[str]]:
     owners = sorted(
         {
             owner
             for match in matches
-            for owner in match.get("deliverables", [])
+            for owner in match.get("owner_deliverable_ids", [])
             if isinstance(owner, str)
         }
     )
-    rule_ids = sorted(
+    shared_evidence = sorted(
+        {
+            deliverable
+            for match in matches
+            for deliverable in match.get("shared_evidence_deliverable_ids", [])
+            if isinstance(deliverable, str)
+        }
+    )
+    owner_rule_ids = sorted(
         {
             str(match["rule_id"])
             for match in matches
+            if match.get("role") != "shared_evidence"
+            and match.get("rule_id") is not None
+        }
+    )
+    shared_evidence_rule_ids = sorted(
+        {
+            str(match["rule_id"])
+            for match in matches
+            if match.get("role") == "shared_evidence"
             if match.get("rule_id") is not None
         }
     )
-    return owners, rule_ids
+    return {
+        "owner_deliverable_ids": owners,
+        "shared_evidence_deliverable_ids": shared_evidence,
+        "owner_rule_ids": owner_rule_ids,
+        "shared_evidence_rule_ids": shared_evidence_rule_ids,
+        "rule_ids": sorted(set(owner_rule_ids) | set(shared_evidence_rule_ids)),
+        "deliverable_ids": sorted(set(owners) | set(shared_evidence)),
+    }
 
 
 def _provenance_reason(
@@ -1289,6 +1591,8 @@ def _evaluate_bindings(
     compatibility_mapping: dict[str, Any] = {
         "paths": {},
         "deliverables": {},
+        "owner_deliverables": {},
+        "shared_evidence_deliverables": {},
         "unbound": [],
         "ignored": [],
     }
@@ -1311,6 +1615,14 @@ def _evaluate_bindings(
     digest = artifact_bindings_digest(bindings)
     report["bindings_sha256"] = digest
     known_deliverables = _deliverable_ids(state)
+    requires_artifact_owner = {
+        str(item.get("id") or item.get("deliverable_id"))
+        for item in state.get("deliverables", [])
+        if isinstance(item, Mapping)
+        and item.get("definition_state", "concrete") == "concrete"
+        and item.get("requires_artifact_owner") is True
+        and isinstance(item.get("id") or item.get("deliverable_id"), str)
+    }
     if target_deliverable is not None and target_deliverable not in known_deliverables:
         report["issues"].append(
             _issue(
@@ -1321,16 +1633,25 @@ def _evaluate_bindings(
         )
 
     rules_by_owner: dict[str, list[str]] = {}
+    user_rules_by_owner: dict[str, list[str]] = {}
+    rules_by_shared_evidence: dict[str, list[str]] = {}
     for rule in bindings["bindings"]:
-        for owner in _rule_deliverables(rule):
-            rules_by_owner.setdefault(owner, []).append(str(rule["id"]))
-            if owner not in known_deliverables:
+        rule_id = str(rule["id"])
+        shared_evidence = _rule_is_shared_evidence(rule)
+        for deliverable_id in _rule_deliverables(rule):
+            rule_index = (
+                rules_by_shared_evidence if shared_evidence else rules_by_owner
+            )
+            rule_index.setdefault(deliverable_id, []).append(rule_id)
+            if not shared_evidence and not _rule_is_managed_evidence(rule):
+                user_rules_by_owner.setdefault(deliverable_id, []).append(rule_id)
+            if deliverable_id not in known_deliverables:
                 report["issues"].append(
                     _issue(
                         "BINDING_UNKNOWN_DELIVERABLE",
                         "Binding references a Deliverable absent from project state",
-                        deliverable_id=owner,
-                        rule_ids=[str(rule["id"])],
+                        deliverable_id=deliverable_id,
+                        rule_ids=[rule_id],
                     )
                 )
 
@@ -1437,7 +1758,12 @@ def _evaluate_bindings(
     )
     for path in window_paths:
         matches = window_mapping["paths"].get(path, [])
-        owners, rule_ids = _path_owner_details(matches)
+        details = _path_binding_details(matches)
+        owners = details["owner_deliverable_ids"]
+        shared_evidence = details["shared_evidence_deliverable_ids"]
+        owner_rule_ids = details["owner_rule_ids"]
+        shared_evidence_rule_ids = details["shared_evidence_rule_ids"]
+        rule_ids = details["rule_ids"]
         critical = is_critical_path(path, bindings) or any(
             bool(match.get("critical", True)) for match in matches
         )
@@ -1447,8 +1773,14 @@ def _evaluate_bindings(
             "changed_since_baseline": require_baseline,
             "critical": critical,
             "rule_ids": rule_ids,
-            "deliverable_ids": owners,
-            "binding_ready": bool(matches) and (len(owners) == 1 or not critical),
+            "deliverable_ids": details["deliverable_ids"],
+            "owner_deliverable_id": owners[0] if len(owners) == 1 else None,
+            "owner_deliverable_ids": owners,
+            "shared_evidence_deliverable_ids": shared_evidence,
+            "owner_rule_ids": owner_rule_ids,
+            "shared_evidence_rule_ids": shared_evidence_rule_ids,
+            "binding_ready": bool(owner_rule_ids)
+            and (len(owners) == 1 or not critical),
             "issue_codes": [],
         }
         if not matches:
@@ -1462,13 +1794,24 @@ def _evaluate_bindings(
             report["issues"].append(issue)
             report["paths"][path]["issue_codes"].append(issue["code"])
             continue
+        if not owners:
+            if critical:
+                issue = _issue(
+                    "BINDING_CRITICAL_OWNER_MISSING",
+                    "Critical changed path has shared evidence but no Deliverable owner",
+                    path=path,
+                    rule_ids=shared_evidence_rule_ids,
+                )
+                report["issues"].append(issue)
+                report["paths"][path]["issue_codes"].append(issue["code"])
+            continue
         if len(owners) > 1:
             issue = _issue(
                 "BINDING_CRITICAL_OWNER_CONFLICT",
                 "Changed path resolves to more than one Deliverable owner",
                 severity="error" if critical else "warning",
                 path=path,
-                rule_ids=rule_ids,
+                rule_ids=owner_rule_ids,
             )
             report["issues"].append(issue)
             report["paths"][path]["issue_codes"].append(issue["code"])
@@ -1502,10 +1845,23 @@ def _evaluate_bindings(
                     path=path,
                     deliverable_id=owner,
                     reason_code=reason,
-                    rule_ids=rule_ids,
+                    rule_ids=owner_rule_ids,
                 )
                 report["issues"].append(issue)
                 report["paths"][path]["issue_codes"].append(issue["code"])
+
+    for deliverable_id in sorted(requires_artifact_owner):
+        if user_rules_by_owner.get(deliverable_id):
+            continue
+        report["issues"].append(
+            _issue(
+                "REFINEMENT_OWNER_REQUIRED",
+                "Refined concrete Deliverable requires a user-authored owner binding",
+                deliverable_id=deliverable_id,
+                reason_code="REFINEMENT_OWNER_REQUIRED",
+                rule_ids=sorted(rules_by_owner.get(deliverable_id, [])),
+            )
+        )
 
     global_blocking_codes = {
         "ARTIFACT_BINDINGS_MISSING",
@@ -1520,21 +1876,33 @@ def _evaluate_bindings(
         "BINDING_INVALID_PATTERN",
         "BINDING_CRITICAL_MULTIPLE_DELIVERABLES",
         "BINDING_CRITICAL_OWNER_CONFLICT",
+        "BINDING_CRITICAL_OWNER_MISSING",
         "BINDING_UNKNOWN_DELIVERABLE",
+        "REFINEMENT_OWNER_REQUIRED",
     }
     for deliverable_id in sorted(known_deliverables):
         touched_paths = sorted(window_mapping["deliverables"].get(deliverable_id, []))
+        owner_paths = sorted(
+            window_mapping["owner_deliverables"].get(deliverable_id, [])
+        )
+        shared_evidence_paths = sorted(
+            window_mapping["shared_evidence_deliverables"].get(deliverable_id, [])
+        )
         relevant_issues = [
             issue
             for issue in report["issues"]
             if issue.get("deliverable_id") == deliverable_id
-            or issue.get("path") in touched_paths
+            or issue.get("path") in owner_paths
             or (
                 issue.get("path") is None
                 and issue.get("code") in global_blocking_codes
             )
         ]
-        has_binding = bool(rules_by_owner.get(deliverable_id))
+        has_binding = bool(
+            user_rules_by_owner.get(deliverable_id)
+            if deliverable_id in requires_artifact_owner
+            else rules_by_owner.get(deliverable_id)
+        )
         binding_ready = has_binding and not any(
             issue.get("severity") == "error"
             and issue.get("code") in binding_blocking_codes
@@ -1554,7 +1922,27 @@ def _evaluate_bindings(
             "issue_codes": issue_codes,
             "blockers": blockers,
             "paths": touched_paths,
-            "rule_ids": sorted(rules_by_owner.get(deliverable_id, [])),
+            "owner_paths": owner_paths,
+            "shared_evidence_paths": shared_evidence_paths,
+            "rule_ids": sorted(
+                set(rules_by_owner.get(deliverable_id, []))
+                | set(rules_by_shared_evidence.get(deliverable_id, []))
+            ),
+            "owner_rule_ids": sorted(rules_by_owner.get(deliverable_id, [])),
+            "shared_evidence_rule_ids": sorted(
+                rules_by_shared_evidence.get(deliverable_id, [])
+            ),
+            "binding_impact": {
+                "requires_artifact_owner": deliverable_id
+                in requires_artifact_owner,
+                "managed_evidence_only": bool(
+                    rules_by_owner.get(deliverable_id)
+                )
+                and not bool(user_rules_by_owner.get(deliverable_id)),
+                "user_owner_rule_ids": sorted(
+                    user_rules_by_owner.get(deliverable_id, [])
+                ),
+            },
         }
 
     if target_deliverable in report["deliverables"] and not rules_by_owner.get(

@@ -11,11 +11,264 @@ import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 
 ELIGIBILITY_SCHEMA_VERSION = "1.0"
 _STATUSES = {"passed", "warning", "failed"}
+
+
+def _deliverable_records(state: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    return {
+        item["id"]: item
+        for item in state.get("deliverables", [])
+        if isinstance(item, Mapping)
+        and isinstance(item.get("id"), str)
+        and item["id"]
+    }
+
+
+def _gate_records(state: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    return {
+        item["id"]: item
+        for item in state.get("gates", [])
+        if isinstance(item, Mapping)
+        and isinstance(item.get("id"), str)
+        and item["id"]
+    }
+
+
+def _refinement_children(
+    deliverables: Mapping[str, Mapping[str, Any]],
+) -> dict[str, list[str]]:
+    children: dict[str, list[str]] = {}
+    for identifier, deliverable in deliverables.items():
+        parent = deliverable.get("refines")
+        if isinstance(parent, str) and parent:
+            children.setdefault(parent, []).append(identifier)
+    for identifiers in children.values():
+        identifiers.sort()
+    return children
+
+
+def _refinement_leaf_ids(
+    identifier: str,
+    deliverables: Mapping[str, Mapping[str, Any]],
+    children: Mapping[str, list[str]],
+) -> tuple[list[str], list[str]]:
+    """Return concrete and unresolved leaves below one refinement root."""
+
+    concrete: list[str] = []
+    unresolved: list[str] = []
+    pending = list(reversed(children.get(identifier, [])))
+    visited: set[str] = set()
+    while pending:
+        child_id = pending.pop()
+        if child_id in visited:
+            continue
+        visited.add(child_id)
+        descendants = children.get(child_id, [])
+        if descendants:
+            pending.extend(reversed(descendants))
+            continue
+        child = deliverables.get(child_id, {})
+        if child.get("definition_state", "concrete") == "concrete":
+            concrete.append(child_id)
+        else:
+            unresolved.append(child_id)
+    return sorted(concrete), sorted(unresolved)
+
+
+def _refinement_trigger_satisfied(
+    trigger: Any,
+    deliverables: Mapping[str, Mapping[str, Any]],
+    gates: Mapping[str, Mapping[str, Any]],
+) -> tuple[bool, list[str]]:
+    if not isinstance(trigger, Mapping):
+        return False, ["invalid refinement trigger"]
+    conditions = trigger.get("all_of")
+    if not isinstance(conditions, list) or not conditions:
+        return False, ["invalid refinement trigger"]
+    pending: list[str] = []
+    for condition in conditions:
+        if not isinstance(condition, Mapping):
+            pending.append("invalid refinement trigger condition")
+            continue
+        subject = condition.get("subject")
+        expected = condition.get("condition")
+        if not isinstance(subject, str) or not subject:
+            pending.append("invalid refinement trigger subject")
+        elif expected == "accepted":
+            if deliverables.get(subject, {}).get("status") != "accepted":
+                pending.append(f"{subject} must be accepted")
+        elif expected == "approved":
+            gate = gates.get(subject, {})
+            if gate.get("status") != "approved" or gate.get("stale") is True:
+                pending.append(f"{subject} must be currently approved")
+        else:
+            pending.append(f"{subject} has an invalid refinement condition")
+    return not pending, pending
+
+
+def deliverable_refinement_status(
+    state: Mapping[str, Any], deliverable_id: str
+) -> dict[str, Any]:
+    """Derive refinement state without changing the Deliverable lifecycle.
+
+    Old project states have no refinement fields and therefore remain concrete,
+    claimable, and ``not_required`` by default.
+    """
+
+    deliverables = _deliverable_records(state)
+    deliverable = deliverables.get(deliverable_id)
+    if deliverable is None:
+        return {
+            "definition_state": None,
+            "refinement_required": False,
+            "refinement_status": "unknown",
+            "refinement_reason": "UNKNOWN_DELIVERABLE",
+            "claimable": False,
+            "leaf_deliverables": [],
+            "unresolved_leaves": [],
+        }
+
+    definition_state = deliverable.get("definition_state", "concrete")
+    required = deliverable.get("refinement_required") is True
+    children = _refinement_children(deliverables)
+    concrete_leaves, unresolved_leaves = _refinement_leaf_ids(
+        deliverable_id, deliverables, children
+    )
+
+    status = "not_required"
+    reason: str | None = None
+    if required:
+        trigger = deliverable.get("refinement_trigger")
+        trigger_satisfied = True
+        pending_conditions: list[str] = []
+        if trigger is not None:
+            trigger_satisfied, pending_conditions = _refinement_trigger_satisfied(
+                trigger, deliverables, _gate_records(state)
+            )
+        if not trigger_satisfied:
+            status = "pending"
+            reason = "REFINEMENT_TRIGGER_PENDING"
+        elif concrete_leaves and not unresolved_leaves:
+            status = "resolved"
+        else:
+            status = "due"
+            reason = "REFINEMENT_REQUIRED"
+    elif definition_state in {"abstract", "placeholder"} and not concrete_leaves:
+        # Non-concrete nodes are never directly executable, even when they are
+        # aggregate-only rather than explicitly trigger-driven.
+        reason = "REFINEMENT_REQUIRED"
+
+    claimable = definition_state == "concrete" and status != "due"
+    if not claimable and reason is None:
+        reason = "REFINEMENT_REQUIRED"
+    result = {
+        "definition_state": definition_state,
+        "refinement_required": required,
+        "refinement_status": status,
+        "refinement_reason": reason,
+        "claimable": claimable,
+        "leaf_deliverables": concrete_leaves,
+        "unresolved_leaves": unresolved_leaves,
+    }
+    if required and status == "pending":
+        result["pending_conditions"] = pending_conditions
+    return result
+
+
+def unresolved_refinement_dependencies(
+    state: Mapping[str, Any], deliverable_id: str
+) -> list[str]:
+    """Return transitive prerequisites whose process definition is unresolved."""
+
+    deliverables = _deliverable_records(state)
+    target = deliverables.get(deliverable_id)
+    if target is None:
+        return []
+    pending = list(target.get("depends_on", []))
+    visited: set[str] = set()
+    blockers: set[str] = set()
+    while pending:
+        dependency = pending.pop()
+        if not isinstance(dependency, str) or dependency in visited:
+            continue
+        visited.add(dependency)
+        record = deliverables.get(dependency)
+        if record is None:
+            continue
+        refinement = deliverable_refinement_status(state, dependency)
+        if refinement.get("refinement_status") in {"pending", "due"}:
+            blockers.add(dependency)
+        pending.extend(record.get("depends_on", []))
+    return sorted(blockers)
+
+
+def gate_requirement_readiness(
+    state: Mapping[str, Any], gate: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Evaluate Gate prerequisites using concrete refinement leaf closure."""
+
+    deliverables = _deliverable_records(state)
+    incomplete: set[str] = set()
+    refinement_due: set[str] = set()
+    evaluated: dict[str, list[str]] = {}
+    required = gate.get("required_deliverables", [])
+    if not isinstance(required, list):
+        required = []
+    for identifier in required:
+        if not isinstance(identifier, str) or identifier not in deliverables:
+            continue
+        row = deliverable_refinement_status(state, identifier)
+        definition_state = row["definition_state"]
+        if row["refinement_status"] in {"pending", "due"}:
+            refinement_due.add(identifier)
+        leaves = list(row["leaf_deliverables"])
+        if row["unresolved_leaves"]:
+            refinement_due.update(row["unresolved_leaves"])
+        if definition_state in {"abstract", "placeholder"}:
+            evaluated[identifier] = leaves
+            if not leaves:
+                refinement_due.add(identifier)
+                incomplete.add(identifier)
+            for leaf_id in leaves:
+                if deliverables.get(leaf_id, {}).get("status") != "accepted":
+                    incomplete.add(leaf_id)
+        else:
+            evaluated[identifier] = [identifier]
+            if deliverables[identifier].get("status") != "accepted":
+                incomplete.add(identifier)
+    return {
+        "ready": not incomplete and not refinement_due,
+        "incomplete": sorted(incomplete),
+        "refinement_due": sorted(refinement_due),
+        "requirements": evaluated,
+    }
+
+
+def requirements_fingerprint(
+    required_deliverables: Iterable[str], process: Mapping[str, Any]
+) -> str:
+    """Hash a Gate's sorted concrete leaf closure without lifecycle status."""
+
+    deliverables = _deliverable_records(process)
+    children = _refinement_children(deliverables)
+    closure: list[dict[str, Any]] = []
+    for identifier in sorted({str(item) for item in required_deliverables}):
+        deliverable = deliverables.get(identifier)
+        if deliverable is None:
+            leaves: list[str] = []
+        elif deliverable.get("definition_state", "concrete") == "concrete":
+            leaves = [identifier]
+        else:
+            leaves, _ = _refinement_leaf_ids(identifier, deliverables, children)
+        closure.append({"root": identifier, "concrete_leaves": sorted(leaves)})
+    encoded = json.dumps(
+        closure, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def claim_protocol_readiness(
@@ -238,27 +491,63 @@ def normalize_eligibility(
             if item.get("reason_code") or item.get("code")
         }
     )
-    deliverables = {
-        identifier: _normalize_deliverable(
+    deliverables: dict[str, dict[str, Any]] = {}
+    for identifier in identifiers:
+        row = _normalize_deliverable(
             raw_deliverables.get(identifier),
             global_eligible=global_eligible,
             default_issue_codes=default_issue_codes,
             default_blockers=default_blockers,
         )
-        for identifier in identifiers
-    }
+        refinement = deliverable_refinement_status(state, identifier)
+        row.update(refinement)
+        if not refinement["claimable"]:
+            code = str(refinement["refinement_reason"] or "REFINEMENT_REQUIRED")
+            row["eligible"] = False
+            row["issue_codes"] = sorted({*row["issue_codes"], code})
+            row["blockers"].append(
+                {
+                    "code": code,
+                    "severity": "error",
+                    "deliverable_id": identifier,
+                    "reason_code": code,
+                    "message": (
+                        f"Deliverable {identifier!r} requires process refinement "
+                        "before it can be claimed."
+                    ),
+                }
+            )
+        refinement_dependencies = unresolved_refinement_dependencies(
+            state, identifier
+        )
+        if refinement_dependencies:
+            code = "REFINEMENT_DEPENDENCY_REQUIRED"
+            row["eligible"] = False
+            row["issue_codes"] = sorted({*row["issue_codes"], code})
+            row["blockers"].append(
+                {
+                    "code": code,
+                    "severity": "error",
+                    "deliverable_id": identifier,
+                    "reason_code": code,
+                    "dependencies": refinement_dependencies,
+                    "message": (
+                        f"Deliverable {identifier!r} depends on unresolved "
+                        "refinement roots: " + ", ".join(refinement_dependencies)
+                    ),
+                }
+            )
+        deliverables[identifier] = row
     summary = result.get("summary")
     if not isinstance(summary, Mapping):
         summary = {}
     summary = deepcopy(dict(summary))
-    summary.setdefault("deliverables", len(deliverables))
-    summary.setdefault(
-        "eligible_deliverables",
-        sum(1 for row in deliverables.values() if row["eligible"]),
+    summary["deliverables"] = len(deliverables)
+    summary["eligible_deliverables"] = sum(
+        1 for row in deliverables.values() if row["eligible"]
     )
-    summary.setdefault(
-        "blocked_deliverables",
-        sum(1 for row in deliverables.values() if not row["eligible"]),
+    summary["blocked_deliverables"] = sum(
+        1 for row in deliverables.values() if not row["eligible"]
     )
     summary.setdefault(
         "errors",
@@ -312,17 +601,25 @@ def binding_eligibility(
             target_deliverable=target_deliverable,
         )
     except (OSError, ReconcileError, ValueError) as exc:
-        return _diagnostic_failure(
+        return normalize_eligibility(
+            _diagnostic_failure(
+                state,
+                code="ARTIFACT_BINDINGS_INVALID",
+                message=str(exc),
+                target_deliverable=target_deliverable,
+            ),
             state,
-            code="ARTIFACT_BINDINGS_INVALID",
-            message=str(exc),
             target_deliverable=target_deliverable,
         )
     if not isinstance(value, Mapping):
-        return _diagnostic_failure(
+        return normalize_eligibility(
+            _diagnostic_failure(
+                state,
+                code="ARTIFACT_BINDINGS_INVALID",
+                message="binding readiness must be an object",
+                target_deliverable=target_deliverable,
+            ),
             state,
-            code="ARTIFACT_BINDINGS_INVALID",
-            message="binding readiness must be an object",
             target_deliverable=target_deliverable,
         )
     return normalize_eligibility(

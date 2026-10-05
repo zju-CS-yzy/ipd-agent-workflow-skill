@@ -42,6 +42,33 @@ Only after the binding validates and the matching Claim exists may the Agent mod
 the framework never guesses that `docs/**`, `src/**`, or `tests/**` belongs to
 a particular Deliverable.
 
+Owner and shared-evidence rules have different authority:
+
+```yaml
+bindings:
+  - id: runtime-owner
+    role: owner
+    glob: src/runtime/**
+    deliverable: develop.runtime
+    critical: true
+  - id: shared-analysis
+    role: shared_evidence
+    glob: evidence/shared-analysis/**
+    deliverables:
+      - develop.runtime
+      - qualify.runtime
+    critical: false
+```
+
+Omitting `role` keeps the legacy Owner behavior. Only an Owner rule maps a
+changed path to the single Deliverable that may Claim it. A `shared_evidence`
+rule may cite several Deliverables but is always non-critical; it cannot
+authorize a Claim or satisfy the Owner requirement for a critical path. An
+Owner and shared-evidence rule may match the same path without creating an
+Owner conflict. Two different Owners for the same critical path fail closed;
+for a non-critical path they produce a warning but do not by themselves make
+the Deliverable ineligible.
+
 Reconciliation normally runs after `close`, when the active lease has already
 ended. It therefore validates each mapped changed path against the current
 iteration's auditable Claim binding window retained in
@@ -79,6 +106,13 @@ or otherwise writes Git/SVN.
 `evidence/<deliverable-id>/**`. Re-tailoring updates those framework-managed
 evidence rules and removes only framework-managed rules for Deliverables that
 no longer exist. Hand-authored binding rules are preserved.
+
+Process provenance is not repository ownership. A Deliverable introduced by a
+task type, capability, or `.ipd/process_extensions.yaml` still needs an
+explicit Owner Binding for any real critical source, test, documentation,
+configuration, firmware, hardware, or tool path it governs. The framework
+never derives a Binding Owner from `provenance`, `maturity`, an Activity, or a
+directory name.
 
 ## Evidence references
 

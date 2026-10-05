@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 from typing import Any
 
 from .state import StateError, write_state
@@ -185,6 +186,143 @@ def artifact_baseline_event_issues(event: Any) -> list[str]:
     return issues
 
 
+def process_migration_event_issues(event: Any) -> list[str]:
+    """Validate one explicitly authorized process-history migration event."""
+
+    if not isinstance(event, dict) or event.get("action") != "process_migration":
+        return ["must be a process_migration event object"]
+    issues: list[str] = []
+    for field in ("actor", "reason", "at"):
+        if not isinstance(event.get(field), str) or not event[field].strip():
+            issues.append(f"field {field!r} must be a non-empty string")
+    if event.get("actor_type") != "human":
+        issues.append("field 'actor_type' must be 'human'")
+    if event.get("authorized") is not True:
+        issues.append("field 'authorized' must be true")
+    state_revision = event.get("state_revision")
+    if type(state_revision) is not int or state_revision < 0:
+        issues.append("field 'state_revision' must be a non-negative integer")
+    event_at = event.get("at")
+    if isinstance(event_at, str) and event_at.strip():
+        try:
+            _parse_time(event_at)
+        except RuntimeError as exc:
+            issues.append(str(exc))
+    if event.get("previous_process_schema_version") not in {"1.0", "2.0"}:
+        issues.append(
+            "field 'previous_process_schema_version' must be '1.0' or '2.0'"
+        )
+    if event.get("process_schema_version") != "2.0":
+        issues.append("field 'process_schema_version' must be '2.0'")
+    migrations = event.get("migrations")
+    if not isinstance(migrations, list) or not migrations:
+        issues.append("field 'migrations' must be a non-empty array")
+        migrations = []
+    for index, migration in enumerate(migrations):
+        if not isinstance(migration, dict):
+            issues.append(f"field 'migrations[{index}]' must be an object")
+            continue
+        expected = {"from", "to", "strategy", "reason", "preserve_history"}
+        if set(migration) != expected:
+            issues.append(f"field 'migrations[{index}]' has invalid fields")
+        for field in ("from", "to", "reason"):
+            if not isinstance(migration.get(field), str) or not migration[field].strip():
+                issues.append(
+                    f"field 'migrations[{index}].{field}' must be a non-empty string"
+                )
+        if migration.get("strategy") not in {"replace", "split"}:
+            issues.append(
+                f"field 'migrations[{index}].strategy' must be 'replace' or 'split'"
+            )
+        if migration.get("preserve_history") is not True:
+            issues.append(
+                f"field 'migrations[{index}].preserve_history' must be true"
+            )
+    return issues
+
+
+def process_refinement_event_issues(event: Any) -> list[str]:
+    """Validate one authorized and replay-safe process refinement event."""
+
+    if not isinstance(event, dict) or event.get("action") != "process_refinement_applied":
+        return ["must be a process_refinement_applied event object"]
+    expected = {
+        "action",
+        "at",
+        "plan_id",
+        "plan_digest",
+        "base_process_fingerprint",
+        "result_process_fingerprint",
+        "actor",
+        "actor_type",
+        "authorized",
+        "reason",
+        "state_revision",
+        "root",
+        "children",
+        "invalidated_gates",
+    }
+    issues: list[str] = []
+    missing = sorted(expected - set(event))
+    unknown = sorted(set(event) - expected)
+    for field in missing:
+        issues.append(f"field {field!r} is required")
+    for field in unknown:
+        issues.append(f"field {field!r} is not allowed")
+    for field in (
+        "at",
+        "plan_id",
+        "plan_digest",
+        "base_process_fingerprint",
+        "result_process_fingerprint",
+        "actor",
+        "reason",
+        "root",
+    ):
+        if not isinstance(event.get(field), str) or not event[field].strip():
+            issues.append(f"field {field!r} must be a non-empty string")
+    for field in (
+        "plan_digest",
+        "base_process_fingerprint",
+        "result_process_fingerprint",
+    ):
+        value = event.get(field)
+        if isinstance(value, str) and not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", value
+        ):
+            issues.append(
+                f"field {field!r} must use sha256:<64 lowercase hex>"
+            )
+    event_at = event.get("at")
+    if isinstance(event_at, str) and event_at.strip():
+        try:
+            _parse_time(event_at)
+        except RuntimeError as exc:
+            issues.append(str(exc))
+    if event.get("actor_type") != "human":
+        issues.append("field 'actor_type' must be 'human'")
+    if event.get("authorized") is not True:
+        issues.append("field 'authorized' must be true")
+    state_revision = event.get("state_revision")
+    if type(state_revision) is not int or state_revision < 0:
+        issues.append("field 'state_revision' must be a non-negative integer")
+    for field, allow_empty in (("children", False), ("invalidated_gates", True)):
+        values = event.get(field)
+        if not isinstance(values, list):
+            issues.append(f"field {field!r} must be an array")
+            continue
+        if not allow_empty and not values:
+            issues.append(f"field {field!r} must not be empty")
+        parsed = [item for item in values if isinstance(item, str) and item.strip()]
+        if len(parsed) != len(values):
+            issues.append(f"field {field!r} must contain only non-empty strings")
+        if len(set(parsed)) != len(parsed):
+            issues.append(f"field {field!r} must not contain duplicates")
+    if event.get("root") in (event.get("children") or []):
+        issues.append("field 'children' must not contain the refinement root")
+    return issues
+
+
 def validate_runtime(runtime: Any) -> list[str]:
     """Validate the packaged runtime contract without external dependencies."""
 
@@ -282,6 +420,16 @@ def validate_runtime(runtime: Any) -> list[str]:
                 issues.extend(
                     f"runtime event {index} {issue}"
                     for issue in artifact_baseline_event_issues(event)
+                )
+            elif event.get("action") == "process_migration":
+                issues.extend(
+                    f"runtime event {index} {issue}"
+                    for issue in process_migration_event_issues(event)
+                )
+            elif event.get("action") == "process_refinement_applied":
+                issues.extend(
+                    f"runtime event {index} {issue}"
+                    for issue in process_refinement_event_issues(event)
                 )
             else:
                 event_at = event.get("at")
@@ -504,6 +652,53 @@ def record_artifact_baseline_adoption(
     )
     if any(candidate == snapshot for candidate in known_snapshots):
         return runtime, False
+    updated = _revised(runtime)
+    updated["events"].append(deepcopy(event))
+    return updated, True
+
+
+def record_process_refinement(
+    runtime: dict[str, Any], event: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
+    """Append an authorized refinement exactly once.
+
+    A replay of the same plan digest against the same base process is a no-op.
+    Reusing a plan ID for changed content or another base is a governance
+    conflict and therefore fails closed.
+    """
+
+    issues = validate_runtime(runtime)
+    if issues:
+        raise RuntimeError(issues[0])
+    event_issues = process_refinement_event_issues(event)
+    if event_issues:
+        raise RuntimeError(event_issues[0])
+    for existing in runtime.get("events", []):
+        if not isinstance(existing, dict):
+            continue
+        if existing.get("action") != "process_refinement_applied":
+            continue
+        if existing.get("plan_id") != event["plan_id"]:
+            continue
+        replay_fields = (
+            "plan_digest",
+            "base_process_fingerprint",
+            "result_process_fingerprint",
+            "actor",
+            "actor_type",
+            "authorized",
+            "reason",
+            "state_revision",
+            "root",
+            "children",
+            "invalidated_gates",
+        )
+        if all(existing.get(field) == event.get(field) for field in replay_fields):
+            return runtime, False
+        raise RuntimeError(
+            f"process refinement plan {event['plan_id']!r} conflicts with an "
+            "already applied result, authority, or process contract"
+        )
     updated = _revised(runtime)
     updated["events"].append(deepcopy(event))
     return updated, True

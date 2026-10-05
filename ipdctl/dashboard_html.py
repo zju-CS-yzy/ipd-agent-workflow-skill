@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from html import escape
 import json
+import re
 from typing import Any, Mapping, Sequence
 
 
@@ -199,7 +200,7 @@ h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); line-height: 1.14; letter-s
 .top-meta strong { color: #F2F4F7; font-weight: 600; }
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(8, minmax(110px, 1fr));
+  grid-template-columns: repeat(9, minmax(104px, 1fr));
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 0;
@@ -210,6 +211,19 @@ h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); line-height: 1.14; letter-s
 .metric-label { display: block; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .metric-value { display: block; margin-top: 7px; font-size: 18px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
 .metric-value.alert { color: var(--red); }
+.refinement-alert {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 14px 18px;
+  border: 2px solid #0E9384;
+  background: #F0FDF9;
+  color: #134E48;
+}
+.refinement-alert .kicker { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.refinement-alert strong { color: #107569; }
 .progress { height: 5px; margin-top: 9px; overflow: hidden; background: #EAECF0; border-radius: 999px; }
 .progress > span { display: block; height: 100%; background: var(--blue); }
 .next-task {
@@ -301,6 +315,7 @@ tbody tr[data-node]:hover, tbody tr[data-node]:focus-within { background: var(--
 .detail-section:last-child { border-bottom: 0; }
 .detail-section h3 { margin: 0 0 8px; color: #344054; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
 .detail-section p { margin: 0; }
+.detail-section code { white-space: pre-wrap; overflow-wrap: anywhere; color: #344054; }
 .detail-list { margin: 0; padding-left: 18px; }
 .detail-list li + li { margin-top: 5px; }
 .empty { padding: 24px; color: var(--muted); text-align: center; }
@@ -355,6 +370,9 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Progress": _t(translator, "dashboard.progress", "Progress"),
         "Accepted": _t(translator, "dashboard.accepted", "Accepted"),
         "Review queue": _t(translator, "dashboard.review_queue", "Review queue"),
+        "Refinement due": _t(
+            translator, "dashboard.refinement_due", "Refinement due"
+        ),
         "Waiting on prerequisites": _t(
             translator,
             "dashboard.waiting_on_dependencies",
@@ -436,6 +454,11 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Input evidence": _t(translator, "detail.input_evidence", "Input evidence"),
         "Output deliverables": _t(translator, "detail.output_deliverables", "Output deliverables"),
         "Review history": _t(translator, "detail.review_history", "Review history"),
+        "Provenance layer": _t(translator, "detail.provenance_layer", "Provenance layer"),
+        "Provenance source": _t(translator, "detail.provenance_source", "Provenance source"),
+        "Maturity": _t(translator, "detail.maturity", "Maturity"),
+        "Review criteria": _t(translator, "detail.criteria", "Review criteria"),
+        "Replaced by": _t(translator, "detail.replaced_by", "Replaced by"),
         "Blocker": _t(translator, "detail.blocker", "Blocker"),
         "Actionability": _t(translator, "detail.actionability", "Actionability"),
         "Binding readiness": _binding_text(translator, "readiness"),
@@ -467,9 +490,19 @@ def _localize_static_html(template: str, translator: Any) -> str:
         ">Blocked<": ">" + _status_label("blocked", translator) + "<",
         ">Superseded<": ">" + _status_label("superseded", translator) + "<",
     }
-    for source in sorted(replacements, key=len, reverse=True):
-        template = template.replace(source, replacements[source])
-    return template
+    # Static copy may be translated by trusted substring replacement, but
+    # JavaScript identifiers and lookup keys must remain language-neutral.
+    # Runtime-visible script copy is localized through the embedded i18n map.
+    fragments = re.split(r"(<script\b[^>]*>.*?</script>)", template, flags=re.I | re.S)
+    rendered: list[str] = []
+    for fragment in fragments:
+        if re.match(r"<script\b", fragment, flags=re.I):
+            rendered.append(fragment)
+            continue
+        for source in sorted(replacements, key=len, reverse=True):
+            fragment = fragment.replace(source, replacements[source])
+        rendered.append(fragment)
+    return "".join(rendered)
 
 
 def _badge(status: Any, translator: Any) -> str:
@@ -623,6 +656,8 @@ def render_index(
     checkpoints = _items(state_data.get("checkpoints"))
     deliverables = _items(state_data.get("deliverables"))
     available = _items(state_data.get("available_tasks"))
+    refinement_due = _items(state_data.get("refinement_due"))
+    refinement_due_count = summary.get("refinement_due", len(refinement_due))
     waiting_count = summary.get("waiting_on_dependencies", 0)
     explicit_blockers = summary.get("explicitly_blocked")
     if explicit_blockers is None:
@@ -690,6 +725,38 @@ def render_index(
     if repository.get("dirty") is True:
         repository_label += " · " + _t(translator, "common.modified", "Modified")
 
+    refinement_alert = ""
+    if refinement_due:
+        first_due = refinement_due[0]
+        due_id = _text(first_due.get("id"))
+        due_title = _text(
+            first_due.get("display_label") or first_due.get("title"), due_id
+        )
+        refinement_alert = (
+            '<section class="refinement-alert" aria-label="'
+            + escape(
+                _t(translator, "dashboard.refinement_due", "Refinement due"),
+                quote=True,
+            )
+            + '"><span class="kicker">'
+            + escape(_t(translator, "dashboard.refinement_due", "Refinement due"))
+            + "</span><div><strong>"
+            + escape(f"{due_id} · {due_title}")
+            + "</strong><div>"
+            + escape(
+                _t(
+                    translator,
+                    "dashboard.refinement_due_description",
+                    "A required process definition must be refined before governed work can continue.",
+                )
+            )
+            + '</div></div><a class="btn" href="#node=deliverable:'
+            + escape(due_id, quote=True)
+            + '">'
+            + escape(_t(translator, "dashboard.open_details", "Open details"))
+            + "</a></section>"
+        )
+
     html = r'''<!doctype html>
 <html lang="en">
 <head>
@@ -719,8 +786,11 @@ def render_index(
     <div class="metric"><span class="metric-label">Accepted</span><strong class="metric-value">__ACCEPTED__ / __TOTAL__</strong></div>
     <div class="metric"><span class="metric-label">Review queue</span><strong class="metric-value">__REVIEW_QUEUE__</strong></div>
     <div class="metric"><span class="metric-label">Waiting on prerequisites</span><strong class="metric-value">__WAITING__</strong></div>
+    <div class="metric"><span class="metric-label">Refinement due</span><strong class="metric-value__REFINEMENT_ALERT_CLASS__">__REFINEMENT_DUE__</strong></div>
     <div class="metric"><span class="metric-label">Open blockers</span><strong class="metric-value__BLOCKER_ALERT__">__BLOCKERS__</strong></div>
   </section>
+
+  __REFINEMENT_ALERT__
 
   <section class="next-task" aria-label="Next available task">
     <span class="kicker">Next available task</span>
@@ -776,50 +846,74 @@ def render_index(
   const workspace = document.getElementById('workspace');
   const details = document.getElementById('details');
   const label = (group, key, fallback) => (i18n[group] && i18n[group][key]) || fallback;
+  const ui = (key, fallback) => label('ui', key, fallback);
   const esc = value => String(value ?? '—').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const values = value => Array.isArray(value) ? value : [];
-  const list = (value, empty = 'None') => {
+  const list = (value, empty = null) => {
     const items = values(value);
-    return items.length ? `<ul class="detail-list">${items.map(item => `<li>${esc(typeof item === 'object' ? (item.id || item.path || JSON.stringify(item)) : item)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`;
+    return items.length ? `<ul class="detail-list">${items.map(item => `<li>${esc(typeof item === 'object' ? (item.id || item.path || JSON.stringify(item)) : item)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty || ui('none', 'None'))}</p>`;
   };
   const section = (title, content) => `<section class="detail-section"><h3>${esc(title)}</h3>${content}</section>`;
   const checkpoint = (kind, id) => values(state.checkpoints).find(item => String(item.type || '').toLowerCase() === kind && String(item.id) === id);
   const deliverable = id => values(state.deliverables).find(item => String(item.id) === id);
+  const activity = id => values(state.activities).find(item => String(item.id) === id);
+  const phase = id => values(state.phases).find(item => String(item.id) === id);
 
   function showDetails(kind, id) {
-    const item = kind === 'deliverable' ? deliverable(id) : checkpoint(kind, id);
+    const item = kind === 'deliverable' ? deliverable(id) : kind === 'activity' ? activity(id) : kind === 'phase' ? phase(id) : checkpoint(kind, id);
     if (!item) return;
     document.getElementById('detail-kind').textContent = label('nodeTypes', kind, kind === 'deliverable' ? 'Deliverable' : kind.toUpperCase());
     document.getElementById('detail-title').textContent = `${item.id || id} · ${item.display_label || item.title || label('common', 'untitled', 'Untitled')}`;
     const status = item.display_status || item.status || 'unknown';
     const statusKey = String(status).toLowerCase().replaceAll(' ', '_');
-    let body = section('Status', `<p><span class="badge status-${esc(statusKey)}">${esc(label('statuses', statusKey, String(status).replaceAll('_', ' ')))}</span></p>`);
+    let body = section(ui('status', 'Status'), `<p><span class="badge status-${esc(statusKey)}">${esc(label('statuses', statusKey, String(status).replaceAll('_', ' ')))}</span></p>`);
+    const provenance = item.provenance || {};
+    if (provenance.layer) body += section(ui('provenance_layer', 'Provenance layer'), `<p>${esc(provenance.layer)}</p>`);
+    if (provenance.source_id) body += section(ui('provenance_source', 'Provenance source'), `<p>${esc(provenance.source_id)}</p>`);
+    if (item.maturity) body += section(ui('maturity', 'Maturity'), `<p>${esc(item.maturity)}</p>`);
     if (kind === 'deliverable') {
-      body += section('ID', `<p>${esc(item.id)}</p>`);
-      body += section('Owner', `<p>${esc(item.owner || 'Unassigned')}</p>`);
-      body += section('Dependencies', list(item.depends_on));
+      body += section(ui('id', 'ID'), `<p>${esc(item.id)}</p>`);
+      body += section(ui('owner', 'Owner'), `<p>${esc(item.owner || ui('unassigned', 'Unassigned'))}</p>`);
+      body += section(ui('dependencies', 'Dependencies'), list(item.depends_on));
+      body += section(ui('definition_state', 'Definition state'), `<p>${esc(label('definitions', item.definition_state || 'concrete', item.definition_state || 'concrete'))}</p>`);
+      body += section(ui('refines', 'Refines'), list(item.refines));
+      body += section(ui('refined_by', 'Refined by'), list(item.refined_by));
+      body += section(ui('refinement_trigger', 'Refinement trigger'), item.refinement_trigger ? `<p><code>${esc(JSON.stringify(item.refinement_trigger))}</code></p>` : `<p class="muted">${esc(ui('none', 'None'))}</p>`);
+      body += section(ui('refinement_status', 'Refinement status'), `<p><span class="badge status-${esc(item.refinement_status || 'not_required')}">${esc(label('refinementStatuses', item.refinement_status || 'not_required', item.refinement_status || 'not required'))}</span></p>`);
+      body += section(ui('concrete_leaf_closure', 'Concrete leaf closure'), list(item.concrete_leaf_closure));
+      const bindingImpact = item.binding_impact || (item.actionability && item.actionability.binding_impact);
+      if (bindingImpact) body += section(ui('binding_impact', 'Binding impact'), `<p><code>${esc(JSON.stringify(bindingImpact))}</code></p>`);
       if (item.actionability && item.actionability.state) {
         const actionabilityKey = String(item.actionability.state).toLowerCase();
-        body += section('Actionability', `<p>${esc(label('actionability', actionabilityKey, actionabilityKey.replaceAll('_', ' ')))}</p>`);
-        body += section('Unmet prerequisites', list(item.actionability.unmet_dependencies));
+        body += section(ui('actionability', 'Actionability'), `<p>${esc(label('actionability', actionabilityKey, actionabilityKey.replaceAll('_', ' ')))}</p>`);
+        body += section(ui('unmet_dependencies', 'Unmet prerequisites'), list(item.actionability.unmet_dependencies));
         if (typeof item.actionability.binding_ready === 'boolean') {
           const readinessKey = item.actionability.binding_ready ? 'ready' : 'not_ready';
           body += section(label('binding', 'readiness', 'Binding readiness'), `<p>${esc(label('binding', readinessKey, readinessKey.replaceAll('_', ' ')))}</p>`);
           body += section(label('binding', 'blockers', 'Binding blockers'), list(item.actionability.binding_blockers, label('binding', 'no_blockers', 'No binding blockers')));
         }
       }
-      body += section('Evidence', list(item.evidence, 'No evidence recorded.'));
-      const history = values(item.reviews).map(review => typeof review === 'object' ? [review.decision || review.result || review.status || 'Recorded', review.reviewer || review.actor || 'Unknown reviewer', review.evidence || review.comment || review.notes || ''].filter(Boolean).join(' · ') : review);
-      body += section('Review history', list(history, 'No review history recorded.'));
-      if (item.blocker) body += section('Blocker', `<p>${esc(typeof item.blocker === 'object' ? (item.blocker.reason || item.blocker.id || JSON.stringify(item.blocker)) : item.blocker)}</p>`);
-    } else {
-      body += section('Input evidence', list(item.input_evidence || item.evidence, 'No input evidence recorded.'));
-      body += section('Output deliverables', list(item.output_deliverables || item.required_deliverables, 'No output deliverables recorded.'));
-      const blockers = values(item.blockers).map(blocker => typeof blocker === 'object' ? `${blocker.deliverable || blocker.id || 'Item'} · ${blocker.status || blocker.reason || 'Blocked'}` : blocker);
-      body += section('Blockers', list(blockers, 'No open blockers.'));
+      body += section(ui('evidence', 'Evidence'), list(item.evidence, ui('no_evidence', 'No evidence recorded.')));
+      const history = values(item.reviews).map(review => typeof review === 'object' ? [review.decision || review.result || review.status || ui('recorded', 'Recorded'), review.reviewer || review.actor || ui('unknown_reviewer', 'Unknown reviewer'), review.evidence || review.comment || review.notes || ''].filter(Boolean).join(' · ') : review);
+      body += section(ui('review_history', 'Review history'), list(history, ui('no_review_history', 'No review history recorded.')));
+      if (values(item.replacements).length) body += section(ui('replaced_by', 'Replaced by'), list(item.replacements));
+      if (item.blocker) body += section(ui('blocker', 'Blocker'), `<p>${esc(typeof item.blocker === 'object' ? (item.blocker.reason || item.blocker.id || JSON.stringify(item.blocker)) : item.blocker)}</p>`);
+    } else if (kind === 'activity') {
+      body += section(ui('definition_state', 'Definition state'), `<p>${esc(label('definitions', item.definition_state || 'concrete', item.definition_state || 'concrete'))}</p>`);
+      body += section(ui('refines', 'Refines'), list(item.refines));
+      body += section(ui('refined_by', 'Refined by'), list(item.refined_by));
+      body += section(ui('refinement_trigger', 'Refinement trigger'), item.refinement_trigger ? `<p><code>${esc(JSON.stringify(item.refinement_trigger))}</code></p>` : `<p class="muted">${esc(ui('none', 'None'))}</p>`);
+      body += section(ui('output_deliverables', 'Output deliverables'), list(item.deliverables, ui('no_output_deliverables', 'No output deliverables recorded.')));
+    } else if (kind !== 'phase') {
+      const criteria = values(item.criteria).map(criterion => typeof criterion === 'object' ? `${criterion.id || label('common', 'criterion', 'criterion')} · ${criterion.description || ''}${criterion.evidence_required ? ` · ${label('common', 'evidence_required', 'Evidence required')}` : ''}` : criterion);
+      if (criteria.length) body += section(ui('criteria', 'Review criteria'), list(criteria));
+      body += section(ui('input_evidence', 'Input evidence'), list(item.input_evidence || item.evidence, ui('no_input_evidence', 'No input evidence recorded.')));
+      body += section(ui('output_deliverables', 'Output deliverables'), list(item.output_deliverables || item.required_deliverables, ui('no_output_deliverables', 'No output deliverables recorded.')));
+      const blockers = values(item.blockers).map(blocker => typeof blocker === 'object' ? `${blocker.deliverable || blocker.id || ui('item', 'Item')} · ${blocker.status || blocker.reason || ui('blocked', 'Blocked')}` : blocker);
+      body += section(ui('blockers', 'Blockers'), list(blockers, ui('no_blockers', 'No open blockers.')));
       const approval = item.approval || {};
       const approvalStatus = String(approval.status || 'pending');
-      body += section('Approval', `<p>${esc(label('statuses', approvalStatus, approvalStatus))}${approval.authorized_human ? ' · Human authorization recorded' : ''}</p>`);
+      body += section(ui('approval', 'Approval'), `<p>${esc(label('statuses', approvalStatus, approvalStatus))}${approval.authorized_human ? ` · ${esc(ui('human_authorization_recorded', 'Human authorization recorded'))}` : ''}</p>`);
     }
     document.getElementById('detail-body').innerHTML = body;
     details.hidden = false;
@@ -828,7 +922,7 @@ def render_index(
   }
 
   function route() {
-    const match = location.hash.match(/^#node=(tr|dcp|gate|deliverable):(.+)$/i);
+    const match = location.hash.match(/^#node=(phase|activity|tr|dcp|gate|deliverable):(.+)$/i);
     if (match) showDetails(match[1].toLowerCase(), decodeURIComponent(match[2]));
   }
   window.addEventListener('hashchange', route);
@@ -924,6 +1018,9 @@ def render_index(
         "__TOTAL__": _count(summary.get("total_deliverables", len(deliverables))),
         "__REVIEW_QUEUE__": _count(summary.get("review_queue", 0)),
         "__WAITING__": _count(waiting_count),
+        "__REFINEMENT_DUE__": _count(refinement_due_count),
+        "__REFINEMENT_ALERT_CLASS__": " alert" if refinement_due_count else "",
+        "__REFINEMENT_ALERT__": refinement_alert,
         "__BLOCKERS__": _count(explicit_blockers),
         "__BLOCKER_ALERT__": " alert" if explicit_blockers else "",
         "__TASK_ID__": _h(task_id),
@@ -959,7 +1056,7 @@ def render_index(
                 },
                 "nodeTypes": {
                     item: _t(translator, f"node_type.{item}", item.upper() if item in {"tr", "dcp"} else item.title())
-                    for item in ("tr", "dcp", "gate", "deliverable")
+                    for item in ("phase", "activity", "tr", "dcp", "gate", "deliverable")
                 },
                 "actionability": {
                     item: _t(
@@ -975,6 +1072,7 @@ def render_index(
                         "actionable",
                         "waiting_on_dependencies",
                         "waiting_on_bindings",
+                        "waiting_on_refinement",
                         "waiting_on_protocol",
                         "claimed",
                         "inactive",
@@ -990,8 +1088,69 @@ def render_index(
                         "no_blockers",
                     )
                 },
+                "definitions": {
+                    item: _t(
+                        translator,
+                        f"definition_state.{item}",
+                        item.replace("_", " ").title(),
+                    )
+                    for item in ("abstract", "placeholder", "concrete")
+                },
+                "refinementStatuses": {
+                    item: _t(
+                        translator,
+                        f"refinement_status.{item}",
+                        item.replace("_", " ").title(),
+                    )
+                    for item in ("not_required", "pending", "due", "resolved")
+                },
                 "common": {
-                    "untitled": _t(translator, "common.unknown", "Untitled")
+                    "untitled": _t(translator, "common.unknown", "Untitled"),
+                    "criterion": _t(translator, "common.criterion", "criterion"),
+                    "evidence_required": _t(
+                        translator,
+                        "detail.evidence_required",
+                        "Evidence required",
+                    ),
+                },
+                "ui": {
+                    "status": _t(translator, "field.status", "Status"),
+                    "id": _t(translator, "field.id", "ID"),
+                    "owner": _t(translator, "field.owner", "Owner"),
+                    "dependencies": _t(translator, "field.dependencies", "Dependencies"),
+                    "definition_state": _t(translator, "detail.definition_state", "Definition state"),
+                    "refines": _t(translator, "detail.refines", "Refines"),
+                    "refined_by": _t(translator, "detail.refined_by", "Refined by"),
+                    "refinement_trigger": _t(translator, "detail.refinement_trigger", "Refinement trigger"),
+                    "refinement_status": _t(translator, "detail.refinement_status", "Refinement status"),
+                    "concrete_leaf_closure": _t(translator, "detail.concrete_leaf_closure", "Concrete leaf closure"),
+                    "binding_impact": _t(translator, "detail.binding_impact", "Binding impact"),
+                    "evidence": _t(translator, "field.evidence", "Evidence"),
+                    "approval": _t(translator, "field.approval", "Approval"),
+                    "blockers": _t(translator, "field.blockers", "Blockers"),
+                    "review_history": _t(translator, "detail.review_history", "Review history"),
+                    "provenance_layer": _t(translator, "detail.provenance_layer", "Provenance layer"),
+                    "provenance_source": _t(translator, "detail.provenance_source", "Provenance source"),
+                    "maturity": _t(translator, "detail.maturity", "Maturity"),
+                    "criteria": _t(translator, "detail.criteria", "Review criteria"),
+                    "replaced_by": _t(translator, "detail.replaced_by", "Replaced by"),
+                    "blocker": _t(translator, "detail.blocker", "Blocker"),
+                    "actionability": _t(translator, "detail.actionability", "Actionability"),
+                    "unmet_dependencies": _t(translator, "detail.unmet_dependencies", "Unmet prerequisites"),
+                    "input_evidence": _t(translator, "detail.input_evidence", "Input evidence"),
+                    "output_deliverables": _t(translator, "detail.output_deliverables", "Output deliverables"),
+                    "no_evidence": _t(translator, "detail.no_evidence", "No evidence recorded."),
+                    "no_review_history": _t(translator, "detail.no_review_history", "No review history recorded."),
+                    "no_input_evidence": _t(translator, "detail.no_input_evidence", "No input evidence recorded."),
+                    "no_output_deliverables": _t(translator, "detail.no_output_deliverables", "No output deliverables recorded."),
+                    "no_blockers": _t(translator, "detail.no_blockers", "No open blockers."),
+                    "human_authorization_recorded": _t(translator, "common.human_authorization_recorded", "Human authorization recorded"),
+                    "unassigned": _t(translator, "common.unassigned", "Unassigned"),
+                    "unknown_reviewer": _t(translator, "common.reviewer", "Unknown reviewer"),
+                    "recorded": _t(translator, "common.recorded", "Recorded"),
+                    "item": _t(translator, "common.item", "Item"),
+                    "blocked": _t(translator, "common.blocked", "Blocked"),
+                    "none": _t(translator, "common.none", "None"),
                 },
             }
         ),

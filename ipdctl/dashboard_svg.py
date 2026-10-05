@@ -18,7 +18,13 @@ from urllib.parse import quote
 
 PHASE_ORDER = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
 TYPE_ORDER = {"Phase": 0, "TR": 1, "DCP": 2, "Gate": 3, "Activity": 4, "Deliverable": 5}
-RELATION_ORDER = {"depends_on": 0, "supports": 1, "verifies": 2, "supersedes": 3}
+RELATION_ORDER = {
+    "depends_on": 0,
+    "supports": 1,
+    "verifies": 2,
+    "supersedes": 3,
+    "refines": 4,
+}
 
 STATUS_ALIASES = {"not_started": "planned", "approved": "accepted"}
 STATUS_STYLES = {
@@ -36,6 +42,7 @@ RELATION_STYLES = {
     "supports": ("#1570EF", "6 4", "arrow-supports"),
     "verifies": ("#7F56D9", "2 4", "arrow-verifies"),
     "supersedes": ("#DC6803", "10 4 2 4", "arrow-supersedes"),
+    "refines": ("#0E9384", "5 4", "arrow-refines"),
 }
 
 
@@ -48,6 +55,7 @@ class _Node:
     status: str
     current: bool
     blocked: bool
+    refinement_due: bool
     detail_key: str
 
 
@@ -159,6 +167,7 @@ def _normalise_graph(graph: Mapping[str, Any]) -> tuple[list[_Node], list[_Edge]
                 status=status,
                 current=bool(raw.get("current")),
                 blocked=bool(raw.get("blocked")) or status == "blocked",
+                refinement_due=raw.get("refinement_due") is True,
                 detail_key=_text(raw.get("detail_key")).strip() or f"{node_type.lower()}:{node_id}",
             )
         )
@@ -473,6 +482,7 @@ def _render_defs() -> str:
         ("arrow-supports", "#1570EF"),
         ("arrow-verifies", "#7F56D9"),
         ("arrow-supersedes", "#DC6803"),
+        ("arrow-refines", "#0E9384"),
     ):
         marker_defs.append(
             f'<marker id="{marker_id}" viewBox="0 0 10 10" refX="9" refY="5" '
@@ -598,7 +608,8 @@ def _render_node(
     attrs = (
         f'data-node-id="{escape(node.id, quote=True)}" data-node-type="{node.type}" '
         f'data-status="{node.status}" data-x="{_fmt(box.x)}" data-y="{_fmt(box.y)}" '
-        f'data-width="{_fmt(box.width)}" data-height="{_fmt(box.height)}"'
+        f'data-width="{_fmt(box.width)}" data-height="{_fmt(box.height)}" '
+        f'data-refinement-due="{str(node.refinement_due).lower()}"'
     )
     node_type_label = _t(
         translator,
@@ -660,6 +671,15 @@ def _render_node(
             '<rect width="68" height="22" rx="11" fill="#C01048"/>'
             f'<text x="34" y="15" text-anchor="middle">{escape(_t(translator, "svg.blocked", "BLOCKED"))}</text></g>'
         )
+    if node.refinement_due:
+        # Refinement due is an independent definition-governance signal.  Keep
+        # it visible even when the lifecycle is also explicitly blocked.
+        badge_x = box.x + 4 if node.blocked else box.right - 78
+        parts.append(
+            f'<g class="refinement-badge" transform="translate({_fmt(badge_x)} {_fmt(box.y - 11)})">'
+            '<rect width="74" height="22" rx="11" fill="#0E9384"/>'
+            f'<text x="37" y="15" text-anchor="middle">{escape(_t(translator, "svg.refinement_due", "REFINE"))}</text></g>'
+        )
     parts.extend(("</g>", "</a>"))
     return "".join(parts)
 
@@ -673,7 +693,7 @@ def _render_legend(
 ) -> str:
     parts = [
         f'<g class="legend" transform="translate({_fmt(x)} {_fmt(y)})">',
-        f'<rect width="{_fmt(width)}" height="180" rx="16" fill="#FFFFFF" stroke="#D0D5DD"/>',
+        f'<rect width="{_fmt(width)}" height="208" rx="16" fill="#FFFFFF" stroke="#D0D5DD"/>',
         f'<text x="18" y="25" class="legend-title">{escape(_t(translator, "svg.legend", "Legend"))}</text>',
     ]
     node_items = (
@@ -693,12 +713,14 @@ def _render_legend(
     edge_x = 18
     edge_relations = tuple(
         relation
-        for relation in ("depends_on", "supports", "verifies", "supersedes")
+        for relation in ("depends_on", "supports", "verifies", "supersedes", "refines")
         if relations is None or relation in relations
     )
     for index, relation in enumerate(edge_relations):
         colour, dash, marker = RELATION_STYLES[relation]
-        item_x = edge_x + index * 184
+        row, column = divmod(index, 4)
+        item_x = edge_x + column * 184
+        item_y = 82 + row * 28
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
         relation_label = (
             _t(
@@ -714,15 +736,16 @@ def _render_legend(
             )
         )
         parts.append(
-            f'<path d="M {item_x} 82 H {item_x + 46}" stroke="{colour}" stroke-width="2"{dash_attr} '
+            f'<path d="M {item_x} {item_y} H {item_x + 46}" stroke="{colour}" stroke-width="2"{dash_attr} '
             f'marker-end="url(#{marker})"/>'
-            f'<text x="{item_x + 56}" y="87" class="legend-label">{escape(relation_label)}</text>'
+            f'<text x="{item_x + 56}" y="{item_y + 5}" class="legend-label">{escape(relation_label)}</text>'
         )
     statuses = tuple(STATUS_STYLES)
+    status_start_y = 122 + (28 if len(edge_relations) > 4 else 0)
     for index, status in enumerate(statuses):
         row, column = divmod(index, 4)
         item_x = 18 + column * 182
-        item_y = 122 + row * 28
+        item_y = status_start_y + row * 28
         fill, stroke, _ = STATUS_STYLES[status]
         parts.append(
             f'<circle cx="{item_x + 7}" cy="{item_y}" r="7" fill="{fill}" stroke="{stroke}" stroke-width="2"/>'
@@ -819,6 +842,7 @@ def render_svg(
                 status="blocked" if node.id in blocked else node.status,
                 current=node.current or node.id in emphasise,
                 blocked=node.blocked or node.id in blocked,
+                refinement_due=node.refinement_due,
                 detail_key=node.detail_key,
             )
             for node in nodes
@@ -869,7 +893,7 @@ def render_svg(
         '.node-title{font-size:13px;font-weight:650}.node-meta{font-size:10px;font-weight:600;fill:#667085}'
         '.node-kind{font-size:9px;font-weight:800;fill:#667085;letter-spacing:.12em}'
         '.node{cursor:pointer}.node:hover>*:not(title){filter:brightness(.97)}'
-        '.blocked-badge text{font-size:9px;font-weight:800;fill:#fff;letter-spacing:.04em}'
+        '.blocked-badge text,.refinement-badge text{font-size:9px;font-weight:800;fill:#fff;letter-spacing:.04em}'
         '.edge{opacity:.82}.legend-title{font-size:13px;font-weight:750}.legend-label{font-size:11px;fill:#475467}'
         '</style>',
         '<rect width="100%" height="100%" fill="#F8FAFC"/>',
@@ -888,7 +912,7 @@ def render_svg(
             "</g>",
             _render_legend(
                 36,
-                height - 200,
+                height - 224,
                 min(width - 72, 760),
                 translator,
                 canonical_relations,
@@ -960,12 +984,16 @@ def render_dependency_svg(
     phase: str | None = None,
     title: str = "Deliverable Dependency",
     detail_href_prefix: str = "../index.html#node=",
-    relations: Iterable[str] | None = ("depends_on",),
+    relations: Iterable[str] | None = ("depends_on", "refines"),
     filter_to_phase: bool = True,
     translator: Any | None = None,
     locale: str = "en",
 ) -> str:
-    """Render activities and deliverables using a topological layered layout."""
+    """Render execution dependencies and structural refinement relationships.
+
+    Only ``depends_on`` influences topological levels; ``refines`` is a dashed
+    trace overlay and cannot change execution order.
+    """
 
     translator = _translator(translator, locale)
     if title == "Deliverable Dependency":

@@ -41,9 +41,17 @@ not release artifacts.
 
 Complete [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) before creating a tag. The source commit must be clean, CI must pass, package version and changelog must agree, and the release hygiene check must find no cache, build output, generated runtime data, credential-like files, or high-confidence secret patterns.
 
-The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.3.2-beta` (Python package version `0.3.2b1`).
+The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.4.0-beta` (Python package version `0.4.0b1`).
 
-For release qualification, include an in-place v0.3.1 project upgrade with
+The direct previous-version gate must build a governed project with the real
+`v0.3.2-beta` Tag, open it under v0.4 without reinitializing, prove
+`tailor --preview` is zero-write, re-tailor it to process schema `2.0`, and
+preserve accepted status, evidence, and review history. Enabling a capability
+must add only planned work, expose provenance in the Dashboard, fail closed on
+the changed binding contract, and pass only after an explicitly authorized
+human baseline adoption.
+
+Retain the longer-horizon in-place v0.3.1 compatibility regression with
 pre-existing dirty critical files: validate single-owner bindings, preview and
 record an authorized baseline adoption, expire and recover one real v0.3.1
 windowless active Claim, run two complete Claim iterations, and
