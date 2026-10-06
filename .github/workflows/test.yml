@@ -62,13 +62,21 @@ jobs:
           python -m zipfile -l "$wheel" | grep 'schemas/process_extensions.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/refinement_plan.schema.json'
           python -m zipfile -l "$wheel" | grep 'policies/capabilities/sourced_component_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/module_decomposition_and_verification.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/interface_contract_and_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/release_and_lifecycle_assurance.yaml'
           python -m zipfile -l "$wheel" | grep 'templates/project/.ipd/process_extensions.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
           tar -tzf "$sdist" | grep '/schemas/capability_policy.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/process_extensions.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/refinement_plan.schema.json$'
+          tar -tzf "$sdist" | grep '/scripts/simulate_capability_lifecycle.py$'
           tar -tzf "$sdist" | grep '/scripts/simulate_progressive_refinement.py$'
+          tar -tzf "$sdist" | grep '/scripts/verify_v041_upgrade.py$'
           tar -tzf "$sdist" | grep '/policies/capabilities/sourced_component_integration.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/module_decomposition_and_verification.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/interface_contract_and_integration.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/release_and_lifecycle_assurance.yaml$'
           tar -tzf "$sdist" | grep '/templates/project/.ipd/process_extensions.yaml$'
       - name: Test progressive refinement from extracted sdist
         shell: bash
@@ -85,6 +93,18 @@ jobs:
           cd "$RUNNER_TEMP/sdist-progressive"
           "$RUNNER_TEMP/sdist-venv/bin/python" -B \
             simulate_progressive_refinement.py --json
+          cd "$RUNNER_TEMP"
+          for pattern in \
+            sourced_component_integration \
+            module_decomposition_and_verification \
+            interface_contract_and_integration \
+            release_and_lifecycle_assurance; do
+            project="$(mktemp -d)/catalog-$pattern"
+            "$RUNNER_TEMP/sdist-venv/bin/ipdctl" init "$project" --name "catalog-$pattern" --locale en
+            "$RUNNER_TEMP/sdist-venv/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=[sys.argv[2]]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml" "$pattern"
+            "$RUNNER_TEMP/sdist-venv/bin/ipdctl" tailor "$project"
+            "$RUNNER_TEMP/sdist-venv/bin/ipdctl" validate "$project" --json
+          done
           cd "$source_root"
           "$RUNNER_TEMP/sdist-venv/bin/python" -B -m unittest tests.test_progressive_refinement_simulation -v
       - name: Test installed wheel outside checkout
@@ -100,6 +120,17 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" -B \
             simulate_progressive_refinement.py --json
           cd "$RUNNER_TEMP"
+          for pattern in \
+            sourced_component_integration \
+            module_decomposition_and_verification \
+            interface_contract_and_integration \
+            release_and_lifecycle_assurance; do
+            project="$(mktemp -d)/catalog-$pattern"
+            "$RUNNER_TEMP/venv/bin/ipdctl" init "$project" --name "catalog-$pattern" --locale en
+            "$RUNNER_TEMP/venv/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=[sys.argv[2]]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml" "$pattern"
+            "$RUNNER_TEMP/venv/bin/ipdctl" tailor "$project"
+            "$RUNNER_TEMP/venv/bin/ipdctl" validate "$project" --json
+          done
           for locale in en zh-CN; do
             project="$(mktemp -d)/project-$locale"
             "$RUNNER_TEMP/venv/bin/ipdctl" init "$project" --name "package-$locale" --locale "$locale"
@@ -157,8 +188,26 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install current package
         run: python -m pip install .
-      - name: Qualify v0.4.0-beta to v0.4.1-beta
+      - name: Qualify the published v0.4.0 project upgrade
         run: python -B scripts/verify_v040_upgrade.py
+
+  upgrade-v041:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install current package
+        run: python -m pip install .
+      - name: Qualify v0.4.1-beta to v0.5.0-beta
+        run: python -B scripts/verify_v041_upgrade.py
 
   governance-gate:
     if: always()
@@ -169,6 +218,7 @@ jobs:
       - upgrade-v031
       - upgrade-v032
       - upgrade-v040
+      - upgrade-v041
     steps:
       - name: Require every release-contract job
         shell: bash
@@ -178,13 +228,15 @@ jobs:
           UPGRADE_V031_RESULT: ${{ needs.upgrade-v031.result }}
           UPGRADE_V032_RESULT: ${{ needs.upgrade-v032.result }}
           UPGRADE_V040_RESULT: ${{ needs.upgrade-v040.result }}
+          UPGRADE_V041_RESULT: ${{ needs.upgrade-v041.result }}
         run: |
-          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s upgrade-v040=%s\n' \
+          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s upgrade-v040=%s upgrade-v041=%s\n' \
             "$TEST_RESULT" "$PACKAGE_RESULT" \
             "$UPGRADE_V031_RESULT" "$UPGRADE_V032_RESULT" \
-            "$UPGRADE_V040_RESULT"
+            "$UPGRADE_V040_RESULT" "$UPGRADE_V041_RESULT"
           test "$TEST_RESULT" = "success"
           test "$PACKAGE_RESULT" = "success"
           test "$UPGRADE_V031_RESULT" = "success"
           test "$UPGRADE_V032_RESULT" = "success"
           test "$UPGRADE_V040_RESULT" = "success"
+          test "$UPGRADE_V041_RESULT" = "success"

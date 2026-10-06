@@ -75,6 +75,13 @@ is explicitly intended. Use `claim --recover` only to recover an orphaned
 another actor cannot be taken over. An Agent must never call final approval
 while impersonating a human.
 
+Treat the actionability fields in `context --json` as distinct causes:
+`waiting_items` have unmet `depends_on` prerequisites, `explicit_blockers`
+have lifecycle status `blocked`, and `governance_blockers` fail binding,
+refinement, Claim-provenance, or protocol checks. `blocked_items` is only the
+deduplicated Deliverable-scoped compatibility union; project-scoped protocol
+entries remain exclusive to `governance_blockers`.
+
 Tailoring compiles exactly four additive layers in order:
 `core -> task_type -> capability -> project`. Select reusable capability packs
 with `task_profile.yaml` at `capability_patterns`; use the canonical
@@ -86,6 +93,15 @@ Every compiled Phase, Activity, Deliverable, TR, DCP, and Gate records its
 `provenance` layer/source and phase-derived `maturity`. Dependencies must be
 acyclic and phase-monotonic: an earlier-Phase Deliverable cannot depend on a
 later-Phase Deliverable.
+
+The built-in capability catalog contains `sourced_component_integration`,
+`module_decomposition_and_verification`,
+`interface_contract_and_integration`, and
+`release_and_lifecycle_assurance`. Capabilities are explicit opt-ins: an
+omitted or empty `capability_patterns` list adds none of them. Use
+`depends_on` for readiness and execution order. `supports` and `verifies` are
+trace semantics for review and visualization; they never create execution
+prerequisites.
 
 Always run `tailor --preview` before changing an existing process. Preview is
 read-only; `--json` returns `added`, `removed`, `changed`, `migrations`, and
@@ -120,9 +136,15 @@ remains readable only while it semantically matches a profile without enabled
 capabilities and the canonical project extension is empty. Preview and
 re-tailor before enabling a capability or adding project extension content.
 
-Progressive refinement is a separate, additive project decision. A canonical
-`refinement_requirements` entry declares the root and trigger; the plan must
-use `mode: expand` and the current `process_fingerprint`. Always run
+Progressive refinement is a separate, additive decision. A canonical
+`refinement_requirements` entry, or a selected capability's policy-owned
+placeholder, declares the root and trigger. The
+`module_decomposition_and_verification` capability deliberately adds
+`module.implementation_baseline` as a placeholder; accepting
+`module.decomposition_baseline` makes its refinement due. Expand it through
+`ipdctl refine` rather than treating the placeholder as executable module
+work. The plan must use `mode: expand` and the current
+`process_fingerprint`. Always run
 `refine --preview --json` first. Apply only the reviewed plan, with an
 identified human Actor, `--authorized`, and a reason, while there is no active
 Claim and the root belongs to the current Phase. Never infer child modules,

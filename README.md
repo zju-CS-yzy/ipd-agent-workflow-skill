@@ -4,7 +4,7 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-Current prerelease target: `v0.4.1-beta` (Python package `0.4.1b1`).
+Current prerelease target: `v0.5.0-beta` (Python package `0.5.0b1`).
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 
@@ -81,6 +81,14 @@ cannot be taken over. For an expired v0.3.1 Claim that has no binding window,
 record the exact authorized-human migration baseline first; its first recovery
 creates an immutable migration window that later recoveries reuse.
 
+For machine consumers, `context --json` separates `waiting_items` (unmet
+`depends_on` prerequisites), `explicit_blockers` (lifecycle status
+`blocked`), and `governance_blockers` (binding, refinement, Claim provenance,
+or protocol failures). `blocked_items` remains the deduplicated,
+Deliverable-scoped compatibility union; project-scoped entries such as
+`project.claim_readiness` appear only in `governance_blockers`. Do not infer a
+root cause from the compatibility aggregate.
+
 `advance-phase` requires all current-Phase Gates to be approved and the latest
 passed verification to match both the current state revision and the freshly
 calculated verification-input fingerprint. It advances one Phase and leaves
@@ -101,15 +109,37 @@ locale-aware. Run `ipdctl COMMAND --help` for the exact options; the normative s
 
 ## Layered process compilation
 
-`task_profile.yaml` selects task types and optional reusable capabilities. For
-example, this enables the generic three-stage sourced-component flow—candidate
-validation, selection decision, and integration baseline—without embedding a
-vendor, robot, sensor, repository path, or Owner assumption:
+`task_profile.yaml` selects task types and optional reusable capabilities.
+Capabilities are explicit opt-ins: omitting `capability_patterns`, or setting
+it to `[]`, preserves the base task-type flow without adding a capability.
+The built-in catalog is:
+
+| Capability pattern | Governed scope |
+| --- | --- |
+| `sourced_component_integration` | Candidate validation, selection decision, and controlled integration baseline. |
+| `module_decomposition_and_verification` | Module decomposition, evidence-driven module realization, and module verification. |
+| `interface_contract_and_integration` | Versioned interface contracts, integration evidence, and conformance verification. |
+| `release_and_lifecycle_assurance` | Release strategy, controlled candidate, verification, handover, and lifecycle assurance. |
+
+For example, this enables module and interface governance without embedding a
+product decomposition, repository path, or Owner assumption:
 
 ```yaml
 capability_patterns:
-  - sourced_component_integration
+  - module_decomposition_and_verification
+  - interface_contract_and_integration
 ```
+
+The module capability adds `module.implementation_baseline` as a triggered
+`placeholder`. Once `module.decomposition_baseline` is accepted, its
+refinement requirement becomes due. Use `ipdctl refine` to expand that
+unknown-at-tailoring-time structure into reviewed, project-owned module
+Activities and Deliverables; do not claim the placeholder itself.
+
+Typed `supports` and `verifies` relations preserve engineering meaning in
+traceability views, Dashboard graphs, and review context. They do not
+participate in readiness or execution topology. Only `depends_on` creates an
+execution prerequisite.
 
 `ipdctl init` creates an empty canonical `.ipd/process_extensions.yaml` as the
 project-owned fourth layer. It may add Activities, review-required Deliverables, typed relations
@@ -171,12 +201,15 @@ capability or adding extension content, preview and re-tailor the process.
 
 ## Progressive refinement
 
-Projects may declare a `refinement_requirements` entry in
-`.ipd/process_extensions.yaml` for a known Deliverable. The declaration fixes
-the root, its initial `definition_state`, an explicit trigger, and the
-`all_children_accepted` completion policy. No task-type policy guesses the
-project's modules or functions: an Agent prepares a separate reviewed plan only
-after project evidence makes the requirement `due`.
+A refinement requirement can come from a project-owned
+`refinement_requirements` entry in `.ipd/process_extensions.yaml` or from a
+selected capability's policy-owned placeholder. The declaration fixes the
+root, its initial `definition_state`, an explicit trigger, and the
+`all_children_accepted` completion policy. In the built-in module capability,
+`module.implementation_baseline` becomes `due` only after
+`module.decomposition_baseline` is accepted. No task-type or capability policy
+guesses the project's actual modules or functions: an Agent prepares a
+separate reviewed plan only after project evidence makes the requirement due.
 
 Only Deliverables may be refinement requirement roots. Trigger subjects must
 be reachable before the root's Gate: an accepted Deliverable may not be in a
@@ -254,6 +287,11 @@ and unbound changes under critical roots fail verification. An actually changed
 critical path may resolve to only one Deliverable owner. New Claim events record
 an exact binding window; an old historical Claim is not permanent ownership
 evidence for later changes.
+
+If a concrete capability Deliverable explicitly requires an Owner but has no
+user-authored rule, eligibility reports `ARTIFACT_OWNER_REQUIRED`; a concrete
+child created by refinement retains the more specific
+`REFINEMENT_OWNER_REQUIRED` code.
 
 A Binding with no `role`, or with `role: owner`, preserves the single-owner
 contract and uses one `deliverable`. `role: shared_evidence` instead uses a

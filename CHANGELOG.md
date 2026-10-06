@@ -1,8 +1,52 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.4.1-beta` maps to package version `0.4.1b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.0-beta` maps to package version `0.5.0b1`.
 
 ## [Unreleased]
+
+## [0.5.0b1] - 2026-10-06
+
+### Added
+
+- Expanded the explicit opt-in Capability Catalog with domain-neutral module
+  decomposition and verification, interface contract and integration, and
+  release and lifecycle assurance policies. Each policy contributes governed
+  Activities, Deliverables, typed trace relations, checkpoint criteria, and
+  capability provenance without embedding project-instance data.
+- Added a policy-owned progressive-refinement root for the module
+  implementation baseline. Once the approved decomposition satisfies its
+  trigger, a reviewed `ipdctl refine` plan materializes concrete project-owned
+  module Deliverables while retaining structural lineage and rewriting
+  downstream execution dependencies to concrete leaves.
+- Added explicit `waiting_items`, `explicit_blockers`, and
+  `governance_blockers` projections to context and Dashboard machine data while
+  retaining the deduplicated, Deliverable-scoped `blocked_items` compatibility
+  field.
+
+### Changed
+
+- Capability policy discovery now validates every registry asset in source,
+  wheel, and sdist installations and fails closed on a partial catalog.
+- Capability policies use stricter identifier, activity-reference, dependency,
+  criterion, and refinement-trigger validation. Catalog order is canonical, so
+  equivalent selections compile byte-for-byte identically.
+- Dashboard and CLI summaries now distinguish work waiting on prerequisites
+  from lifecycle-blocked work and governance failures; the same shared
+  classifier drives both projections.
+- Bilingual workflow resources and documentation now cover every built-in
+  capability. Only `depends_on` participates in readiness and execution order;
+  `supports`, `verifies`, and `supersedes` remain trace semantics.
+
+### Compatibility
+
+- Capability selection remains opt-in. A v0.4.1 profile with no
+  `capability_patterns` field and one with `capability_patterns: []` compile to
+  the same process.
+- Existing v0.4.1 projects remain readable without rerunning `init`; enabling a
+  new capability is a reviewed re-tailoring decision, not an automatic upgrade.
+- Process and capability schema versions remain unchanged; the single-Claim
+  lifecycle, authorized-human approval boundary, and read-only Git/SVN
+  integration remain intact.
 
 ## [0.4.1b1] - 2026-10-06
 

@@ -37,6 +37,7 @@ from .refinement import (
     effective_gate_requirements,
     refinement_children,
     refinement_leaf_closure,
+    refinement_requirement_from_deliverable,
     validate_refinement_trigger,
 )
 from .yamlio import YamlError, load_yaml, write_yaml_atomic
@@ -332,6 +333,21 @@ def _assemble(
         source["refines"] = target_id
 
     requirements_by_root: dict[str, dict[str, Any]] = {}
+    for root in deliverables:
+        if root.get("provenance", {}).get("layer") == "project":
+            # Project-owned requirements are normalized in the extension's
+            # dedicated refinement_requirements collection.
+            continue
+        try:
+            requirement = refinement_requirement_from_deliverable(root)
+        except RefinementPlanError as exc:
+            raise TailoringError(str(exc)) from exc
+        if requirement is None:
+            continue
+        root_id = requirement["root"]
+        requirements_by_root[root_id] = requirement
+        root["completion_policy"] = requirement["completion_policy"]
+
     for requirement in extension["refinement_requirements"]:
         root_id = requirement["root"]
         root = deliverable_by_id.get(root_id)
@@ -340,6 +356,16 @@ def _assemble(
                 f"$.refinement_requirements: root {root_id!r} must reference "
                 "an existing Deliverable"
             )
+        if root_id in requirements_by_root:
+            if requirements_by_root[root_id] != requirement:
+                raise TailoringError(
+                    f"$.refinement_requirements: root {root_id!r} conflicts "
+                    "with an earlier process layer"
+                )
+            # Applying a plan materializes a policy-owned requirement in the
+            # project extension. An identical persisted copy is evidence of
+            # that application, not an override.
+            continue
         requirements_by_root[root_id] = requirement
         root["definition_state"] = requirement["definition_state"]
         root["refinement_required"] = True

@@ -15,7 +15,14 @@
   ],
   "properties": {
     "schema_version": { "const": "1.0" },
-    "capability_pattern": { "const": "sourced_component_integration" },
+    "capability_pattern": {
+      "enum": [
+        "sourced_component_integration",
+        "module_decomposition_and_verification",
+        "interface_contract_and_integration",
+        "release_and_lifecycle_assurance"
+      ]
+    },
     "title": { "type": "string", "minLength": 1 },
     "activities": {
       "type": "array",
@@ -53,15 +60,39 @@
         "title": { "type": "string", "minLength": 1 },
         "phase": { "$ref": "#/$defs/phaseId" },
         "sequence": { "type": "integer", "minimum": 0 },
-        "definition_state": { "$ref": "#/$defs/definitionState" },
-        "refinement_required": { "type": "boolean" },
-        "refinement_trigger": { "$ref": "#/$defs/refinementTrigger" },
+        "definition_state": { "enum": ["concrete", "abstract"] },
         "refines": { "$ref": "#/$defs/identifier" }
       }
     },
     "deliverable": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["definition_state"],
+            "properties": { "definition_state": { "const": "placeholder" } }
+          },
+          "then": {
+            "required": ["refinement_required", "refinement_trigger"],
+            "properties": { "refinement_required": { "const": true } }
+          }
+        },
+        {
+          "if": {
+            "required": ["refinement_required"],
+            "properties": { "refinement_required": { "const": true } }
+          },
+          "then": { "required": ["refinement_trigger"] }
+        },
+        {
+          "if": { "required": ["refinement_trigger"] },
+          "then": {
+            "required": ["refinement_required"],
+            "properties": { "refinement_required": { "const": true } }
+          }
+        }
+      ],
       "required": ["id", "title", "phase", "activity_id", "review_required", "depends_on"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },

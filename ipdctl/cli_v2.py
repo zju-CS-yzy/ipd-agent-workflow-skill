@@ -76,7 +76,7 @@ from .state import StateError, load_state, resolve_state_path, revised_copy, wri
 from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
 
-VERSION = "0.4.1-beta"
+VERSION = "0.5.0-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):

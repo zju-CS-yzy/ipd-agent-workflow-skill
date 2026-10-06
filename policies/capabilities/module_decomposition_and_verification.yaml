@@ -1,0 +1,73 @@
+schema_version: "1.0"
+capability_pattern: module_decomposition_and_verification
+title: Module decomposition and verification
+activities:
+  - id: plan.module_decomposition
+    title: Define module boundaries, interfaces, ownership, and verification intent
+    phase: plan
+    sequence: 29
+  - id: develop.module_realization
+    title: Realize and integrate governed module baselines
+    phase: develop
+    sequence: 39
+  - id: qualify.module_verification
+    title: Verify module behavior and integration against the approved decomposition
+    phase: qualify
+    sequence: 49
+deliverables:
+  - id: module.decomposition_baseline
+    title: Module decomposition baseline
+    phase: plan
+    activity_id: plan.module_decomposition
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - plan.integrated_plan
+  - id: module.implementation_baseline
+    title: Module implementation baseline
+    phase: develop
+    activity_id: develop.module_realization
+    review_required: true
+    definition_state: placeholder
+    refinement_required: true
+    requires_artifact_owner: false
+    refinement_trigger:
+      all_of:
+        - subject: module.decomposition_baseline
+          condition: accepted
+    depends_on:
+      - module.decomposition_baseline
+      - develop.solution_baseline
+  - id: module.verification_report
+    title: Module verification report
+    phase: qualify
+    activity_id: qualify.module_verification
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - module.implementation_baseline
+      - qualify.validation_report
+dependencies:
+  - source: module.decomposition_baseline
+    target: module.implementation_baseline
+    relation: supports
+  - source: module.verification_report
+    target: module.implementation_baseline
+    relation: verifies
+checkpoint_criteria:
+  - id: criterion.module.decomposition
+    checkpoint_id: dcp.plan
+    description: Module boundaries, interfaces, ownership, and verification intent are explicit and reviewable.
+    evidence_required: true
+  - id: criterion.module.refinement
+    checkpoint_id: tr.develop
+    description: The module implementation baseline has been refined into concrete owned module deliverables before governed implementation proceeds.
+    evidence_required: true
+  - id: criterion.module.traceability
+    checkpoint_id: tr.qualify
+    description: Each implemented module is traceable to the approved decomposition and has reproducible verification evidence.
+    evidence_required: true
+  - id: criterion.module.acceptance
+    checkpoint_id: dcp.qualify
+    description: Module and integration deviations are resolved or explicitly accepted by an authorized decision.
+    evidence_required: true

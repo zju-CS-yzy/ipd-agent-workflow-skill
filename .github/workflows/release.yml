@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - "v0.4.1-beta"
+      - "v0.5.0-beta"
 
 permissions:
   contents: write
@@ -25,6 +25,7 @@ jobs:
           python -B scripts/verify_v031_upgrade.py
           python -B scripts/verify_v032_upgrade.py
           python -B scripts/verify_v040_upgrade.py
+          python -B scripts/verify_v041_upgrade.py
           python -B -m unittest discover -s tests -v
           IPD_TEST_LOCALE=en python -B -m unittest \
             tests.test_full_lifecycle_simulation -v
@@ -35,35 +36,43 @@ jobs:
           git archive \
             --format=zip \
             --prefix=ipd-agent-workflow-skill/ \
-            --output=dist/ipd-agent-workflow-skill-v0.4.1-beta.zip \
+            --output=dist/ipd-agent-workflow-skill-v0.5.0-beta.zip \
             HEAD
           cd dist
           sha256sum \
-            ipd-agent-workflow-skill-v0.4.1-beta.zip \
-            ipd_agent_workflow_skill-0.4.1b1-py3-none-any.whl \
-            ipd_agent_workflow_skill-0.4.1b1.tar.gz \
+            ipd-agent-workflow-skill-v0.5.0-beta.zip \
+            ipd_agent_workflow_skill-0.5.0b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.5.0b1.tar.gz \
             > SHA256SUMS.txt
       - name: Inspect and smoke-test release artifacts
         shell: bash
         run: |
           wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.4.1-beta.zip"
+          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.5.0-beta.zip"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
           python -m zipfile -l "$wheel" | grep 'schemas/artifact_bindings.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/process_extensions.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/refinement_plan.schema.json'
           python -m zipfile -l "$wheel" | grep 'policies/capabilities/sourced_component_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/module_decomposition_and_verification.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/interface_contract_and_integration.yaml'
+          python -m zipfile -l "$wheel" | grep 'policies/capabilities/release_and_lifecycle_assurance.yaml'
           python -m zipfile -l "$wheel" | grep 'templates/project/.ipd/process_extensions.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
           tar -tzf "$sdist" | grep '/schemas/artifact_bindings.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/capability_policy.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/process_extensions.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/refinement_plan.schema.json$'
+          tar -tzf "$sdist" | grep '/scripts/simulate_capability_lifecycle.py$'
           tar -tzf "$sdist" | grep '/scripts/simulate_progressive_refinement.py$'
           tar -tzf "$sdist" | grep '/scripts/verify_v040_upgrade.py$'
+          tar -tzf "$sdist" | grep '/scripts/verify_v041_upgrade.py$'
           tar -tzf "$sdist" | grep '/policies/capabilities/sourced_component_integration.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/module_decomposition_and_verification.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/interface_contract_and_integration.yaml$'
+          tar -tzf "$sdist" | grep '/policies/capabilities/release_and_lifecycle_assurance.yaml$'
           tar -tzf "$sdist" | grep '/templates/project/.ipd/process_extensions.yaml$'
           mkdir -p "$RUNNER_TEMP/wheel-progressive"
           cp "$GITHUB_WORKSPACE/scripts/simulate_progressive_refinement.py" \
@@ -97,7 +106,11 @@ jobs:
           test -f "$skill_root/schemas/capability_policy.schema.json"
           test -f "$skill_root/schemas/process_extensions.schema.json"
           test -f "$skill_root/schemas/refinement_plan.schema.json"
+          test -f "$skill_root/scripts/simulate_capability_lifecycle.py"
           test -f "$skill_root/policies/capabilities/sourced_component_integration.yaml"
+          test -f "$skill_root/policies/capabilities/module_decomposition_and_verification.yaml"
+          test -f "$skill_root/policies/capabilities/interface_contract_and_integration.yaml"
+          test -f "$skill_root/policies/capabilities/release_and_lifecycle_assurance.yaml"
           test -f "$skill_root/templates/project/.ipd/process_extensions.yaml"
           artifact_index=0
           for artifact in "$wheel" "$sdist" "$skill_root"; do
@@ -105,6 +118,17 @@ jobs:
             environment="$RUNNER_TEMP/release-venv-$artifact_index"
             python -m venv "$environment"
             "$environment/bin/pip" install "$artifact"
+            for pattern in \
+              sourced_component_integration \
+              module_decomposition_and_verification \
+              interface_contract_and_integration \
+              release_and_lifecycle_assurance; do
+              project="$(mktemp -d)/catalog-$pattern"
+              "$environment/bin/ipdctl" init "$project" --name "catalog-$pattern" --locale en
+              "$environment/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=[sys.argv[2]]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml" "$pattern"
+              "$environment/bin/ipdctl" tailor "$project"
+              "$environment/bin/ipdctl" validate "$project" --json
+            done
             for locale in en zh-CN; do
               project="$(mktemp -d)/project-$locale"
               "$environment/bin/ipdctl" init "$project" --name "release-$locale" --locale "$locale"
@@ -120,12 +144,12 @@ jobs:
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@5113cdc90fd4d541c801c55356214017bf5ae34b # v3
         with:
-          name: "IPD Agent Workflow Framework v0.4.1-beta"
-          body_path: .github/release-notes/v0.4.1-beta.md
+          name: "IPD Agent Workflow Framework v0.5.0-beta"
+          body_path: .github/release-notes/v0.5.0-beta.md
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            dist/ipd-agent-workflow-skill-v0.4.1-beta.zip
-            dist/ipd_agent_workflow_skill-0.4.1b1-py3-none-any.whl
-            dist/ipd_agent_workflow_skill-0.4.1b1.tar.gz
+            dist/ipd-agent-workflow-skill-v0.5.0-beta.zip
+            dist/ipd_agent_workflow_skill-0.5.0b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.5.0b1.tar.gz
             dist/SHA256SUMS.txt

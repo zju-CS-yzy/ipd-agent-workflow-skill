@@ -353,6 +353,45 @@ def validate_refinement_trigger(value: Any, path: str = "$") -> list[str]:
     return sorted(set(_trigger_issues(value, path)))
 
 
+def refinement_requirement_from_deliverable(
+    deliverable: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Return the canonical requirement embedded in a Deliverable, if any.
+
+    Capability policies may declare a refinement root directly on a
+    Deliverable. Project extensions use the equivalent normalized requirement
+    object. This conversion keeps both authorities aligned and lets an applied
+    plan persist the requirement in the project extension.
+    """
+
+    if deliverable.get("refinement_required") is not True:
+        return None
+    root = deliverable.get("id")
+    if not _valid_id(root):
+        raise RefinementPlanError(
+            "embedded refinement requirement must have a valid Deliverable id"
+        )
+    definition_state = deliverable.get("definition_state", "concrete")
+    if definition_state not in {"concrete", "placeholder"}:
+        raise RefinementPlanError(
+            f"embedded refinement root {root!r} must be concrete or placeholder"
+        )
+    trigger = deliverable.get("refinement_trigger")
+    trigger_issues = validate_refinement_trigger(
+        trigger, f"deliverable {root!r}.refinement_trigger"
+    )
+    if trigger_issues:
+        raise RefinementPlanError("; ".join(trigger_issues))
+    assert isinstance(trigger, Mapping)
+    return {
+        "root": root,
+        "definition_state": definition_state,
+        "refinement_required": True,
+        "trigger": deepcopy(dict(trigger)),
+        "completion_policy": "all_children_accepted",
+    }
+
+
 def refinement_status(
     requirement: Mapping[str, Any],
     *,
@@ -762,6 +801,12 @@ def validate_refinement_plan(
             for item in requirements
             if isinstance(item, Mapping)
         }
+        if process is not None:
+            declared_roots.update(
+                item["id"]
+                for item in process_deliverable_by_id.values()
+                if item.get("refinement_required") is True
+            )
         if root not in declared_roots:
             issues.append(
                 f"$.root: {root!r} has no declared refinement requirement"
@@ -1045,6 +1090,29 @@ def merge_refinement_plan(
         for item in merged["refinement_requirements"]
         if isinstance(item, Mapping)
     }
+    plan_root = normalized_plan["root"]
+    if plan_root not in existing_requirement_roots:
+        process_root = next(
+            (
+                item
+                for item in (
+                    process.get("deliverables", []) if process is not None else []
+                )
+                if isinstance(item, Mapping) and item.get("id") == plan_root
+            ),
+            None,
+        )
+        implicit_requirement = (
+            refinement_requirement_from_deliverable(process_root)
+            if process_root is not None
+            else None
+        )
+        if implicit_requirement is None:
+            raise RefinementPlanError(
+                f"refinement root {plan_root!r} has no declared requirement"
+            )
+        merged["refinement_requirements"].append(implicit_requirement)
+        existing_requirement_roots.add(plan_root)
     for deliverable in normalized_plan["deliverables"]:
         if deliverable.get("refinement_required") is not True:
             continue
@@ -1108,6 +1176,7 @@ __all__ = [
     "refinement_children",
     "refinement_leaf_closure",
     "refinement_plan_digest",
+    "refinement_requirement_from_deliverable",
     "refinement_status",
     "trigger_satisfied",
     "validate_refinement_trigger",
