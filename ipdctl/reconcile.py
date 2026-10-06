@@ -1635,14 +1635,19 @@ def _evaluate_bindings(
     digest = artifact_bindings_digest(bindings)
     report["bindings_sha256"] = digest
     known_deliverables = _deliverable_ids(state)
-    requires_artifact_owner = {
-        str(item.get("id") or item.get("deliverable_id"))
+    artifact_owner_requirements = {
+        str(item.get("id") or item.get("deliverable_id")): (
+            "refinement"
+            if isinstance(item.get("refines"), str) and item.get("refines")
+            else "artifact"
+        )
         for item in state.get("deliverables", [])
         if isinstance(item, Mapping)
         and item.get("definition_state", "concrete") == "concrete"
         and item.get("requires_artifact_owner") is True
         and isinstance(item.get("id") or item.get("deliverable_id"), str)
     }
+    requires_artifact_owner = set(artifact_owner_requirements)
     if target_deliverable is not None and target_deliverable not in known_deliverables:
         report["issues"].append(
             _issue(
@@ -1873,12 +1878,23 @@ def _evaluate_bindings(
     for deliverable_id in sorted(requires_artifact_owner):
         if user_rules_by_owner.get(deliverable_id):
             continue
+        refinement_owned = artifact_owner_requirements[deliverable_id] == "refinement"
+        code = (
+            "REFINEMENT_OWNER_REQUIRED"
+            if refinement_owned
+            else "ARTIFACT_OWNER_REQUIRED"
+        )
+        message = (
+            "Refined concrete Deliverable requires a user-authored owner binding"
+            if refinement_owned
+            else "Concrete Deliverable requires a user-authored owner binding"
+        )
         report["issues"].append(
             _issue(
-                "REFINEMENT_OWNER_REQUIRED",
-                "Refined concrete Deliverable requires a user-authored owner binding",
+                code,
+                message,
                 deliverable_id=deliverable_id,
-                reason_code="REFINEMENT_OWNER_REQUIRED",
+                reason_code=code,
                 rule_ids=sorted(rules_by_owner.get(deliverable_id, [])),
             )
         )
@@ -1898,6 +1914,7 @@ def _evaluate_bindings(
         "BINDING_CRITICAL_OWNER_CONFLICT",
         "BINDING_CRITICAL_OWNER_MISSING",
         "BINDING_UNKNOWN_DELIVERABLE",
+        "ARTIFACT_OWNER_REQUIRED",
         "REFINEMENT_OWNER_REQUIRED",
     }
     for deliverable_id in sorted(known_deliverables):

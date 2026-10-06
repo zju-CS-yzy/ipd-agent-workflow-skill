@@ -76,7 +76,7 @@ from .state import StateError, load_state, resolve_state_path, revised_copy, wri
 from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
 
-VERSION = "0.4.1-beta"
+VERSION = "0.5.0-beta"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -1371,6 +1371,17 @@ def _cmd_context(args: argparse.Namespace) -> int:
             value=", ".join(item["id"] for item in snapshot["available_tasks"]) or none,
         )
     )
+    for field, message_key in (
+        ("waiting_items", "cli.context.waiting_items"),
+        ("explicit_blockers", "cli.context.explicit_blockers"),
+        ("governance_blockers", "cli.context.governance_blockers"),
+    ):
+        print(
+            translator.text(
+                message_key,
+                value=", ".join(item["id"] for item in snapshot[field]) or none,
+            )
+        )
     print(
         translator.text(
             "cli.context.blocked_items",

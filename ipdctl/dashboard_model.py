@@ -139,7 +139,10 @@ def _eligibility_fields(value: Any) -> dict[str, Any] | None:
         blockers = [_machine_copy(item) for item in raw_blockers]
     else:
         blockers = [_machine_copy(raw_blockers)]
-    binding_blocked = binding_ready is False or eligible is False or bool(blockers)
+    # ``eligible`` may include non-binding governance checks.  Keep the
+    # binding classification narrow so protocol/refinement failures are not
+    # mislabeled as missing artifact bindings.
+    binding_blocked = binding_ready is False
     return {
         "eligible": eligible,
         "binding_ready": binding_ready,
@@ -701,7 +704,10 @@ def build_dashboard_model(
         }
         return sorted(leaves)
 
-    from .eligibility import deliverable_refinement_status
+    from .eligibility import (
+        deliverable_actionability,
+        deliverable_refinement_status,
+    )
 
     refinement_state = {
         "deliverables": [
@@ -721,9 +727,11 @@ def build_dashboard_model(
         ],
         "gates": deepcopy(state.get("gates", [])),
     }
+    refinement_by_id: dict[str, dict[str, Any]] = {}
     for item in deliverables:
         item["concrete_leaf_closure"] = concrete_leaf_closure(item["id"])
         refinement = deliverable_refinement_status(refinement_state, item["id"])
+        refinement_by_id[item["id"]] = refinement
         item["refinement_status"] = refinement["refinement_status"]
         item["refinement_due"] = refinement["refinement_status"] == "due"
         item["refinement_reason"] = refinement.get("refinement_reason")
@@ -734,60 +742,34 @@ def build_dashboard_model(
     status_by_id = {item["id"]: item["status"] for item in deliverables}
     available_tasks: list[dict[str, Any]] = []
     blocked_items: list[dict[str, Any]] = []
+    waiting_items: list[dict[str, Any]] = []
+    explicit_blockers: list[dict[str, Any]] = []
+    governance_blockers: list[dict[str, Any]] = []
     for item in deliverables:
         eligibility_fields = _eligibility_fields(eligibility_deliverables.get(item["id"]))
-        binding_blocked = bool(
-            eligibility_fields and eligibility_fields["binding_blocked"]
-        )
-        binding_actionability_blocked = binding_blocked and (
-            item["status"] in {"planned", "blocked", "rejected"}
-            or bool(item.get("recoverable_claim"))
-        )
         unmet = [
             dependency
             for dependency in item["depends_on"]
             if status_by_id.get(dependency) != "accepted"
         ]
         is_claimed = item["id"] in active_claims
-        in_current_scope = not current_phase or item.get("phase") in {None, current_phase}
-        non_concrete = item["definition_state"] in {"abstract", "placeholder"}
-        if item["status"] in {"accepted", "superseded"}:
-            actionability_state = "inactive"
-        elif is_claimed:
-            actionability_state = "claimed"
-        elif not in_current_scope:
-            actionability_state = "inactive"
-        elif non_concrete:
-            actionability_state = "waiting_on_refinement"
-        elif unmet:
-            actionability_state = "waiting_on_dependencies"
-        elif binding_actionability_blocked:
-            actionability_state = "waiting_on_bindings"
-        elif item["status"] in {"planned", "blocked", "rejected"} and not claim_ready:
-            actionability_state = "waiting_on_protocol"
-        elif item["status"] in {"planned", "blocked", "rejected"}:
-            actionability_state = "actionable"
-        else:
-            actionability_state = "inactive"
-
-        if item.get("recoverable_claim"):
-            attention = "orphan_claim"
-        elif item["status"] == "blocked":
-            attention = "explicitly_blocked"
-        elif item["status"] == "rejected":
-            attention = "rework_required"
-        elif binding_actionability_blocked:
-            attention = "binding_blocked"
-        elif item["refinement_due"]:
-            attention = "refinement_due"
-        else:
-            attention = None
-
+        actionability = deliverable_actionability(
+            item,
+            current_phase=current_phase or None,
+            active_claim=is_claimed,
+            unmet=unmet,
+            binding_status=eligibility_fields,
+            claim_readiness=claim_readiness_document,
+            refinement=refinement_by_id[item["id"]],
+        )
         item["actionability"] = {
-            "state": actionability_state,
-            "actionable": actionability_state == "actionable",
-            "in_current_scope": in_current_scope,
-            "unmet_dependencies": unmet,
+            key: deepcopy(actionability[key])
+            for key in (
+                "state",
+                "actionable",
+                "in_current_scope",
+                "unmet_dependencies",
+            )
         }
         if (
             item["refinement_status"] != "not_required"
@@ -812,7 +794,7 @@ def build_dashboard_model(
                 item["binding_impact"] = deepcopy(
                     eligibility_fields["binding_impact"]
                 )
-        item["attention"] = attention
+        item["attention"] = actionability["attention"]
 
         if item["actionability"]["actionable"]:
             available_tasks.append(
@@ -824,36 +806,56 @@ def build_dashboard_model(
                     "owner": item["owner"],
                     "status": item["status"],
                     "actionability": dict(item["actionability"]),
-                    "attention": attention,
+                    "attention": actionability["attention"],
                 }
             )
-        if in_current_scope and (
-            item["status"] == "blocked"
-            or actionability_state == "waiting_on_dependencies"
-            or binding_actionability_blocked
-            or item.get("recoverable_claim")
-            or item["refinement_due"]
+        blocker_record = {
+            "id": item["id"],
+            "scope": "deliverable",
+            "title": item["title"],
+            "display_label": item["display_label"],
+            "status": item["status"],
+            "unmet_dependencies": unmet,
+            "reason": item["blocker"] or item["refinement_reason"],
+            "code": (
+                actionability["governance_codes"][0]
+                if actionability["governance_codes"]
+                else None
+            ),
+            "recoverable": bool(item.get("recoverable_claim")),
+            "actionability": dict(item["actionability"]),
+            "attention": actionability["attention"],
+            "binding_blockers": (
+                list(eligibility_fields["binding_blockers"])
+                if eligibility_fields is not None
+                else []
+            ),
+            "refinement_status": item["refinement_status"],
+            "refinement_due": item["refinement_due"],
+        }
+        if actionability["waiting_item"]:
+            waiting_items.append(deepcopy(blocker_record))
+        if actionability["explicit_blocker"]:
+            explicit_blockers.append(deepcopy(blocker_record))
+        if actionability["governance_blocker"]:
+            governance_blockers.append(deepcopy(blocker_record))
+        if (
+            actionability["waiting_item"]
+            or actionability["explicit_blocker"]
+            or actionability["governance_blocker"]
         ):
-            blocked_items.append(
-                {
-                    "id": item["id"],
-                    "title": item["title"],
-                    "display_label": item["display_label"],
-                    "status": item["status"],
-                    "unmet_dependencies": unmet,
-                    "reason": item["blocker"],
-                    "recoverable": bool(item.get("recoverable_claim")),
-                    "actionability": dict(item["actionability"]),
-                    "attention": attention,
-                    "binding_blockers": (
-                        list(eligibility_fields["binding_blockers"])
-                        if eligibility_fields is not None
-                        else []
-                    ),
-                    "refinement_status": item["refinement_status"],
-                    "refinement_due": item["refinement_due"],
-                }
-            )
+            blocked_items.append(blocker_record)
+
+    if claim_readiness_document.get("eligible") is False:
+        governance_blockers.append(
+            {
+                "id": "project.claim_readiness",
+                "scope": "project",
+                "code": claim_readiness_document.get("reason_code"),
+                "reason": claim_readiness_document.get("reason_code"),
+                "required_action": claim_readiness_document.get("required_action"),
+            }
+        )
 
     process_activities = _activities(process)
     activities: list[dict[str, Any]] = []
@@ -1195,6 +1197,9 @@ def build_dashboard_model(
             "review_queue": review_queue,
             "blocked_items": len(blocked_items),
             "available_tasks": len(available_tasks),
+            "waiting_items": len(waiting_items),
+            "explicit_blockers": len(explicit_blockers),
+            "governance_blockers": len(governance_blockers),
             "waiting_on_dependencies": sum(
                 item["actionability"]["state"] == "waiting_on_dependencies"
                 and item["actionability"]["in_current_scope"]
@@ -1240,6 +1245,9 @@ def build_dashboard_model(
         "checkpoints": checkpoints,
         "deliverables": deliverables,
         "available_tasks": available_tasks,
+        "waiting_items": waiting_items,
+        "explicit_blockers": explicit_blockers,
+        "governance_blockers": governance_blockers,
         "blocked_items": blocked_items,
         "refinement_due": [
             {

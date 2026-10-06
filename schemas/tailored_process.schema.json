@@ -69,7 +69,14 @@
         "capability_patterns": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "enum": ["sourced_component_integration"] }
+          "items": {
+            "enum": [
+              "sourced_component_integration",
+              "module_decomposition_and_verification",
+              "interface_contract_and_integration",
+              "release_and_lifecycle_assurance"
+            ]
+          }
         }
       }
     },

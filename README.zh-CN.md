@@ -4,7 +4,7 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-当前预发布目标：`v0.4.1-beta`（Python 包 `0.4.1b1`）。
+当前预发布目标：`v0.5.0-beta`（Python 包 `0.5.0b1`）。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 
@@ -78,6 +78,13 @@ ipdctl verify /path/to/project
 授权的迁移基线；首次恢复会生成不可变的 Migration Window，后续恢复继续
 复用该 Window。
 
+面向机器的 `context --json` 会区分 `waiting_items`（未满足的 `depends_on`
+前置项）、`explicit_blockers`（生命周期状态为 `blocked`）和
+`governance_blockers`（Binding、Refinement、Claim Provenance 或协议失败）。
+`blocked_items` 继续作为仅限 Deliverable 范围的去重兼容并集；
+`project.claim_readiness` 等项目级条目只进入 `governance_blockers`。不能用兼容
+汇总字段推断具体根因。
+
 `advance-phase` 要求当前 Phase 的全部 Gate 已批准，而且最近一次通过的验证
 同时匹配当前 State Revision 与重新计算的验证输入指纹。该命令只推进一个
 Phase，并把 Workflow 留在 `refresh`；继续 Claim 或 Gate 评审前必须再次执行
@@ -96,14 +103,34 @@ Phase，并把 Workflow 留在 `refresh`；继续 Claim 或 Gate 评审前必须
 
 ## 分层流程编译
 
-`task_profile.yaml` 选择任务类型和可选的可复用能力。例如，以下配置启用通用的
-外部组件候选验证、选型决策和集成基线三阶段流程，但不会嵌入供应商、机器人、
-传感器、仓库路径或 Owner 假设：
+`task_profile.yaml` 选择任务类型和可选的可复用能力。Capability 采用显式启用：
+省略 `capability_patterns` 或将其设为 `[]`，都会保留基础 Task-type 流程，不添加
+任何 Capability。内置目录如下：
+
+| Capability pattern | 治理范围 |
+| --- | --- |
+| `sourced_component_integration` | 候选组件验证、选型决策与受控集成基线。 |
+| `module_decomposition_and_verification` | 模块分解、证据驱动的模块实现与模块验证。 |
+| `interface_contract_and_integration` | 版本化接口契约、集成证据与一致性验证。 |
+| `release_and_lifecycle_assurance` | 发布策略、受控候选版本、验证、移交与生命周期保障。 |
+
+例如，以下配置启用模块和接口治理，但不会预设产品分解、仓库路径或 Owner：
 
 ```yaml
 capability_patterns:
-  - sourced_component_integration
+  - module_decomposition_and_verification
+  - interface_contract_and_integration
 ```
+
+模块 Capability 会加入触发式 `placeholder`
+`module.implementation_baseline`。当 `module.decomposition_baseline` 被
+`accepted` 后，该节点的细化要求进入 `due`。此时应通过 `ipdctl refine`，用经过
+审核的项目自有 Activity 与 Deliverable 展开裁剪时未知的模块结构，而不是 Claim
+这个 Placeholder。
+
+类型化 `supports` 与 `verifies` 关系用于在 Traceability、Dashboard Graph 和
+Review Context 中保留工程语义，不参与 Readiness 或执行拓扑。只有
+`depends_on` 会形成执行前置关系。
 
 `ipdctl init` 会创建空的规范 `.ipd/process_extensions.yaml`，作为项目拥有的
 第四层。该文件可追加 Activity、必须评审的 Deliverable、类型化关系（`depends_on`、`supports`、`verifies`、
@@ -153,11 +180,14 @@ Schema `1.0` 仅允许补齐 Schema `2.0` 所需的确定性 Core Provenance、M
 
 ## 渐进细化
 
-项目可以在 `.ipd/process_extensions.yaml` 中为一个已知 Deliverable 声明
-`refinement_requirements`。声明固定 Root、初始 `definition_state`、显式 Trigger
-和 `all_children_accepted` 完成规则。Task-type Policy 不会猜测项目中的模块或
-功能；只有项目证据使该要求进入 `due` 后，Agent 才准备单独的、可人工审核的
-Refinement Plan。
+细化要求既可以来自 `.ipd/process_extensions.yaml` 中项目自有的
+`refinement_requirements`，也可以来自已选 Capability 中由 Policy 定义的
+Placeholder。声明固定 Root、初始 `definition_state`、显式 Trigger 和
+`all_children_accepted` 完成规则。内置模块 Capability 中，只有
+`module.decomposition_baseline` 被 `accepted` 后，
+`module.implementation_baseline` 才会进入 `due`。Task-type 与 Capability Policy
+都不会猜测项目中的真实模块或功能；只有项目证据使该要求到期后，Agent 才准备
+单独的、可人工审核的 Refinement Plan。
 
 只有 Deliverable 可以成为细化要求的 Root。Trigger Subject 必须在 Root 的 Gate
 之前可达：要求 accepted 的 Deliverable 不能处于更晚 Phase，要求 approved 的
@@ -236,6 +266,10 @@ Deliverable 重新生成一条框架托管的 `evidence/<deliverable-id>/**` 绑
 下存在未绑定变更会使验证失败。实际发生变化的 Critical Path 只能解析到一个
 Deliverable Owner。新 Claim 事件会记录精确 Binding Window；旧的历史 Claim
 不能永久证明后续变更的归属。
+
+如果具体 Capability Deliverable 明确要求 Owner、却没有用户编写的规则，
+Eligibility 会报告 `ARTIFACT_OWNER_REQUIRED`；由 Refinement 生成的具体子节点继续
+使用更精确的 `REFINEMENT_OWNER_REQUIRED`。
 
 未填写 `role` 的 Binding 与显式 `role: owner` 都保持单一 Owner 契约，并使用
 唯一 `deliverable`。`role: shared_evidence` 改用 `deliverables` 列表，且必须

@@ -241,6 +241,57 @@ bindings:
             self.assertEqual(report["status"], "passed")
             self.assertEqual(report["claim_provenance"], ["D-A"])
 
+    def test_owner_requirement_code_distinguishes_capability_and_refinement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_git(root, "init")
+            run_git(root, "config", "user.name", "IPD Test")
+            run_git(root, "config", "user.email", "ipd@example.test")
+            (root / "README.md").write_text("initial\n", encoding="utf-8")
+            bindings_path = root / ".ipd" / "artifact_bindings.yaml"
+            bindings_path.parent.mkdir()
+            bindings_path.write_text(
+                """schema_version: "1.0"
+critical_roots: []
+ignore:
+  - .ipd/**
+bindings: []
+""",
+                encoding="utf-8",
+            )
+            run_git(root, "add", "README.md", ".ipd/artifact_bindings.yaml")
+            run_git(root, "commit", "-m", "initial")
+            state = {
+                "revision": 1,
+                "deliverables": [
+                    {
+                        "id": "capability.baseline",
+                        "definition_state": "concrete",
+                        "requires_artifact_owner": True,
+                    },
+                    {
+                        "id": "module.child",
+                        "definition_state": "concrete",
+                        "requires_artifact_owner": True,
+                        "refines": "module.root",
+                    },
+                ],
+            }
+
+            report = binding_readiness(root, state, create_runtime_state())
+            codes = {
+                issue.get("deliverable_id"): issue.get("code")
+                for issue in report["issues"]
+                if issue.get("deliverable_id")
+                in {"capability.baseline", "module.child"}
+            }
+            self.assertEqual(
+                codes["capability.baseline"], "ARTIFACT_OWNER_REQUIRED"
+            )
+            self.assertEqual(
+                codes["module.child"], "REFINEMENT_OWNER_REQUIRED"
+            )
+
     def test_legacy_claim_is_history_not_v032_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

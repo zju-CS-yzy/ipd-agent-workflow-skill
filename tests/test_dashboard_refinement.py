@@ -434,7 +434,7 @@ class RefinementBindingImpactTests(unittest.TestCase):
 
         row = report["deliverables"]["concept.mobility"]
         self.assertFalse(row["eligible"])
-        self.assertIn("REFINEMENT_OWNER_REQUIRED", row["issue_codes"])
+        self.assertIn("ARTIFACT_OWNER_REQUIRED", row["issue_codes"])
         candidate = process(
             deliverable("concept.mobility", requires_artifact_owner=True)
         )
@@ -446,7 +446,7 @@ class RefinementBindingImpactTests(unittest.TestCase):
             projected["actionability"]["state"], "waiting_on_bindings"
         )
         self.assertIn(
-            "REFINEMENT_OWNER_REQUIRED",
+            "ARTIFACT_OWNER_REQUIRED",
             projected["actionability"]["issue_codes"],
         )
         self.assertFalse(state_data["available_tasks"])

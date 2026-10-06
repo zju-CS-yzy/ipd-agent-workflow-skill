@@ -20,7 +20,12 @@ SUPPORTED_PROCESS_SCHEMA_VERSIONS = (
 )
 TASK_POLICY_SCHEMA_VERSION = "1.0"
 CAPABILITY_POLICY_SCHEMA_VERSION = "1.0"
-CAPABILITY_PATTERNS = ("sourced_component_integration",)
+CAPABILITY_PATTERNS = (
+    "sourced_component_integration",
+    "module_decomposition_and_verification",
+    "interface_contract_and_integration",
+    "release_and_lifecycle_assurance",
+)
 
 
 class ProcessModelError(ValueError):
@@ -36,6 +41,21 @@ def _refinement_node_issues(value: dict[str, Any], path: str) -> list[str]:
         )
     if "refinement_required" in value and type(value.get("refinement_required")) is not bool:
         issues.append(f"{path}.refinement_required: must be a boolean")
+    if (
+        value.get("definition_state") == "placeholder"
+        and value.get("refinement_required") is not True
+    ):
+        issues.append(
+            f"{path}.refinement_required: placeholder nodes must require refinement"
+        )
+    if value.get("refinement_required") is True and "refinement_trigger" not in value:
+        issues.append(
+            f"{path}.refinement_trigger: required when refinement_required is true"
+        )
+    if "refinement_trigger" in value and value.get("refinement_required") is not True:
+        issues.append(
+            f"{path}.refinement_required: must equal true when a refinement trigger is declared"
+        )
     if "refinement_trigger" in value:
         issues.extend(
             validate_refinement_trigger(
@@ -51,6 +71,7 @@ def _refinement_node_issues(value: dict[str, Any], path: str) -> list[str]:
 
 
 _TYPE_SEPARATOR = re.compile(r"[\s-]+")
+_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _TASK_TYPE_ALIASES = {
     "software": "software",
     "hardware": "hardware",
@@ -249,20 +270,50 @@ def capability_policy_directory() -> Path:
 
     source_tree = Path(__file__).resolve().parents[1] / "policies" / "capabilities"
     if source_tree.is_dir():
-        return source_tree
+        return _require_capability_policy_assets(source_tree)
     try:
         distribution = metadata.distribution("ipd-agent-workflow-skill")
     except metadata.PackageNotFoundError as exc:
         raise ProcessModelError("capability policy resources are unavailable") from exc
-    marker = (
-        "share/ipd-agent-workflow-skill/policies/capabilities/"
-        "sourced_component_integration.yaml"
-    )
+    marker = "share/ipd-agent-workflow-skill/policies/capabilities/"
+    candidates: list[Path] = []
     for entry in distribution.files or ():
         rendered = str(entry).replace("\\", "/")
-        if rendered.endswith(marker):
-            return Path(distribution.locate_file(entry)).parent
+        if marker in rendered and rendered.endswith(".yaml"):
+            candidates.append(Path(distribution.locate_file(entry)).parent)
+    for candidate in sorted(set(candidates), key=lambda item: str(item)):
+        try:
+            return _require_capability_policy_assets(candidate)
+        except ProcessModelError:
+            continue
+    if candidates:
+        return _require_capability_policy_assets(candidates[0])
     raise ProcessModelError("installed capability policy resources are unavailable")
+
+
+def _require_capability_policy_assets(directory: Path) -> Path:
+    """Fail closed when the registry and installed capability assets diverge."""
+
+    present = {path.stem for path in directory.glob("*.yaml") if path.is_file()}
+    missing = [
+        f"{pattern}.yaml"
+        for pattern in CAPABILITY_PATTERNS
+        if pattern not in present
+    ]
+    unexpected = sorted(
+        f"{pattern}.yaml" for pattern in present - set(CAPABILITY_PATTERNS)
+    )
+    if missing or unexpected:
+        details: list[str] = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if unexpected:
+            details.append("unregistered: " + ", ".join(unexpected))
+        raise ProcessModelError(
+            "capability policy resources do not match the registry; "
+            + "; ".join(details)
+        )
+    return directory
 
 
 def validate_capability_policy(
@@ -319,8 +370,6 @@ def validate_capability_policy(
         required_fields = {"id", "title", "phase", "sequence"}
         fields = required_fields | {
             "definition_state",
-            "refinement_required",
-            "refinement_trigger",
             "refines",
         }
         for field in sorted(required_fields - activity.keys()):
@@ -328,8 +377,8 @@ def validate_capability_policy(
         for field in sorted(activity.keys() - fields):
             issues.append(f"{path}.{field}: unknown field")
         identifier = activity.get("id")
-        if not isinstance(identifier, str) or not identifier.strip():
-            issues.append(f"{path}.id: must be a non-empty string")
+        if not isinstance(identifier, str) or not _IDENTIFIER_PATTERN.fullmatch(identifier):
+            issues.append(f"{path}.id: must be a valid lowercase identifier")
         elif identifier in activity_ids:
             issues.append(f"{path}.id: duplicate activity id {identifier!r}")
         else:
@@ -374,8 +423,8 @@ def validate_capability_policy(
         for field in sorted(deliverable.keys() - fields):
             issues.append(f"{path}.{field}: unknown field")
         identifier = deliverable.get("id")
-        if not isinstance(identifier, str) or not identifier.strip():
-            issues.append(f"{path}.id: must be a non-empty string")
+        if not isinstance(identifier, str) or not _IDENTIFIER_PATTERN.fullmatch(identifier):
+            issues.append(f"{path}.id: must be a valid lowercase identifier")
         elif identifier in deliverable_ids:
             issues.append(f"{path}.id: duplicate deliverable id {identifier!r}")
         else:
@@ -386,8 +435,12 @@ def validate_capability_policy(
             issues.append(f"{path}.title: must be a non-empty string")
         if deliverable.get("phase") not in phase_ids:
             issues.append(f"{path}.phase: unknown phase {deliverable.get('phase')!r}")
-        if not isinstance(deliverable.get("activity_id"), str):
-            issues.append(f"{path}.activity_id: must be a non-empty string")
+        activity_id = deliverable.get("activity_id")
+        if activity_id not in activity_ids:
+            issues.append(
+                f"{path}.activity_id: references unknown policy activity "
+                f"{activity_id!r}"
+            )
         if deliverable.get("review_required") is not True:
             issues.append(f"{path}.review_required: must equal true")
         dependencies = deliverable.get("depends_on")
@@ -397,6 +450,10 @@ def validate_capability_policy(
             issues.append(f"{path}.depends_on: must be an array of non-empty strings")
         elif len(dependencies) != len(set(dependencies)):
             issues.append(f"{path}.depends_on: must not contain duplicates")
+        elif not all(_IDENTIFIER_PATTERN.fullmatch(item) for item in dependencies):
+            issues.append(
+                f"{path}.depends_on: must contain valid lowercase identifiers"
+            )
         if "requires_artifact_owner" in deliverable and type(
             deliverable.get("requires_artifact_owner")
         ) is not bool:
@@ -421,10 +478,10 @@ def validate_capability_policy(
         source = dependency.get("source")
         target = dependency.get("target")
         relation = dependency.get("relation")
-        if not isinstance(source, str) or not source.strip():
-            issues.append(f"{path}.source: must be a non-empty string")
-        if not isinstance(target, str) or not target.strip():
-            issues.append(f"{path}.target: must be a non-empty string")
+        if not isinstance(source, str) or not _IDENTIFIER_PATTERN.fullmatch(source):
+            issues.append(f"{path}.source: must be a valid lowercase identifier")
+        if not isinstance(target, str) or not _IDENTIFIER_PATTERN.fullmatch(target):
+            issues.append(f"{path}.target: must be a valid lowercase identifier")
         if relation not in TRACE_RELATIONS:
             issues.append(
                 f"{path}.relation: must be one of: {', '.join(TRACE_RELATIONS)}"
@@ -456,8 +513,8 @@ def validate_capability_policy(
         for field in sorted(criterion.keys() - fields):
             issues.append(f"{path}.{field}: unknown field")
         identifier = criterion.get("id")
-        if not isinstance(identifier, str) or not identifier.strip():
-            issues.append(f"{path}.id: must be a non-empty string")
+        if not isinstance(identifier, str) or not _IDENTIFIER_PATTERN.fullmatch(identifier):
+            issues.append(f"{path}.id: must be a valid lowercase identifier")
         elif identifier in seen_criteria:
             issues.append(f"{path}.id: duplicate criterion id {identifier!r}")
         else:

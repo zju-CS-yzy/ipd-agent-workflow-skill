@@ -35,14 +35,14 @@ ipdctl --help
 
 创建 Tag 前完成 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)。源 Commit 必须干净，CI 必须通过，包版本与 Changelog 必须一致，发布卫生检查必须确认不存在缓存、构建输出、运行时生成数据、凭据类文件或高置信度 Secret。
 
-规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.4.1-beta`（Python 包版本 `0.4.1b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
+规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.5.0-beta`（Python 包版本 `0.5.0b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
 
-直接前序版本验证必须使用真实 `v0.4.0-beta` Tag 创建受控项目，在不重新初始化
-的前提下由 v0.4.1 读取。它必须证明 `tailor --preview --json` 零写入，并显示
-Claim Trace 的新增、删除与重定向，以及显式 Gate Migration 和 Dependency
-Correction。缺少人工授权迁移参数时必须 Fail-closed；应用后必须保留所有未受
-影响状态、全部 Evidence/Review 记录及仍有效的 Claim Link，并要求被修正的工作
-重新评审。最后的 `refresh`、`verify` 和 `validate --json` 必须通过。
+直接前序版本验证必须使用真实 `v0.4.1-beta` Tag 创建受控项目，在不重新初始化
+的前提下由 v0.5 读取。未启用 Capability 的 Profile 必须保持字节兼容，Context
+和 Dashboard 必须保留既有状态与历史，`tailor --preview --json` 必须零写入。
+显式启用 v0.5 Capability 时，Preview 只能出现预期的新增节点与 Provenance，升级
+过程不得自动启用任何 Capability。未变更项目最终的 `refresh`、`verify` 和
+`validate --json` 必须通过。
 
 同时保留 v0.3.2 到 v0.4 的流程 Schema 升级门作为长期兼容回归：继续保留
 accepted 状态、Evidence 与 Review History；Capability 只能新增 planned 工作；

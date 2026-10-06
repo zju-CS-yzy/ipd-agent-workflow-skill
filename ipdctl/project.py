@@ -12,6 +12,7 @@ from .dependencies import unmet_dependencies
 from .eligibility import (
     binding_eligibility,
     claim_protocol_readiness,
+    deliverable_actionability,
     deliverable_binding_status,
     deliverable_refinement_status,
     eligibility_fingerprint,
@@ -1829,6 +1830,9 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     graph = {item["id"]: item.get("depends_on", []) for item in state["deliverables"]}
     available: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
+    waiting: list[dict[str, Any]] = []
+    explicit_blockers: list[dict[str, Any]] = []
+    governance_blockers: list[dict[str, Any]] = []
     refinements: list[dict[str, Any]] = []
     for item in state["deliverables"]:
         refinement = deliverable_refinement_status(state, item["id"])
@@ -1845,62 +1849,98 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         unmet = list(unmet_dependencies(item["id"], graph, status_by_id))
         active_claim = runtime["active_claims"].get(item["id"])
         binding_status = deliverable_binding_status(eligibility, item["id"])
-        binding_blocked = not binding_status["eligible"]
-        binding_relevant = item["status"] in {"planned", "blocked", "rejected"}
-        if (
-            item["status"] in {"planned", "blocked", "rejected"}
-            and not unmet
-            and not active_claim
-            and not binding_blocked
-            and claim_readiness["eligible"]
-        ):
-            available.append({"id": item["id"], "title": item["title"], "status": item["status"]})
-        orphaned_claim = item["status"] == "in_progress" and not active_claim
-        if (
-            item["status"] == "blocked"
-            or unmet
-            or orphaned_claim
-            or (binding_relevant and binding_blocked)
-        ):
-            binding_blockers = binding_status.get("blockers", [])
-            binding_reason = next(
-                (
-                    (
-                        blocker.get("reason_code")
-                        or blocker.get("message")
-                        or blocker.get("code")
-                    )
-                    if isinstance(blocker, dict)
-                    else str(blocker)
-                    for blocker in binding_blockers
-                    if isinstance(blocker, (dict, str))
-                ),
-                None,
+        actionability = deliverable_actionability(
+            item,
+            current_phase=current_phase,
+            active_claim=bool(active_claim),
+            unmet=unmet,
+            binding_status=binding_status,
+            claim_readiness=claim_readiness,
+            refinement=refinement,
+        )
+        public_actionability = {
+            key: deepcopy(actionability[key])
+            for key in (
+                "state",
+                "actionable",
+                "in_current_scope",
+                "unmet_dependencies",
             )
-            blocked.append(
+        }
+        if actionability["actionable"]:
+            available.append(
                 {
                     "id": item["id"],
                     "title": item["title"],
                     "status": item["status"],
-                    "unmet_dependencies": unmet,
-                    "reason": (
-                        "active claim lease is missing; recover this deliverable before work continues"
-                        if orphaned_claim
-                        else item.get("blocked_reason") or binding_reason
-                    ),
-                    "code": (
-                        binding_status.get("issue_codes", [None])[0]
-                        if binding_relevant
-                        and binding_blocked
-                        and binding_status.get("issue_codes")
-                        else None
-                    ),
-                    "recoverable": orphaned_claim,
-                    "binding_ready": binding_status["binding_ready"],
-                    "issue_codes": binding_status["issue_codes"],
-                    "binding_blockers": binding_blockers,
+                    "actionability": public_actionability,
                 }
             )
+
+        binding_blockers = binding_status.get("blockers", [])
+        binding_reason = next(
+            (
+                (
+                    blocker.get("reason_code")
+                    or blocker.get("message")
+                    or blocker.get("code")
+                )
+                if isinstance(blocker, dict)
+                else str(blocker)
+                for blocker in binding_blockers
+                if isinstance(blocker, (dict, str))
+            ),
+            None,
+        )
+        blocker_record = {
+            "id": item["id"],
+            "scope": "deliverable",
+            "title": item["title"],
+            "status": item["status"],
+            "unmet_dependencies": unmet,
+            "reason": (
+                "active claim lease is missing; recover this deliverable before work continues"
+                if actionability["orphaned_claim"]
+                else item.get("blocked_reason")
+                or binding_reason
+                or refinement.get("refinement_reason")
+            ),
+            "code": (
+                actionability["governance_codes"][0]
+                if actionability["governance_codes"]
+                else None
+            ),
+            "recoverable": actionability["orphaned_claim"],
+            "binding_ready": binding_status["binding_ready"],
+            "issue_codes": binding_status["issue_codes"],
+            "binding_blockers": binding_blockers,
+            "actionability": public_actionability,
+            "attention": actionability["attention"],
+            "refinement_status": refinement.get("refinement_status"),
+            "refinement_due": refinement.get("refinement_status") == "due",
+        }
+        if actionability["waiting_item"]:
+            waiting.append(deepcopy(blocker_record))
+        if actionability["explicit_blocker"]:
+            explicit_blockers.append(deepcopy(blocker_record))
+        if actionability["governance_blocker"]:
+            governance_blockers.append(deepcopy(blocker_record))
+        if (
+            actionability["waiting_item"]
+            or actionability["explicit_blocker"]
+            or actionability["governance_blocker"]
+        ):
+            blocked.append(blocker_record)
+    if claim_readiness.get("eligible") is False:
+        governance_blockers.append(
+            {
+                "id": "project.claim_readiness",
+                "scope": "project",
+                "code": claim_readiness.get("reason_code"),
+                "reason": claim_readiness.get("reason_code"),
+                "required_action": claim_readiness.get("required_action"),
+            }
+        )
     repo = inspect_repository(paths["root"])
     from .refinement import process_fingerprint
 
@@ -1921,11 +1961,20 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
             for item in refinements
             if item.get("refinement_status") == "due"
         ),
-        "available_tasks": available,
-        "blocked_items": blocked,
+        "available_tasks": sorted(available, key=lambda item: item["id"]),
+        "waiting_items": sorted(waiting, key=lambda item: item["id"]),
+        "explicit_blockers": sorted(
+            explicit_blockers, key=lambda item: item["id"]
+        ),
+        "governance_blockers": sorted(
+            governance_blockers, key=lambda item: item["id"]
+        ),
+        "blocked_items": sorted(blocked, key=lambda item: item["id"]),
         "active_claims": runtime["active_claims"],
         "recoverable_claims": sorted(
-            item["id"] for item in blocked if item.get("recoverable") is True
+            item["id"]
+            for item in governance_blockers
+            if item.get("recoverable") is True
         ),
         "claim_readiness": claim_readiness,
         "eligibility": eligibility,

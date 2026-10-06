@@ -1,0 +1,67 @@
+schema_version: "1.0"
+capability_pattern: interface_contract_and_integration
+title: Interface contract and integration
+activities:
+  - id: plan.interface_contracts
+    title: Baseline versioned interface contracts and compatibility policy
+    phase: plan
+    sequence: 30
+  - id: develop.interface_integration
+    title: Integrate components against controlled interface contracts
+    phase: develop
+    sequence: 40
+  - id: qualify.interface_conformance
+    title: Verify interface conformance and interoperability
+    phase: qualify
+    sequence: 50
+deliverables:
+  - id: interface.contract_baseline
+    title: Interface contract baseline
+    phase: plan
+    activity_id: plan.interface_contracts
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - plan.integrated_plan
+  - id: interface.integration_evidence
+    title: Interface integration evidence
+    phase: develop
+    activity_id: develop.interface_integration
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - interface.contract_baseline
+      - develop.solution_baseline
+  - id: interface.conformance_report
+    title: Interface conformance report
+    phase: qualify
+    activity_id: qualify.interface_conformance
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - interface.integration_evidence
+      - qualify.validation_report
+dependencies:
+  - source: interface.contract_baseline
+    target: interface.integration_evidence
+    relation: supports
+  - source: interface.conformance_report
+    target: interface.contract_baseline
+    relation: verifies
+checkpoint_criteria:
+  - id: criterion.interface.contract
+    checkpoint_id: dcp.plan
+    description: Versioned interface contracts, ownership, compatibility rules, and change policy are baselined.
+    evidence_required: true
+  - id: criterion.interface.integration
+    checkpoint_id: tr.develop
+    description: Integration evidence demonstrates that controlled implementations satisfy the baselined interface contracts.
+    evidence_required: true
+  - id: criterion.interface.conformance
+    checkpoint_id: tr.qualify
+    description: Conformance and interoperability results cover the required operating combinations and failure modes.
+    evidence_required: true
+  - id: criterion.interface.exceptions
+    checkpoint_id: dcp.qualify
+    description: Interface exceptions and compatibility risks are closed or accepted by an authorized decision.
+    evidence_required: true

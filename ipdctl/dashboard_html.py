@@ -200,7 +200,7 @@ h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); line-height: 1.14; letter-s
 .top-meta strong { color: #F2F4F7; font-weight: 600; }
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(9, minmax(104px, 1fr));
+  grid-template-columns: repeat(10, minmax(104px, 1fr));
   background: var(--surface);
   border: 1px solid var(--line);
   border-top: 0;
@@ -378,7 +378,12 @@ def _localize_static_html(template: str, translator: Any) -> str:
             "dashboard.waiting_on_dependencies",
             "Waiting on prerequisites",
         ),
-        "Open blockers": _t(translator, "dashboard.open_blockers", "Open blockers"),
+        "Explicit blockers": _t(
+            translator, "dashboard.explicit_blockers", "Explicit blockers"
+        ),
+        "Governance blockers": _t(
+            translator, "dashboard.governance_blockers", "Governance blockers"
+        ),
         "Next available task": _t(translator, "dashboard.next_task", "Next available task"),
         "Open details": _t(translator, "dashboard.open_details", "Open details"),
         "Project phases": _t(translator, "dashboard.project_phases", "Project phases"),
@@ -659,7 +664,9 @@ def render_index(
     refinement_due = _items(state_data.get("refinement_due"))
     refinement_due_count = summary.get("refinement_due", len(refinement_due))
     waiting_count = summary.get("waiting_on_dependencies", 0)
-    explicit_blockers = summary.get("explicitly_blocked")
+    explicit_blockers = summary.get("explicit_blockers")
+    if explicit_blockers is None:
+        explicit_blockers = summary.get("explicitly_blocked")
     if explicit_blockers is None:
         explicit_blockers = sum(
             item.get("status") == "blocked"
@@ -669,6 +676,7 @@ def render_index(
             )
             for item in deliverables
         )
+    governance_blockers = summary.get("governance_blockers", 0)
     progress = summary.get("progress_percent", 0)
     try:
         progress_number = max(0.0, min(100.0, float(progress)))
@@ -787,7 +795,8 @@ def render_index(
     <div class="metric"><span class="metric-label">Review queue</span><strong class="metric-value">__REVIEW_QUEUE__</strong></div>
     <div class="metric"><span class="metric-label">Waiting on prerequisites</span><strong class="metric-value">__WAITING__</strong></div>
     <div class="metric"><span class="metric-label">Refinement due</span><strong class="metric-value__REFINEMENT_ALERT_CLASS__">__REFINEMENT_DUE__</strong></div>
-    <div class="metric"><span class="metric-label">Open blockers</span><strong class="metric-value__BLOCKER_ALERT__">__BLOCKERS__</strong></div>
+    <div class="metric"><span class="metric-label">Explicit blockers</span><strong class="metric-value__BLOCKER_ALERT__">__BLOCKERS__</strong></div>
+    <div class="metric"><span class="metric-label">Governance blockers</span><strong class="metric-value__GOVERNANCE_ALERT__">__GOVERNANCE_BLOCKERS__</strong></div>
   </section>
 
   __REFINEMENT_ALERT__
@@ -1023,6 +1032,8 @@ def render_index(
         "__REFINEMENT_ALERT__": refinement_alert,
         "__BLOCKERS__": _count(explicit_blockers),
         "__BLOCKER_ALERT__": " alert" if explicit_blockers else "",
+        "__GOVERNANCE_BLOCKERS__": _count(governance_blockers),
+        "__GOVERNANCE_ALERT__": " alert" if governance_blockers else "",
         "__TASK_ID__": _h(task_id),
         "__TASK_TITLE__": _h(task_title),
         "__TASK_META__": _h(task_meta),

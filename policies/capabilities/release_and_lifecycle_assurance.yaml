@@ -1,0 +1,108 @@
+schema_version: "1.0"
+capability_pattern: release_and_lifecycle_assurance
+title: Release and lifecycle assurance
+activities:
+  - id: plan.release_assurance
+    title: Define release, rollback, support, and lifecycle assurance strategy
+    phase: plan
+    sequence: 31
+  - id: develop.release_candidate
+    title: Build a controlled and traceable release candidate
+    phase: develop
+    sequence: 41
+  - id: qualify.release_verification
+    title: Verify release readiness and residual risk disposition
+    phase: qualify
+    sequence: 51
+  - id: launch.release_handover
+    title: Package, release, and hand over the approved solution
+    phase: launch
+    sequence: 59
+  - id: lifecycle.release_monitoring
+    title: Monitor lifecycle performance, support obligations, and controlled change
+    phase: lifecycle
+    sequence: 69
+deliverables:
+  - id: release.strategy
+    title: Release and lifecycle assurance strategy
+    phase: plan
+    activity_id: plan.release_assurance
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - plan.integrated_plan
+  - id: release.candidate
+    title: Controlled release candidate
+    phase: develop
+    activity_id: develop.release_candidate
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - release.strategy
+      - develop.solution_baseline
+  - id: release.verification_report
+    title: Release verification report
+    phase: qualify
+    activity_id: qualify.release_verification
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - release.candidate
+      - qualify.validation_report
+  - id: release.handover_package
+    title: Release and handover package
+    phase: launch
+    activity_id: launch.release_handover
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - release.verification_report
+      - launch.release_package
+  - id: release.lifecycle_assurance_record
+    title: Lifecycle assurance record
+    phase: lifecycle
+    activity_id: lifecycle.release_monitoring
+    review_required: true
+    requires_artifact_owner: true
+    depends_on:
+      - release.handover_package
+      - lifecycle.performance_review
+dependencies:
+  - source: release.strategy
+    target: release.candidate
+    relation: supports
+  - source: release.verification_report
+    target: release.candidate
+    relation: verifies
+  - source: release.handover_package
+    target: release.lifecycle_assurance_record
+    relation: supports
+checkpoint_criteria:
+  - id: criterion.release.strategy
+    checkpoint_id: dcp.plan
+    description: Release, rollback, support, ownership, and lifecycle obligations are explicit and approved.
+    evidence_required: true
+  - id: criterion.release.candidate
+    checkpoint_id: tr.develop
+    description: The release candidate is reproducible, configuration controlled, and traceable to its inputs.
+    evidence_required: true
+  - id: criterion.release.verification
+    checkpoint_id: tr.qualify
+    description: Release verification covers required behavior, deployment, rollback, and operational readiness.
+    evidence_required: true
+  - id: criterion.release.residual_risk
+    checkpoint_id: dcp.qualify
+    description: Residual release risks and unresolved deviations have an authorized disposition.
+    evidence_required: true
+  - id: criterion.release.handover
+    checkpoint_id: dcp.launch
+    description: The release package, operational handover, rollback evidence, and support ownership are complete.
+    evidence_required: true
+  - id: criterion.release.lifecycle_monitoring
+    checkpoint_id: tr.lifecycle
+    description: Lifecycle performance, incidents, support obligations, and controlled changes have current evidence.
+    evidence_required: true
+  - id: criterion.release.lifecycle_decision
+    checkpoint_id: dcp.lifecycle
+    description: Continued operation, corrective action, major change, or retirement has an authorized decision.
+    evidence_required: true

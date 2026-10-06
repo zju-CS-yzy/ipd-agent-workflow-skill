@@ -16,6 +16,112 @@ from typing import Any, Iterable, Mapping
 
 ELIGIBILITY_SCHEMA_VERSION = "1.0"
 _STATUSES = {"passed", "warning", "failed"}
+_WORKABLE_STATUSES = {"planned", "blocked", "rejected"}
+
+
+def deliverable_actionability(
+    deliverable: Mapping[str, Any],
+    *,
+    current_phase: str | None,
+    active_claim: bool,
+    unmet: Iterable[str] = (),
+    binding_status: Mapping[str, Any] | None = None,
+    claim_readiness: Mapping[str, Any] | None = None,
+    refinement: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return one shared actionability and blocker-classification record.
+
+    ``blocked_items`` historically mixed ordinary dependency waits with actual
+    lifecycle and governance blockers.  The shared classifier keeps that
+    compatibility aggregation reproducible while exposing the three distinct
+    causes used by context and Dashboard projections.
+    """
+
+    status = str(deliverable.get("status") or "planned")
+    phase = deliverable.get("phase")
+    in_current_scope = not current_phase or phase in {None, current_phase}
+    unmet_dependencies = sorted(
+        {str(item) for item in unmet if isinstance(item, str) and item}
+    )
+    binding = binding_status if isinstance(binding_status, Mapping) else {}
+    readiness = claim_readiness if isinstance(claim_readiness, Mapping) else {}
+    refinement_row = refinement if isinstance(refinement, Mapping) else {}
+
+    orphaned_claim = status == "in_progress" and not active_claim
+    binding_blocked = (
+        status in _WORKABLE_STATUSES or orphaned_claim
+    ) and binding.get("binding_ready") is False
+    refinement_status = str(
+        refinement_row.get("refinement_status") or "not_required"
+    )
+    refinement_claimable = refinement_row.get("claimable") is not False
+    claim_ready = readiness.get("eligible") is True if readiness else True
+
+    if status in {"accepted", "superseded"}:
+        state = "inactive"
+    elif active_claim:
+        state = "claimed"
+    elif not in_current_scope:
+        state = "inactive"
+    elif not refinement_claimable:
+        state = "waiting_on_refinement"
+    elif unmet_dependencies:
+        state = "waiting_on_dependencies"
+    elif binding_blocked:
+        state = "waiting_on_bindings"
+    elif status in _WORKABLE_STATUSES and not claim_ready:
+        state = "waiting_on_protocol"
+    elif status in _WORKABLE_STATUSES:
+        state = "actionable"
+    else:
+        state = "inactive"
+
+    if orphaned_claim:
+        attention = "orphan_claim"
+    elif status == "blocked":
+        attention = "explicitly_blocked"
+    elif status == "rejected":
+        attention = "rework_required"
+    elif binding_blocked:
+        attention = "binding_blocked"
+    elif refinement_status == "due":
+        attention = "refinement_due"
+    else:
+        attention = None
+
+    governance_codes: set[str] = set()
+    if orphaned_claim:
+        governance_codes.add("ORPHAN_CLAIM")
+    if binding_blocked:
+        governance_codes.update(
+            str(item)
+            for item in binding.get("issue_codes", [])
+            if isinstance(item, str) and item
+        )
+        if not governance_codes:
+            governance_codes.add("BINDING_NOT_READY")
+    if refinement_status == "due":
+        governance_codes.add(
+            str(refinement_row.get("refinement_reason") or "REFINEMENT_REQUIRED")
+        )
+
+    return {
+        "state": state,
+        "actionable": state == "actionable",
+        "in_current_scope": in_current_scope,
+        "unmet_dependencies": unmet_dependencies,
+        "attention": attention,
+        "orphaned_claim": orphaned_claim,
+        "binding_blocked": binding_blocked,
+        "waiting_item": (
+            in_current_scope
+            and status not in {"accepted", "superseded"}
+            and bool(unmet_dependencies)
+        ),
+        "explicit_blocker": in_current_scope and status == "blocked",
+        "governance_blocker": in_current_scope and bool(governance_codes),
+        "governance_codes": sorted(governance_codes),
+    }
 
 
 def _deliverable_records(state: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:

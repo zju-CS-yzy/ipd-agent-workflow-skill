@@ -117,7 +117,13 @@ dependencies of an existing Deliverable with governed lifecycle history.
    blockers, active claims, progressive-refinement status and process
    fingerprint, repository facts, and binding eligibility. A
    binding-blocked Deliverable is not available work even when its lifecycle
-   dependencies are otherwise ready.
+   dependencies are otherwise ready. Machine output separates
+   `waiting_items` for unmet `depends_on` prerequisites,
+   `explicit_blockers` for lifecycle status `blocked`, and
+   `governance_blockers` for binding, refinement, Claim-provenance, or protocol
+   failures. `blocked_items` is the deduplicated Deliverable-scoped
+   compatibility union; project-scoped protocol failures remain only in
+   `governance_blockers`.
 2. `ipdctl claim <deliverable>` checks the current Phase and predecessor
    closure, records an Agent lease, and moves eligible work to `in_progress`.
    Its append-only Claim event records the Deliverable, Actor, UTC timestamp,

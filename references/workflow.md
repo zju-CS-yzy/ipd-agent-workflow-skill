@@ -44,6 +44,14 @@ Dashboard. Missing or invalid bindings, conflicting critical owners, and
 pre-existing changes without an accepted baseline remove affected work from
 `available_tasks`; a failed preflight writes neither state nor runtime.
 
+`context --json` and Dashboard machine data classify non-actionable work by
+cause. `waiting_items` have unmet `depends_on` prerequisites;
+`explicit_blockers` are Deliverables whose lifecycle status is `blocked`; and
+`governance_blockers` expose binding, refinement, orphan-Claim, or workflow
+protocol failures. One Deliverable may appear in more than one cause-specific
+list. `blocked_items` remains a deduplicated Deliverable-scoped compatibility
+union; project-scoped protocol entries appear only in `governance_blockers`.
+
 ## Deliverables and evidence
 
 A deliverable moves through `planned`, `in_progress`, `ready_for_review`,
@@ -142,10 +150,23 @@ Tailoring compiles four additive layers in one fixed order:
 
 `core -> task_type -> capability -> project`
 
-`task_profile.yaml` selects task types and optional `capability_patterns`. The
-built-in `sourced_component_integration` pack is deliberately generic and adds
-candidate validation, selection decision, and integration baseline stages. It
-does not contain vendor, robot, sensor, project path, or Owner data.
+`task_profile.yaml` selects task types and optional `capability_patterns`.
+Capability selection is explicit: an absent or empty list adds no capability
+layer content. The built-in catalog contains:
+
+- `sourced_component_integration`: candidate validation, selection decision,
+  and controlled integration baseline;
+- `module_decomposition_and_verification`: module decomposition, a triggered
+  realization placeholder, and module verification;
+- `interface_contract_and_integration`: versioned interface contracts,
+  integration evidence, and conformance verification; and
+- `release_and_lifecycle_assurance`: release strategy, controlled candidate,
+  release verification, handover, and lifecycle assurance.
+
+These policies are domain-neutral. They do not contain a vendor, product
+module, robot, sensor, repository path, or Owner decision. Several patterns
+may be selected together; compilation remains deterministic and every added
+fact records capability provenance.
 
 The canonical project layer is `.ipd/process_extensions.yaml`. It may add:
 
@@ -167,6 +188,12 @@ Deliverable, TR, DCP, and Gate nodes record `provenance.layer` and
 projection: `concept=defined`, `plan=selected`, `develop=integrated`,
 `qualify=verified`, `launch=released`, and `lifecycle=monitored`. TR and DCP
 retain separate criteria rather than sharing one generic Gate checklist.
+
+`depends_on` is the only relation used to calculate readiness and execution
+topology. `supports` and `verifies` retain engineering trace semantics for
+review, matrices, and graph rendering; neither creates an execution
+prerequisite. `supersedes` records replacement lineage and likewise does not
+stand in for `depends_on`.
 
 Use `ipdctl tailor --preview` before changing an existing process. Preview is
 zero-write and `--json` returns `added`, `removed`, `changed`, `migrations`,
@@ -203,8 +230,16 @@ Gates; an approved affected Gate makes the change fail closed.
 
 Use progressive refinement when accepted project evidence determines a
 same-Phase module, function, or work-package structure that could not be known
-from the reusable template. The project extension declares the root and
-trigger; it must not embed a guessed decomposition in a task-type policy.
+from the reusable template. A requirement may be project-owned in the
+extension or policy-owned by a selected capability; neither form may embed a
+guessed project decomposition.
+
+`module_decomposition_and_verification` demonstrates the policy-owned form.
+It adds `module.implementation_baseline` as a `placeholder`, with
+`module.decomposition_baseline accepted` as its trigger. The placeholder is
+not executable module work. After the trigger is satisfied, `context` reports
+the requirement as `due`; prepare and preview an explicit `ipdctl refine` Plan
+to materialize project-owned module Activities and Deliverables.
 
 First inspect `context --json`. When the root is `due`, prepare a separate
 schema `1.0` plan with `mode: expand`, the exact current

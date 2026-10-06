@@ -70,6 +70,7 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         deliverables = _by_id(state_data["deliverables"])
         nodes = _by_id(graph["nodes"])
         blocked_items = _by_id(state_data["blocked_items"])
+        waiting_items = _by_id(state_data["waiting_items"])
 
         self.assertEqual(
             deliverables["dependent"]["actionability"],
@@ -82,6 +83,9 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         )
         self.assertIsNone(deliverables["dependent"]["attention"])
         self.assertIn("dependent", blocked_items)
+        self.assertIn("dependent", waiting_items)
+        self.assertEqual(state_data["explicit_blockers"], [])
+        self.assertEqual(state_data["governance_blockers"], [])
         self.assertEqual(
             blocked_items["dependent"]["actionability"]["state"],
             "waiting_on_dependencies",
@@ -92,6 +96,9 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
             "waiting_on_dependencies",
         )
         self.assertEqual(state_data["summary"]["blocked_items"], 1)
+        self.assertEqual(state_data["summary"]["waiting_items"], 1)
+        self.assertEqual(state_data["summary"]["explicit_blockers"], 0)
+        self.assertEqual(state_data["summary"]["governance_blockers"], 0)
         self.assertEqual(state_data["summary"]["waiting_on_dependencies"], 1)
         self.assertEqual(state_data["summary"]["explicitly_blocked"], 0)
 
@@ -126,8 +133,11 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         deliverables = _by_id(state_data["deliverables"])
         nodes = _by_id(graph["nodes"])
         blocked_items = _by_id(state_data["blocked_items"])
+        explicit_blockers = _by_id(state_data["explicit_blockers"])
+        governance_blockers = _by_id(state_data["governance_blockers"])
 
         self.assertEqual(blocked_items["blocked"]["attention"], "explicitly_blocked")
+        self.assertIn("blocked", explicit_blockers)
         self.assertEqual(deliverables["blocked"]["actionability"]["state"], "actionable")
         self.assertTrue(nodes["blocked"]["blocked"])
 
@@ -138,6 +148,7 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         self.assertEqual(deliverables["orphan"]["attention"], "orphan_claim")
         self.assertEqual(deliverables["orphan"]["actionability"]["state"], "inactive")
         self.assertTrue(blocked_items["orphan"]["recoverable"])
+        self.assertIn("orphan", governance_blockers)
         self.assertFalse(nodes["orphan"]["blocked"])
 
         self.assertIsNone(deliverables["claimed"]["attention"])
@@ -152,6 +163,8 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         self.assertEqual(state_data["summary"]["explicitly_blocked"], 1)
         self.assertEqual(state_data["summary"]["rework_required"], 1)
         self.assertEqual(state_data["summary"]["orphan_claims"], 1)
+        self.assertEqual(state_data["summary"]["explicit_blockers"], 1)
+        self.assertEqual(state_data["summary"]["governance_blockers"], 1)
 
     def test_out_of_phase_deliverable_is_inactive_without_losing_dependency_facts(self) -> None:
         prerequisite = _deliverable("prerequisite", "planned")
@@ -177,6 +190,64 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
         self.assertNotIn("future", {item["id"] for item in state_data["blocked_items"]})
         self.assertFalse(nodes["future"]["blocked"])
         self.assertEqual(state_data["summary"]["waiting_on_dependencies"], 0)
+
+    def test_binding_and_protocol_failures_are_governance_blockers(self) -> None:
+        target = _deliverable("target", "planned")
+        binding_state, _ = build_dashboard_model(
+            _process(target),
+            _state(target),
+            eligibility={
+                "schema_version": "1.0",
+                "deliverables": {
+                    "target": {
+                        "eligible": False,
+                        "binding_ready": False,
+                        "issue_codes": ["BINDING_OWNER_MISSING"],
+                        "blockers": [
+                            {"reason_code": "BINDING_OWNER_MISSING"}
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(
+            _by_id(binding_state["deliverables"])["target"]["actionability"]["state"],
+            "waiting_on_bindings",
+        )
+        self.assertEqual(
+            {item["id"] for item in binding_state["governance_blockers"]},
+            {"target"},
+        )
+        self.assertEqual(binding_state["summary"]["governance_blockers"], 1)
+
+        protocol_state, _ = build_dashboard_model(
+            _process(target),
+            _state(target),
+            claim_readiness={
+                "schema_version": "1.0",
+                "eligible": False,
+                "reason_code": "VERIFICATION_REQUIRED",
+                "required_action": "verify",
+            },
+        )
+        self.assertEqual(
+            _by_id(protocol_state["deliverables"])["target"]["actionability"]["state"],
+            "waiting_on_protocol",
+        )
+        self.assertEqual(protocol_state["blocked_items"], [])
+        self.assertEqual(
+            protocol_state["governance_blockers"],
+            [
+                {
+                    "id": "project.claim_readiness",
+                    "scope": "project",
+                    "code": "VERIFICATION_REQUIRED",
+                    "reason": "VERIFICATION_REQUIRED",
+                    "required_action": "verify",
+                }
+            ],
+        )
+        self.assertEqual(protocol_state["summary"]["governance_blockers"], 1)
 
     def test_superseded_deliverable_is_terminal_even_with_unmet_dependencies(self) -> None:
         prerequisite = _deliverable("prerequisite", "planned")
@@ -227,6 +298,9 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
             )
             self.assertEqual(projected["summary"]["waiting_on_dependencies"], 1)
             self.assertEqual(projected["summary"]["explicitly_blocked"], 1)
+            self.assertEqual(projected["summary"]["waiting_items"], 1)
+            self.assertEqual(projected["summary"]["explicit_blockers"], 1)
+            self.assertEqual(projected["summary"]["governance_blockers"], 0)
 
             index = (dashboard / "index.html").read_text(encoding="utf-8")
             self.assertIn("Waiting on Prerequisites", index)
@@ -237,8 +311,13 @@ class DashboardReadinessSemanticsTests(unittest.TestCase):
                 index,
             )
             self.assertIn(
-                '<span class="metric-label">Open Blockers</span>'
+                '<span class="metric-label">Explicit Blockers</span>'
                 '<strong class="metric-value alert">1</strong>',
+                index,
+            )
+            self.assertIn(
+                '<span class="metric-label">Governance Blockers</span>'
+                '<strong class="metric-value">0</strong>',
                 index,
             )
             self.assertNotIn("__WAITING__", index)

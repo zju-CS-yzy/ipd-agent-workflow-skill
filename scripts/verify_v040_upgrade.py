@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify an in-place v0.4.0-beta project upgrade to v0.4.1 source."""
+"""Qualify an in-place v0.4.0-beta project upgrade to current source."""
 
 from __future__ import annotations
 

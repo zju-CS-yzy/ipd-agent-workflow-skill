@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.4.1b1"
-PUBLIC_VERSION = "0.4.1-beta"
+PACKAGE_VERSION = "0.5.0b1"
+PUBLIC_VERSION = "0.5.0-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -30,6 +30,8 @@ REQUIRED_FILES = (
     "scripts/verify_v031_upgrade.py",
     "scripts/verify_v032_upgrade.py",
     "scripts/verify_v040_upgrade.py",
+    "scripts/verify_v041_upgrade.py",
+    "scripts/simulate_capability_lifecycle.py",
     "scripts/simulate_progressive_refinement.py",
     "pyproject.toml",
     "agents/openai.yaml",
@@ -58,6 +60,9 @@ REQUIRED_FILES = (
     "policies/task-types/ai_system.yaml",
     "policies/task-types/material_change.yaml",
     "policies/capabilities/sourced_component_integration.yaml",
+    "policies/capabilities/module_decomposition_and_verification.yaml",
+    "policies/capabilities/interface_contract_and_integration.yaml",
+    "policies/capabilities/release_and_lifecycle_assurance.yaml",
     "templates/project/.ipd/task_profile.yaml",
     "templates/project/.ipd/process_extensions.yaml",
     "templates/project/docs/README.md",
@@ -265,6 +270,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/release.yml",
+            r"python -B scripts/verify_v041_upgrade\.py",
+            "release workflow must qualify the direct v0.4.1 in-place upgrade",
+        ),
+        (
+            ".github/workflows/release.yml",
             r'ipdctl"\s+validate\s+"\$project"\s+--json',
             "release artifact smoke tests must exercise validate --json",
         ),
@@ -285,7 +295,12 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/test.yml",
-            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$.*?-\s+upgrade-v040\s*$",
+            r"upgrade-v041:.*?fetch-depth:\s*0.*?python -B scripts/verify_v041_upgrade\.py",
+            "CI must fetch release history and qualify the direct v0.4.1 upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$.*?-\s+upgrade-v040\s*$.*?-\s+upgrade-v041\s*$",
             "CI must expose the stable governance-gate over all release-contract jobs",
         ),
         (
@@ -299,9 +314,19 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "governance-gate must explicitly require the v0.4.0 upgrade result",
         ),
         (
+            ".github/workflows/test.yml",
+            r"UPGRADE_V041_RESULT:\s*\$\{\{\s*needs\.upgrade-v041\.result\s*\}\}.*?test \"\$UPGRADE_V041_RESULT\" = \"success\"",
+            "governance-gate must explicitly require the v0.4.1 upgrade result",
+        ),
+        (
             "scripts/verify_v040_upgrade.py",
             r'^RELEASE_TAG\s*=\s*"v0\.4\.0-beta"\s*$',
             "direct upgrade qualification must use the published v0.4.0-beta tag",
+        ),
+        (
+            "scripts/verify_v041_upgrade.py",
+            r'^RELEASE_TAG\s*=\s*"v0\.4\.1-beta"\s*$',
+            "direct upgrade qualification must use the published v0.4.1-beta tag",
         ),
         (
             ".github/workflows/test.yml",
@@ -335,12 +360,12 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             "docs/deployment.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.0-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.1-beta`',
             "deployment guide must identify the release and direct upgrade baseline",
         ),
         (
             "docs/deployment.zh-CN.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.0-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.1-beta`',
             "Chinese deployment guide must identify the release and direct upgrade baseline",
         ),
         (
@@ -361,6 +386,80 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
     )
     for relative, pattern, message in checks:
         _require_pattern(findings, root, relative, pattern, message)
+
+    capability_paths = (
+        "policies/capabilities/sourced_component_integration.yaml",
+        "policies/capabilities/module_decomposition_and_verification.yaml",
+        "policies/capabilities/interface_contract_and_integration.yaml",
+        "policies/capabilities/release_and_lifecycle_assurance.yaml",
+    )
+    for capability_path in capability_paths:
+        escaped_path = re.escape(capability_path)
+        _require_pattern(
+            findings,
+            root,
+            ".github/workflows/test.yml",
+            rf"zipfile -l \"\$wheel\" \| grep '{escaped_path}'.*?tar -tzf \"\$sdist\" \| grep '/{escaped_path}\$'",
+            f"CI package inspection must require {capability_path} in wheel and sdist",
+        )
+        _require_pattern(
+            findings,
+            root,
+            ".github/workflows/release.yml",
+            rf"zipfile -l \"\$wheel\" \| grep '{escaped_path}'.*?tar -tzf \"\$sdist\" \| grep '/{escaped_path}\$'.*?test -f \"\$skill_root/{escaped_path}\"",
+            f"release artifact inspection must require {capability_path} in wheel, sdist, and Skill ZIP",
+        )
+
+    catalog_pattern = (
+        r"for pattern in.*?sourced_component_integration.*?"
+        r"module_decomposition_and_verification.*?"
+        r"interface_contract_and_integration.*?"
+        r"release_and_lifecycle_assurance.*?"
+        r'ipdctl\" tailor \"\$project\".*?ipdctl\" validate \"\$project\" --json'
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/test.yml",
+        catalog_pattern,
+        "CI must tailor and validate every installed capability policy",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/release.yml",
+        catalog_pattern,
+        "release artifact smoke tests must tailor and validate every installed capability policy",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/test.yml",
+        r"tar -tzf \"\$sdist\" \| grep '/scripts/verify_v041_upgrade\.py\$'",
+        "CI must require the v0.4.1 upgrade probe in the sdist",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/release.yml",
+        r"tar -tzf \"\$sdist\" \| grep '/scripts/verify_v041_upgrade\.py\$'",
+        "release artifact inspection must require the v0.4.1 upgrade probe in the sdist",
+    )
+    for workflow in (".github/workflows/test.yml", ".github/workflows/release.yml"):
+        _require_pattern(
+            findings,
+            root,
+            workflow,
+            r"tar -tzf \"\$sdist\" \| grep '/scripts/simulate_capability_lifecycle\.py\$'",
+            "package inspection must require the capability lifecycle simulation in the sdist",
+        )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/release.yml",
+        r'test -f "\$skill_root/scripts/simulate_capability_lifecycle\.py"',
+        "release artifact inspection must require the capability lifecycle simulation in the Skill ZIP",
+    )
 
     action_pattern = re.compile(
         r"^\s*(?:-\s*)?uses:\s*[^@\s]+@([^\s#]+)", re.MULTILINE
