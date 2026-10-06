@@ -910,6 +910,10 @@ class CliV032LifecycleTests(unittest.TestCase):
             context = json.loads(output)
             self.assertFalse(context["claim_readiness"]["eligible"])
             self.assertEqual(context["available_tasks"], [])
+            self.assertIn(
+                "project.claim_readiness",
+                {item["id"] for item in context["governance_blockers"]},
+            )
             dashboard = json.loads(
                 (root / ".ipd" / "dashboard" / "data" / "state.json").read_text(
                     encoding="utf-8"
@@ -1227,6 +1231,10 @@ class CliV032LifecycleTests(unittest.TestCase):
             dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
             self.assertFalse(dashboard["claim_readiness"]["eligible"])
             self.assertEqual(dashboard["available_tasks"], [])
+            self.assertIn(
+                "project.claim_readiness",
+                {item["id"] for item in dashboard["governance_blockers"]},
+            )
 
             code, output, error = self.invoke(["verify", str(root), "--json"])
             self.assertEqual(code, 0, error + output)
@@ -1234,6 +1242,10 @@ class CliV032LifecycleTests(unittest.TestCase):
             self.assertEqual(code, 0, error)
             context = json.loads(output)
             self.assertTrue(context["claim_readiness"]["eligible"])
+            self.assertNotIn(
+                "project.claim_readiness",
+                {item["id"] for item in context["governance_blockers"]},
+            )
             self.assertIn(
                 deliverable, {item["id"] for item in context["available_tasks"]}
             )

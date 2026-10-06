@@ -1371,6 +1371,17 @@ def _cmd_context(args: argparse.Namespace) -> int:
             value=", ".join(item["id"] for item in snapshot["available_tasks"]) or none,
         )
     )
+    for field, message_key in (
+        ("waiting_items", "cli.context.waiting_items"),
+        ("explicit_blockers", "cli.context.explicit_blockers"),
+        ("governance_blockers", "cli.context.governance_blockers"),
+    ):
+        print(
+            translator.text(
+                message_key,
+                value=", ".join(item["id"] for item in snapshot[field]) or none,
+            )
+        )
     print(
         translator.text(
             "cli.context.blocked_items",
