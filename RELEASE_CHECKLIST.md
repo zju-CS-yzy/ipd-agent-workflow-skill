@@ -13,7 +13,7 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 - [x] Pass the self-contained 300-node renderer regression and actual-browser bilingual file/HTTP checks, including all 32 relationship-filter combinations, file navigation, phase changes and keyboard interaction.
 - [x] Build the wheel and sdist in isolation; install the Skill ZIP, wheel, and sdist in both locales; require the exact 16-file Dashboard inventory and passed verification.
 - [x] Run `python -B scripts/release_check.py .`, `git diff --check`, and the final credential/project-output/source audit.
-- [ ] Publish only after the protected pull request, default-branch, Tag-test, and Tag-release workflows pass; then verify public assets and record immutable SHAs, hashes, workflow runs, and download-smoke results below.
+- [x] Publish only after the protected pull request, default-branch, Tag-test, and Tag-release workflows pass; then verify public assets and record immutable SHAs, hashes, workflow runs, and download-smoke results below.
 
 ## Final v0.5.1-beta local qualification — 2026-10-09
 
@@ -55,13 +55,50 @@ Qualification covers that frozen baseline, not the later live project state.
 
 Private fixtures, their durable local archive, filenames, paths, detailed logs
 and screenshots remain outside Git and distributions. Local candidates are not
-public assets. The working tree is uncommitted; protected PR/default-branch/Tag
+public assets. At local qualification the working tree was uncommitted; protected PR/default-branch/Tag
 workflows and public-download checks belong to the publication phase.
 
 Publication preparation also makes the browser job a required dependency of
 `governance-gate`. The release workflow waits for a successful test run of the
 same release Tag before uploading public assets; workflow structure and narrow
 read permissions were checked after this CI-only change.
+
+## v0.5.1-beta publication record — 2026-10-09
+
+- Release pull request: [#9](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/9).
+  Release commit: `9c21717e079edc4393d9dd207c70de1d7d3041a4`.
+- Annotated Tag object: `a0c514807997a000cbc343eefb0325f4eca04a0e`;
+  `v0.5.1-beta` resolves to the release commit above. Its file tree equals the
+  qualified development commit `ef100996dc27f71e9765baca47bf81994a40abea`.
+- Successful GitHub Actions runs: development branch
+  [37916075849](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37916075849),
+  pull request [37916107777](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37916107777),
+  default branch [37916999994](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37916999994),
+  Tag tests [37917844839](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37917844839),
+  and Tag release [37917844831](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/actions/runs/37917844831).
+  The browser job is part of the required `governance-gate`; public upload waits
+  for this Tag's successful test run.
+- The public [v0.5.1-beta prerelease](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases/tag/v0.5.1-beta)
+  exposes exactly one bilingual Skill ZIP, one wheel, one sdist and
+  `SHA256SUMS.txt`. All downloaded payloads match both the published checksum
+  file and GitHub's asset digests:
+  - Skill ZIP: `201b2c4c60b1c293f110ccc46bb56473d79a8acd8e1d54e4befbd37073cabae5`.
+  - Wheel: `5bc8b032f202749ecfd1f400fe6ad31653051db30ff6b1f5eeced06776b15564`.
+  - Sdist: `a25798c1c60017ac7c1a19779e979235013147edfd4ce9eb4aef552397971e87`.
+- Public-download qualification passed all 12 artifact/Python/locale
+  combinations: Skill ZIP/wheel/sdist × Python 3.10/3.14 × `en`/`zh-CN`.
+  Each installed package reports `ipdctl 0.5.1-beta`, loads all four Capability
+  Policies, uses explicit test-fixture Owner bindings and baseline adoption,
+  exercises review plus expired-Claim rendering/recovery, and finishes with
+  passed validation/verification and the exact 16-file Dashboard. File navigation,
+  relationship controls and canonical inline node identities are checked.
+- Downloaded packages passed the private-project/output audit. Real-project
+  Golden data, paths, logs and screenshots remain local outside Git and releases.
+  Independent install projects and the public-download temporary root were
+  removed after verification; the real project and installed personal Skill
+  were not upgraded.
+- This post-publication record changes documentation only; it does not move
+  the published Tag or replace its assets.
 
 ## Earlier v0.5.1-beta qualification — before Dashboard navigation additions
 
