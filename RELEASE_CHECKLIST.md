@@ -160,14 +160,15 @@ release commit before publication.
   Structural validity, content readiness, and final human approval remain
   distinct; remote content changes must invalidate the relevant verification.
 
-## v0.5.1-beta publication record
+## v0.5.1-beta publication checklist
 
-- [ ] Record the immutable release commit and annotated Tag object after publication.
-- [ ] Record the successful branch, pull-request, default-branch, Tag-test, and Tag-release workflow runs.
-- [ ] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
-- [ ] Record all six public artifact/locale smoke results and removal of the temporary download root.
+- [x] Record the immutable release commit and annotated Tag object after publication.
+- [x] Record the successful branch, pull-request, default-branch, Tag-test, and Tag-release workflow runs.
+- [x] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
+- [x] Record all twelve public artifact/Python/locale smoke results and removal of the temporary download root.
 
-No publication identifiers or artifact hashes are recorded until those events have occurred.
+Completed identifiers, hashes and public-download results are recorded in the
+dated v0.5.1-beta publication record above; historical records below remain intact.
 
 ## v0.5.0-beta repository baseline (historical)
 
