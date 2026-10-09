@@ -273,7 +273,7 @@ class DashboardRefinementProjectionTests(unittest.TestCase):
                     root, candidate, project_state, locale=locale
                 )
                 dashboard = root / ".ipd" / "dashboard"
-                self.assertEqual(len(manifest["files"]), 15)
+                self.assertEqual(len(manifest["files"]), 16)
                 index = (dashboard / "index.html").read_text(encoding="utf-8")
                 svg = (dashboard / "assets" / "deliverable_dependency.svg").read_text(
                     encoding="utf-8"

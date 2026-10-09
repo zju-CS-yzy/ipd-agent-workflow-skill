@@ -347,6 +347,7 @@ class DashboardTests(unittest.TestCase):
                 "phases/launch.svg",
                 "matrices/deliverable_matrix.html",
                 "matrices/gate_matrix.html",
+                "governance.md",
                 "data/state.json",
                 "data/graph.json",
                 "manifest.json",
@@ -354,8 +355,8 @@ class DashboardTests(unittest.TestCase):
             expected = required | {"phases/lifecycle.svg"}
             self.assertEqual(set(generated_files(dashboard)), expected)
             self.assertEqual(set(manifest["files"]), expected)
-            self.assertEqual(len(expected), 15)
-            self.assertEqual(manifest["schema_version"], "2.1")
+            self.assertEqual(len(expected), 16)
+            self.assertEqual(manifest["schema_version"], "2.2")
             self.assertEqual(manifest["locale"], "en")
             self.assertEqual(manifest["state_revision"], state["revision"])
             self.assertIsNone(manifest["bindings_sha256"])
@@ -933,7 +934,7 @@ class DashboardTests(unittest.TestCase):
         self.assertNotEqual(first["eligibility_sha256"], second["eligibility_sha256"])
         self.assertNotEqual(second["bindings_sha256"], third["bindings_sha256"])
         self.assertNotEqual(second["eligibility_sha256"], third["eligibility_sha256"])
-        self.assertEqual(len(files), 15)
+        self.assertEqual(len(files), 16)
 
     def test_phase_acceptance_requires_all_phase_gates_approved(self) -> None:
         process = process_fixture()

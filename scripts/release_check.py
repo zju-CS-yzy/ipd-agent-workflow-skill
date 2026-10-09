@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.0b1"
-PUBLIC_VERSION = "0.5.0-beta"
+PACKAGE_VERSION = "0.5.1b1"
+PUBLIC_VERSION = "0.5.1-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -31,6 +31,10 @@ REQUIRED_FILES = (
     "scripts/verify_v032_upgrade.py",
     "scripts/verify_v040_upgrade.py",
     "scripts/verify_v041_upgrade.py",
+    "scripts/verify_v050_upgrade.py",
+    "scripts/verify_local_golden.py",
+    "scripts/verify_dashboard_browser.py",
+    "ipdctl/dashboard_files.py",
     "scripts/simulate_capability_lifecycle.py",
     "scripts/simulate_progressive_refinement.py",
     "pyproject.toml",
@@ -39,6 +43,7 @@ REQUIRED_FILES = (
     ".github/workflows/release.yml",
     RELEASE_NOTES_PATH,
     "ipdctl/messages.yaml",
+    "ipdctl/version.py",
     "docs/architecture.md",
     "docs/architecture.zh-CN.md",
     "docs/deployment.md",
@@ -194,14 +199,19 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "sdist must include the release simulation scripts",
         ),
         (
+            "ipdctl/version.py",
+            rf'^PACKAGE_VERSION\s*=\s*"{escaped_package}"\s*$.*?^PUBLIC_VERSION\s*=\s*"{escaped_public}"\s*$',
+            "canonical package and public versions must match the release",
+        ),
+        (
             "ipdctl/__init__.py",
-            rf'^__version__\s*=\s*"{escaped_package}"\s*$',
-            f'__version__ must be "{PACKAGE_VERSION}"',
+            r'^from \.version import PACKAGE_VERSION\s*$.*?^__version__\s*=\s*PACKAGE_VERSION\s*$',
+            "__version__ must use the canonical PACKAGE_VERSION",
         ),
         (
             "ipdctl/cli_v2.py",
-            rf'^VERSION\s*=\s*"{escaped_public}"\s*$',
-            f'CLI VERSION must be "{PUBLIC_VERSION}"',
+            r'^from \.version import PUBLIC_VERSION\s*$.*?^VERSION\s*=\s*PUBLIC_VERSION\s*$',
+            "CLI VERSION must use the canonical PUBLIC_VERSION",
         ),
         (
             "CHANGELOG.md",
@@ -275,8 +285,18 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/release.yml",
+            r"python -B scripts/verify_v050_upgrade\.py",
+            "release workflow must qualify the direct v0.5.0 in-place upgrade",
+        ),
+        (
+            ".github/workflows/release.yml",
             r'ipdctl"\s+validate\s+"\$project"\s+--json',
             "release artifact smoke tests must exercise validate --json",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r'test "\$\(find "\$project/\.ipd/dashboard" -type f \| wc -l\)" -eq 16',
+            "release artifact smoke tests must require the 16-file Dashboard",
         ),
         (
             ".github/workflows/test.yml",
@@ -300,7 +320,12 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/test.yml",
-            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$.*?-\s+upgrade-v040\s*$.*?-\s+upgrade-v041\s*$",
+            r"upgrade-v050:.*?fetch-depth:\s*0.*?python -B scripts/verify_v050_upgrade\.py",
+            "CI must fetch release history and qualify the direct v0.5.0 upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"^\s{2}governance-gate:\s*$.*?needs:\s*$.*?-\s+test\s*$.*?-\s+package\s*$.*?-\s+upgrade-v031\s*$.*?-\s+upgrade-v032\s*$.*?-\s+upgrade-v040\s*$.*?-\s+upgrade-v041\s*$.*?-\s+upgrade-v050\s*$",
             "CI must expose the stable governance-gate over all release-contract jobs",
         ),
         (
@@ -319,6 +344,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "governance-gate must explicitly require the v0.4.1 upgrade result",
         ),
         (
+            ".github/workflows/test.yml",
+            r"UPGRADE_V050_RESULT:\s*\$\{\{\s*needs\.upgrade-v050\.result\s*\}\}.*?test \"\$UPGRADE_V050_RESULT\" = \"success\"",
+            "governance-gate must explicitly require the v0.5.0 upgrade result",
+        ),
+        (
             "scripts/verify_v040_upgrade.py",
             r'^RELEASE_TAG\s*=\s*"v0\.4\.0-beta"\s*$',
             "direct upgrade qualification must use the published v0.4.0-beta tag",
@@ -327,6 +357,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "scripts/verify_v041_upgrade.py",
             r'^RELEASE_TAG\s*=\s*"v0\.4\.1-beta"\s*$',
             "direct upgrade qualification must use the published v0.4.1-beta tag",
+        ),
+        (
+            "scripts/verify_v050_upgrade.py",
+            r'^RELEASE_TAG\s*=\s*"v0\.5\.0-beta"\s*$',
+            "direct upgrade qualification must use the published v0.5.0-beta tag",
         ),
         (
             ".github/workflows/test.yml",
@@ -360,12 +395,12 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             "docs/deployment.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.1-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.5\.0-beta`',
             "deployment guide must identify the release and direct upgrade baseline",
         ),
         (
             "docs/deployment.zh-CN.md",
-            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.4\.1-beta`',
+            rf'`v{escaped_public}`.*?`{escaped_package}`.*?`v0\.5\.0-beta`',
             "Chinese deployment guide must identify the release and direct upgrade baseline",
         ),
         (
@@ -415,7 +450,7 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         r"module_decomposition_and_verification.*?"
         r"interface_contract_and_integration.*?"
         r"release_and_lifecycle_assurance.*?"
-        r'ipdctl\" tailor \"\$project\".*?ipdctl\" validate \"\$project\" --json'
+        r'ipdctl\" tailor \"\$project\".*?ipdctl\" render-dashboard \"\$project\".*?ipdctl\" validate \"\$project\" --json'
     )
     _require_pattern(
         findings,
@@ -444,6 +479,27 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ".github/workflows/release.yml",
         r"tar -tzf \"\$sdist\" \| grep '/scripts/verify_v041_upgrade\.py\$'",
         "release artifact inspection must require the v0.4.1 upgrade probe in the sdist",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/test.yml",
+        r"tar -tzf \"\$sdist\" \| grep '/scripts/verify_v050_upgrade\.py\$'",
+        "CI must require the v0.5.0 upgrade probe in the sdist",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/release.yml",
+        r"tar -tzf \"\$sdist\" \| grep '/scripts/verify_v050_upgrade\.py\$'",
+        "release artifact inspection must require the v0.5.0 upgrade probe in the sdist",
+    )
+    _require_pattern(
+        findings,
+        root,
+        ".github/workflows/release.yml",
+        r'test -f "\$skill_root/scripts/verify_v050_upgrade\.py"',
+        "release artifact inspection must require the v0.5.0 upgrade probe in the Skill ZIP",
     )
     for workflow in (".github/workflows/test.yml", ".github/workflows/release.yml"):
         _require_pattern(

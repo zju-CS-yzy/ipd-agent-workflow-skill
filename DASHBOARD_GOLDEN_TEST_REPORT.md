@@ -1,5 +1,16 @@
 # Dashboard Golden Test Report
 
+> The v0.5.1 release gate now uses frozen local real-project qualification,
+> self-contained large-graph regression and actual-browser checks. See
+> [Dashboard qualification](docs/dashboard-testing.md). The original comparison
+> below remains historical and is not required to restore the missing fixture.
+
+> Historical verification record, retained with its original fixture hashes.
+> This is not v0.5.1 qualification: it describes the previous 15-file Dashboard.
+> The external v1.4 fixture is absent from the recovered checkout; a fresh
+> same-fixture run remains pending. Current renderer regression tests do not
+> substitute for that external comparison.
+
 **Overall result: PASS** — en: 27/27; zh-CN: 27/27.
 
 ## Scope and limitation

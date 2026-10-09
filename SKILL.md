@@ -28,9 +28,9 @@ and `launch` are separate from this per-deliverable loop.
 2. **Claim:** State the outcome to prove, its acceptance evidence, affected deliverables, and dependencies. Do not present an assumption as verified evidence.
 3. **Work:** Make the authorized change. Preserve existing trace links and add links when a claim, deliverable, or gate depends on another tracked entity.
 4. **Close:** Submit work with durable evidence as `ready_for_review`; closing never accepts it.
-5. **Review:** Append review evidence. An Agent may recommend a decision but may not make the final decision.
+5. **Review:** Append review evidence only for `project.current_iteration_subject`. Close or Gate-review entry binds exactly one canonical Deliverable or Gate ID for the whole iteration; every other `review`, `approve`, or `reject` target fails closed. An Agent may recommend a decision but may not make the final decision.
 6. **Human decision:** Record an explicitly authorized human `approve` or `reject`. Preserve the complete review history; the latest authorized human decision is the current governance decision, so an earlier rejection remains auditable but does not permanently block approved rework.
-7. **Refresh:** Regenerate the interactive Dashboard, typed SVG graphs, and matrices from source facts; never edit generated views directly.
+7. **Refresh:** At a safe workflow boundary (`context`, `refresh`, or `verify`), synchronize repository facts, advance the machine step to `verify`, and regenerate the interactive Dashboard. During active work or review, use `render-dashboard` to redraw the current view without changing state or runtime facts. Never edit generated views directly.
 8. **Verify:** Run the relevant product checks plus `ipdctl verify`. Reconcile recorded state with repository changes and report unresolved evidence or review needs. A new claim may start from `verify` only while the latest passed verification still matches the current state revision and complete verification-input fingerprint.
 
 ## Non-negotiable boundaries
@@ -57,6 +57,7 @@ python -m ipdctl adopt-baseline . --preview --json
 python -m ipdctl claim DELIVERABLE --project-root .
 python -m ipdctl close DELIVERABLE --project-root . --evidence evidence/DELIVERABLE/result.md
 python -m ipdctl review DELIVERABLE --project-root . --reviewer REVIEWER
+python -m ipdctl render-dashboard .
 python -m ipdctl approve DELIVERABLE --project-root . --reviewer HUMAN --actor-type human --authorized --evidence evidence/DELIVERABLE/approval.md
 python -m ipdctl refresh .
 python -m ipdctl verify .
@@ -67,13 +68,29 @@ python -m ipdctl validate . --json
 ```
 
 The full command surface is `init`, `tailor`, `refine`, `context`, `adopt-baseline`, `claim`, `close`,
-`review`, `approve`, `reject`, `advance-phase`, `refresh`, `verify`,
+`review`, `approve`, `reject`, `advance-phase`, `render-dashboard`, `refresh`, `verify`,
 `repository`, `reconcile`, `validate`, and the `status` alias for `context`.
 Use `init` only when no state exists. Do not use `--force` unless replacement
 is explicitly intended. Use `claim --recover` only to recover an orphaned
 `in_progress` deliverable identified by `context`; an unexpired claim owned by
 another actor cannot be taken over. An Agent must never call final approval
 while impersonating a human.
+
+The one active review subject is stored in
+`project.current_iteration_subject`. `close` binds a Deliverable; an eligible
+Gate review binds its canonical Gate ID. Approval or rejection clears the lock
+while moving to `refresh`. A v0.5.0 project already paused in `review` has no
+safe subject to infer, so it remains blocked until an authorized human chooses
+the exact existing subject and records why:
+
+```bash
+python -m ipdctl review SUBJECT --project-root . --reviewer HUMAN \
+  --actor-type human --authorized --recover-subject --reason TEXT
+```
+
+Recovery records an append-only `review_subject_recovered` event; it does not
+record a review decision. Continue with the normal `review` and human decision
+commands afterward.
 
 Treat the actionability fields in `context --json` as distinct causes:
 `waiting_items` have unmet `depends_on` prerequisites, `explicit_blockers`
@@ -191,9 +208,16 @@ claim or Gate review. In the final `lifecycle` phase, a successful verification
 with all phase Gates approved records one `lifecycle_complete` runtime event;
 there is no further phase to advance to.
 
-After `refresh`, use `.ipd/dashboard/index.html` for human inspection and
-`.ipd/dashboard/data/state.json` plus `data/graph.json` for automation. A graph
-or matrix is a derived view; never use it to override the YAML fact sources.
+Use `.ipd/dashboard/index.html` for human inspection and
+`.ipd/dashboard/data/state.json` plus `data/graph.json` for automation.
+`.ipd/dashboard/governance.md` is a deterministic, bilingual governance
+snapshot generated from the canonical process and state facts. `validate` and
+`verify` compare it back to those facts, including framework versions, Gate
+IDs, Gate statuses, project phase, workflow step, and the active review
+subject. The Dashboard, graphs, matrices, and governance snapshot are derived
+views; never use them to override the YAML fact sources. Use
+`render-dashboard` for a current view during Review and reserve `refresh` for
+the formal workflow transition.
 
 ## Read details only when needed
 

@@ -49,6 +49,7 @@ REQUIRED_DASHBOARD_FILES = (
     "phases/launch.svg",
     "matrices/deliverable_matrix.html",
     "matrices/gate_matrix.html",
+    "governance.md",
     "data/state.json",
     "data/graph.json",
 )

@@ -682,7 +682,7 @@ class CapabilityLifecycleScenario(LifecycleScenario):
         }
         _require(
             dashboard_files == EXPECTED_DASHBOARD_FILES,
-            "Dashboard output inventory diverged from the 15-file contract",
+            "Dashboard output inventory diverged from the 16-file contract",
         )
         graph_data = final["graph_data"]
         state_data = final["state_data"]

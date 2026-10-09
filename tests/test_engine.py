@@ -6,7 +6,9 @@ from ipdctl.engine import (
     TransitionError,
     approve_deliverable,
     approve_gate,
+    bind_current_iteration_subject,
     claim_deliverable,
+    clear_current_iteration_subject,
     record_deliverable_review,
     record_gate_review,
     reject_deliverable,
@@ -22,6 +24,17 @@ from ipdctl.state import create_initial_state
 class EngineTests(unittest.TestCase):
     def test_workflow_advances_in_one_canonical_order(self) -> None:
         state = create_initial_state("demo")
+        state["deliverables"] = [
+            {
+                "id": "spec",
+                "title": "Specification",
+                "status": "ready_for_review",
+                "review_required": True,
+                "depends_on": [],
+                "evidence": ["docs/specification.md"],
+                "reviews": [],
+            }
+        ]
         state = transition_workflow(state, "claim")
         state = transition_workflow(state, "work")
         self.assertEqual(state["project"]["workflow_step"], "work")
@@ -29,7 +42,9 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(TransitionError):
             transition_workflow(state, "verify")
 
-        for step in ("close", "review", "refresh", "verify", "context"):
+        state = transition_workflow(state, "close")
+        state = transition_workflow(state, "review", subject="spec")
+        for step in ("refresh", "verify", "context"):
             state = transition_workflow(state, step)
         self.assertEqual(state["project"]["workflow_step"], "context")
 
@@ -48,6 +63,8 @@ class EngineTests(unittest.TestCase):
         ]
         state = set_deliverable_status(state, "spec", "in_progress")
         state = set_deliverable_status(state, "spec", "ready_for_review")
+        state["project"]["workflow_step"] = "work"
+        state = bind_current_iteration_subject(state, "spec")
         state = start_deliverable_review(state, "spec")
         with self.assertRaises(TransitionError):
             set_deliverable_status(state, "spec", "accepted")
@@ -122,6 +139,8 @@ class EngineTests(unittest.TestCase):
                 "reviews": [],
             }
         ]
+        state["project"]["workflow_step"] = "review"
+        state["project"]["current_iteration_subject"] = "spec"
         with self.assertRaises(TransitionError):
             approve_deliverable(
                 state,
@@ -140,12 +159,15 @@ class EngineTests(unittest.TestCase):
             evidence="reviews/rejected.md",
         )
         self.assertEqual(state["deliverables"][0]["status"], "rejected")
+        state = clear_current_iteration_subject(state, "spec")
         state = claim_deliverable(state, "spec")
         self.assertEqual(state["deliverables"][0]["status"], "in_progress")
 
         state = set_deliverable_status(
             state, "spec", "ready_for_review", evidence=["docs/specification-v2.md"]
         )
+        state["project"]["workflow_step"] = "work"
+        state = bind_current_iteration_subject(state, "spec")
         state = start_deliverable_review(state, "spec")
         state = approve_deliverable(
             state,
@@ -171,6 +193,8 @@ class EngineTests(unittest.TestCase):
             }
         ]
         state = set_gate_ready(state, "dcp-1")
+        state["project"]["workflow_step"] = "verify"
+        state = bind_current_iteration_subject(state, "dcp-1")
         state = record_gate_review(
             state,
             "dcp-1",
@@ -209,6 +233,8 @@ class EngineTests(unittest.TestCase):
             }
         ]
         state = set_gate_ready(state, "dcp-1")
+        state["project"]["workflow_step"] = "verify"
+        state = bind_current_iteration_subject(state, "dcp-1")
         state = record_gate_review(
             state,
             "dcp-1",
@@ -219,7 +245,10 @@ class EngineTests(unittest.TestCase):
             evidence="reviews/dcp-1-rejected.md",
         )
         state = reject_gate(state, "dcp-1")
+        state = clear_current_iteration_subject(state, "dcp-1")
         state = set_gate_ready(state, "dcp-1")
+        state["project"]["workflow_step"] = "verify"
+        state = bind_current_iteration_subject(state, "dcp-1")
         state = record_gate_review(
             state,
             "dcp-1",

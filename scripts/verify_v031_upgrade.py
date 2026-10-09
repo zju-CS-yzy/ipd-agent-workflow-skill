@@ -436,7 +436,7 @@ def qualify() -> dict[str, Any]:
             "context_eligible": True,
             "dashboard_eligible": True,
             "reconcile_status": "passed",
-            "dashboard_files": 15,
+            "dashboard_files": 16,
         }
         if checks != expected:
             raise RuntimeError(f"v0.3.1 upgrade qualification mismatch: {checks}")

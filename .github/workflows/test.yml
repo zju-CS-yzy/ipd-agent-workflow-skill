@@ -73,6 +73,7 @@ jobs:
           tar -tzf "$sdist" | grep '/scripts/simulate_capability_lifecycle.py$'
           tar -tzf "$sdist" | grep '/scripts/simulate_progressive_refinement.py$'
           tar -tzf "$sdist" | grep '/scripts/verify_v041_upgrade.py$'
+          tar -tzf "$sdist" | grep '/scripts/verify_v050_upgrade.py$'
           tar -tzf "$sdist" | grep '/policies/capabilities/sourced_component_integration.yaml$'
           tar -tzf "$sdist" | grep '/policies/capabilities/module_decomposition_and_verification.yaml$'
           tar -tzf "$sdist" | grep '/policies/capabilities/interface_contract_and_integration.yaml$'
@@ -103,6 +104,7 @@ jobs:
             "$RUNNER_TEMP/sdist-venv/bin/ipdctl" init "$project" --name "catalog-$pattern" --locale en
             "$RUNNER_TEMP/sdist-venv/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=[sys.argv[2]]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml" "$pattern"
             "$RUNNER_TEMP/sdist-venv/bin/ipdctl" tailor "$project"
+            "$RUNNER_TEMP/sdist-venv/bin/ipdctl" render-dashboard "$project"
             "$RUNNER_TEMP/sdist-venv/bin/ipdctl" validate "$project" --json
           done
           cd "$source_root"
@@ -129,6 +131,7 @@ jobs:
             "$RUNNER_TEMP/venv/bin/ipdctl" init "$project" --name "catalog-$pattern" --locale en
             "$RUNNER_TEMP/venv/bin/python" -c 'from pathlib import Path; import sys, yaml; p=Path(sys.argv[1]); data=yaml.safe_load(p.read_text(encoding="utf-8")); data["capability_patterns"]=[sys.argv[2]]; p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")' "$project/.ipd/task_profile.yaml" "$pattern"
             "$RUNNER_TEMP/venv/bin/ipdctl" tailor "$project"
+            "$RUNNER_TEMP/venv/bin/ipdctl" render-dashboard "$project"
             "$RUNNER_TEMP/venv/bin/ipdctl" validate "$project" --json
           done
           for locale in en zh-CN; do
@@ -209,6 +212,24 @@ jobs:
       - name: Qualify v0.4.1-beta to v0.5.0-beta
         run: python -B scripts/verify_v041_upgrade.py
 
+  upgrade-v050:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install current package
+        run: python -m pip install .
+      - name: Qualify v0.5.0-beta to v0.5.1-beta
+        run: python -B scripts/verify_v050_upgrade.py
+
   governance-gate:
     if: always()
     runs-on: ubuntu-latest
@@ -219,6 +240,8 @@ jobs:
       - upgrade-v032
       - upgrade-v040
       - upgrade-v041
+      - upgrade-v050
+      - dashboard-browser
     steps:
       - name: Require every release-contract job
         shell: bash
@@ -229,14 +252,34 @@ jobs:
           UPGRADE_V032_RESULT: ${{ needs.upgrade-v032.result }}
           UPGRADE_V040_RESULT: ${{ needs.upgrade-v040.result }}
           UPGRADE_V041_RESULT: ${{ needs.upgrade-v041.result }}
+          UPGRADE_V050_RESULT: ${{ needs.upgrade-v050.result }}
+          DASHBOARD_BROWSER_RESULT: ${{ needs.dashboard-browser.result }}
         run: |
-          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s upgrade-v040=%s upgrade-v041=%s\n' \
+          printf 'test=%s package=%s upgrade-v031=%s upgrade-v032=%s upgrade-v040=%s upgrade-v041=%s upgrade-v050=%s\n' \
             "$TEST_RESULT" "$PACKAGE_RESULT" \
             "$UPGRADE_V031_RESULT" "$UPGRADE_V032_RESULT" \
-            "$UPGRADE_V040_RESULT" "$UPGRADE_V041_RESULT"
+            "$UPGRADE_V040_RESULT" "$UPGRADE_V041_RESULT" \
+            "$UPGRADE_V050_RESULT"
           test "$TEST_RESULT" = "success"
           test "$PACKAGE_RESULT" = "success"
           test "$UPGRADE_V031_RESULT" = "success"
           test "$UPGRADE_V032_RESULT" = "success"
           test "$UPGRADE_V040_RESULT" = "success"
           test "$UPGRADE_V041_RESULT" = "success"
+          test "$UPGRADE_V050_RESULT" = "success"
+          printf 'dashboard-browser=%s\n' "$DASHBOARD_BROWSER_RESULT"
+          test "$DASHBOARD_BROWSER_RESULT" = "success"
+
+  dashboard-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install . playwright==1.63.0
+          python -m playwright install --with-deps chromium
+      - name: Verify bilingual offline and HTTP Dashboard interactions
+        run: python -B scripts/verify_dashboard_browser.py --output "$RUNNER_TEMP/dashboard-browser"

@@ -23,6 +23,7 @@
 | `ipdctl.dashboard_model` | 将流程、状态和运行时事实投影为标准状态与类型化图 | 发明事实或修改源状态 |
 | `ipdctl.dashboard_svg` | 生成分层泳道、类型化节点和关系边 SVG | 调用 Graphviz 或直接读取项目文件 |
 | `ipdctl.dashboard_html` | 生成离线 Dashboard、矩阵、筛选器、缩放和节点详情 | 持久化编辑或依赖在线资源 |
+| `ipdctl.governance_documents` | 确定性生成并验证由事实派生的治理登记表与 Gate 计划 | 解析任意项目正文或把生成的 Markdown 当成权威事实 |
 | `ipdctl.traceability` | 解析全局实体 ID 和悬空链接 | 把自由文本当作有效实体引用 |
 | `ipdctl.policy` | 加载并验证安全裁剪规则 | 允许禁用不可裁剪控制项 |
 | `ipdctl.repository` | 只读获取 Git/SVN root、revision 和 dirty 状态 | 提交、更新、打标签、推送或修改版本库 |
@@ -51,11 +52,11 @@ Evidence 继续作为历史保留。系统会报告 Binding Impact，但不会�
 具体细化子 Deliverable 必须有用户显式编写的 Owner；Placeholder 与 Abstract
 节点是不可 Claim 的结构事实，不要求 Owner。
 
-Claim Preflight 与全部读取界面使用同一份 Binding Eligibility 投影。每个新 Claim 记录精确 Binding Window；Verify 成功后把精确 Artifact Baseline 带入下一轮。已有 Dirty 项目通过只追加、由人类明确授权的 Baseline Adoption Event 迁移，而不是伪造 Claim 或修改 VCS。Deliverable 与 Gate 都是显式评审 Subject。获得授权的人类决定只追加、不覆盖；最新一条获得授权的人类决定控制当前结果，完整历史仍可审计。只有当前阶段的必要 Gate Subject 满足控制要求时，`advance-phase` 才能成功。`refresh` 根据流程和状态事实生成 Dashboard，并显示 Provenance、Maturity 与 Checkpoint Criteria 供检查；`verify` 重新编译预期流程，并检查项目扩展、状态、证据路径、输出哈希、Binding Eligibility 和版本库核对。最终 Deliverable 与 TR/DCP 批准不能来自 Agent 身份。
+Claim Preflight 与全部读取界面使用同一份 Binding Eligibility 投影。每个新 Claim 记录精确 Binding Window；Verify 成功后把精确 Artifact Baseline 带入下一轮。已有 Dirty 项目通过只追加、由人类明确授权的 Baseline Adoption Event 迁移，而不是伪造 Claim 或修改 VCS。Deliverable 与 Gate 都是显式评审 Subject；进入 Review 时只把一个规范 ID 写入 `project.current_iteration_subject`，所有评审与决定命令在人工决定清锁前都必须匹配该 ID。获得授权的人类决定只追加、不覆盖；最新一条获得授权的人类决定控制当前结果，完整历史仍可审计。只有当前阶段的必要 Gate Subject 满足控制要求时，`advance-phase` 才能成功。`render-dashboard` 生成当前视图而不修改 State 或 Runtime；正式 `refresh` 只允许在安全工作流边界执行，同步版本库事实、只增加一次 State Revision 并进入 Verify。`verify` 重新编译预期流程，并检查项目扩展、状态、证据路径、由事实生成的治理内容、输出哈希、Binding Eligibility 和版本库核对。最终 Deliverable 与 TR/DCP 批准不能来自 Agent 身份。
 
 状态写入先在目标目录生成临时文件，再原子替换。成功的引擎操作只将 `revision` 增加一次，并返回新对象，不修改输入对象。框架以项目解析后路径为键，在当前用户的系统临时目录中使用崩溃后自动释放的操作系统互斥锁；它覆盖恢复和完整命令周期，哈希锁文件不是项目产物。修改类 CLI 命令随后在完整的读取、预检、计算和写入周期内持有项目本地事务日志。日志先取得规范名称，再在修改前快照权威文件与生成输出，在异常或进程终止后恢复；提交时先原子退出活动状态，再清理备份。同一本地用户环境中的另一个并发项目命令会明确失败，可在活动命令结束后重试；不同操作系统账号或不同临时目录命名空间不能并发操作同一检出目录。如果操作系统无法确认日志所属进程是否仍在运行，恢复会按安全失败处理并保留日志，不会擅自回滚。
 
-Dashboard 刷新先构建完整暂存树，再替换已有生成树。`data/state.json` 和 `data/graph.json` 是经过净化的只读投影，不是备用状态仓库。SVG 和 HTML 消费相同事实，所有受管理文件均被 Dashboard manifest 覆盖。
+Dashboard 刷新先构建完整暂存树，再替换已有生成树。`data/state.json` 和 `data/graph.json` 是经过净化的只读投影，不是备用状态仓库。SVG 和 HTML 消费相同事实，所有受管理文件均被 Dashboard manifest 覆盖。`governance.md` 也在同一暂存树中由规范版本、流程、状态、Deliverable 与 Gate 事实生成；校验会重建预期字节，而不是信任文档自身或 Manifest Hash。
 
 ## 语言边界
 

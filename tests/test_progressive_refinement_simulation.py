@@ -29,7 +29,7 @@ class ProgressiveRefinementSimulationTests(unittest.TestCase):
             checks["intermediate_leaf_closure"],
             [LEAF_CAPTURE, LEAF_FUSION],
         )
-        self.assertEqual(checks["dashboard_files"], 15)
+        self.assertEqual(checks["dashboard_files"], 16)
         self.assertEqual(checks["concept_gate_epoch"], 2)
         self.assertTrue(checks["history_preserved"])
         self.assertTrue(checks["owner_preflight_exercised"])

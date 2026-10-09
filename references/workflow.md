@@ -17,10 +17,10 @@ while the machine workflow step remains `review`:
 1. `context` — establish scope, authority, state, repository facts, binding eligibility, and applicable policy.
 2. `claim` — define a falsifiable result and evidence, then atomically record the current binding window before work begins.
 3. `work` — produce or change the deliverable while maintaining dependencies and links.
-4. `close` — submit evidence as `ready_for_review`.
-5. `review` — record review facts; an Agent may recommend but not make a final decision.
+4. `close` — submit evidence as `ready_for_review` and bind that Deliverable as the one `current_iteration_subject`.
+5. `review` — record facts only for the globally locked Deliverable or canonical Gate; an Agent may recommend but not make a final decision.
 6. human `approve` or `reject` — record the explicitly authorized decision and move to `refresh`.
-7. `refresh` — regenerate derived dashboards and matrices and move to `verify`.
+7. `refresh` — at a safe workflow boundary, synchronize repository facts, regenerate derived dashboards and matrices, and move to `verify`. Use `render-dashboard` during Review when only the current visual view is needed.
 8. `verify` — independently check the result and reconcile the state.
 
 After `verify`, a new claim may start only if the latest verification passed for
@@ -29,6 +29,20 @@ the current state revision and its complete input fingerprint is still current.
 `work` to `refresh`, but still requires `refresh` and `verify` before another
 claim. A product Phase changes only when project governance calls for it;
 completing one Agent loop does not imply a Phase change.
+
+The subject lock is global for the iteration, not per command. A second
+Deliverable or Gate cannot be reviewed, approved, or rejected while another ID
+is bound. Approval or rejection clears the lock while entering `refresh`. A
+v0.5.0 project already paused in `review` has no trustworthy lock to infer and
+must fail closed until an authorized human selects the exact eligible existing
+subject with `review --recover-subject --reason`; recovery is an auditable
+repair event, not a decision.
+
+`render-dashboard` is a pure projection command: it may expose the current
+Review subject and blockers without modifying state or runtime. Formal
+`refresh` is limited to `context`, `refresh`, or `verify`, increments the state
+revision exactly once, and rejects an active Claim/work/close/review iteration
+without writes.
 
 If an `in_progress` deliverable has no active lease, `context --json` lists it
 under `recoverable_claims`; recover it explicitly with
@@ -117,6 +131,7 @@ explicit binding make reconciliation, and therefore verification, fail.
   Gate follows both controls in deterministic ID order.
 - A gate moves from `planned` to `ready` only after all required deliverables are accepted.
 - Reviews may be prepared by humans or agents, but final `approved` state requires an explicitly authorized human approval record.
+- Every Review operation must target the one canonical ID stored in `project.current_iteration_subject`; TR/DCP aliases are resolved before binding.
 - The latest authorized human decision controls the current Gate outcome.
   A later approval may resolve an earlier rejection after rework, but the
   earlier rejection remains in review history.
@@ -138,6 +153,12 @@ closed and must be repaired through `tailor`, followed by `refresh` and
 `verify`. The complete Phase/TR/DCP/Gate pointer bundle is also checked against
 ordered `advance_phase` events; coordinated pointer edits cannot manufacture a
 valid phase transition.
+
+The generated `.ipd/dashboard/governance.md` registry and Gate plan is derived
+from the same canonical process/state facts. Its framework and schema versions,
+project pointers, review subject, Deliverable rows, Gate IDs, and Gate statuses
+are recomputed by `validate` and `verify`; editing the Markdown or its manifest
+hash cannot change governance facts.
 
 The final `lifecycle` Phase has no successor. When every Gate in that Phase is
 approved and `verify` passes, the runtime appends one `lifecycle_complete`

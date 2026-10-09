@@ -110,6 +110,7 @@ def render_dashboard(
         render_process_svg,
     )
     from .eligibility import claim_protocol_readiness, eligibility_fingerprint
+    from .governance_documents import render_governance_document
     from .i18n import get_translator
 
     translator = get_translator(locale)
@@ -139,6 +140,8 @@ def render_dashboard(
         translator=translator,
         locale=locale,
     )
+    from .dashboard_files import project_file_navigation
+    project_file_navigation(Path(project_root), state_data["deliverables"], bindings)
     current_phase = _string(state_data["project"]["current"].get("phase"))
     available_ids = [item["id"] for item in state_data["available_tasks"]]
     blocked_ids = [
@@ -230,6 +233,8 @@ def render_dashboard(
                 state_data,
                 graph_data,
                 phase_files,
+                diagrams={path.relative_to(staging).as_posix(): path.read_text(encoding="utf-8")
+                          for path in sorted(staging.rglob("*.svg"))},
                 translator=translator,
             ),
         )
@@ -240,6 +245,15 @@ def render_dashboard(
         _atomic_write(
             staging / "matrices" / "gate_matrix.html",
             render_gate_matrix(state_data, translator=translator),
+        )
+        _atomic_write(
+            staging / "governance.md",
+            render_governance_document(
+                process,
+                state,
+                translator=translator,
+                locale=translator.locale,
+            ),
         )
 
         filenames = sorted(
@@ -255,7 +269,7 @@ def render_dashboard(
             for filename in filenames
         ]
         manifest = {
-            "schema_version": "2.1",
+            "schema_version": "2.2",
             "locale": translator.locale,
             "output_directory": DASHBOARD_RELATIVE_PATH.as_posix(),
             "project": state_data["project"]["name"],
@@ -280,6 +294,7 @@ def render_dashboard(
                 "deliverable_dependency": "assets/deliverable_dependency.svg",
                 "deliverable_matrix": "matrices/deliverable_matrix.html",
                 "gate_matrix": "matrices/gate_matrix.html",
+                "governance": "governance.md",
                 "state": "data/state.json",
                 "graph": "data/graph.json",
                 "phases": phase_files,

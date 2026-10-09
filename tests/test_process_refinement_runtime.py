@@ -10,6 +10,7 @@ from ipdctl.eligibility import (
 from ipdctl.engine import (
     TransitionError,
     approve_gate,
+    bind_current_iteration_subject,
     claim_deliverable,
     record_gate_review,
     set_gate_ready,
@@ -242,6 +243,8 @@ class ProcessRefinementStateTests(unittest.TestCase):
             "concept.mobility", status="accepted", refines="concept.architecture"
         )
         ready = set_gate_ready(state, "tr-concept")
+        ready["project"]["workflow_step"] = "verify"
+        ready = bind_current_iteration_subject(ready, "tr-concept")
         gate = ready["gates"][0]
         self.assertFalse(gate["stale"])
         self.assertIsNone(gate["stale_reason"])

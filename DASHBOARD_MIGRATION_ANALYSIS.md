@@ -155,3 +155,14 @@ identity:
 
 The test does not copy the legacy instance into this repository and does not
 claim an end-to-end v1.4 replay because the original source inputs are missing.
+
+## v0.5.1 replacement qualification policy
+
+The unavailable original v1.4 fixture is a historical migration reference, not
+an active release dependency. The current release gate uses a frozen external
+real v0.5.0 project with `scripts/verify_local_golden.py`, preserving its known
+verification failures and governance history in independent copies. Fixtures,
+expected private facts and detailed results remain outside Git. A self-contained
+300-node renderer regression and bilingual actual-browser checks independently
+cover scale and interaction behavior in CI. These gates do not claim identity
+with, or reconstruction of, the original external reference.

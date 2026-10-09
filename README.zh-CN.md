@@ -4,7 +4,7 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-当前预发布目标：`v0.5.0-beta`（Python 包 `0.5.0b1`）。
+当前预发布目标：`v0.5.1-beta`（Python 包 `0.5.1b1`）。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 
@@ -20,8 +20,8 @@
 - 严格串行执行 `context -> claim -> work -> close -> review -> human approve/reject -> refresh -> verify` 协议。
 - 强制执行八状态交付件生命周期、依赖闭合、证据、评审记录及人类授权验收。
 - 保留全部评审决定，并以最新一条获得授权的人类决定作为当前结果，使被拒绝的工作可以修正、重新评审并批准，而不抹除历史记录。
-- 显式评审 Deliverable 或 Gate Subject，只有当前阶段所需治理检查通过后才能推进 Phase。
-- 在 `.ipd/dashboard/` 生成离线交互式 Dashboard，包含阶段泳道、类型化 SVG、节点详情、Deliverable Matrix、Gate Matrix 和标准 JSON 投影。
+- 每轮评审只锁定一个规范 Deliverable 或 Gate Subject，只有当前阶段所需治理检查通过后才能推进 Phase。
+- 在 `.ipd/dashboard/` 生成离线交互式 Dashboard，包含阶段泳道、类型化 SVG、节点详情、Deliverable Matrix、Gate Matrix、标准 JSON 投影以及由事实生成的治理登记表与 Gate 计划。
 - 在不改变 YAML/JSON 字段、ID、状态、关系和图拓扑的前提下，以 `en` 或 `zh-CN` 展示 CLI 与 Dashboard 文案。
 - 只读检查 Git/SVN 的 branch、revision、dirty 和 remote 信息，并根据显式绑定核对变更。
 - 对 Critical Artifact 执行单一 Owner、逐轮 Claim Window 与已有 Dirty 项目的人工授权迁移基线约束。
@@ -64,6 +64,7 @@ ipdctl claim DELIVERABLE --project-root /path/to/project
 # 执行已授权的工作
 ipdctl close DELIVERABLE --project-root /path/to/project --evidence evidence/DELIVERABLE/result.md
 ipdctl review DELIVERABLE --project-root /path/to/project --reviewer REVIEWER
+ipdctl render-dashboard /path/to/project
 ipdctl approve DELIVERABLE --project-root /path/to/project --reviewer HUMAN --actor-type human --authorized --evidence evidence/DELIVERABLE/approval.md
 ipdctl refresh /path/to/project
 ipdctl verify /path/to/project
@@ -77,6 +78,19 @@ ipdctl verify /path/to/project
 如果过期的是没有 Binding Window 的 v0.3.1 Claim，必须先记录精确且由人类
 授权的迁移基线；首次恢复会生成不可变的 Migration Window，后续恢复继续
 复用该 Window。
+
+`close` 会把规范 Deliverable ID 绑定为
+`project.current_iteration_subject`；Gate Review 则绑定解析后的规范 Gate ID。
+在人工决定清除此锁之前，`review`、`approve` 与 `reject` 对其他对象都会零写入
+失败。已经停在 `review` 的 v0.5.0 项目不能安全推断缺失对象，必须由获得授权的
+人类明确选择仍满足条件的现有 ID 并记录原因：
+
+```bash
+ipdctl review SUBJECT --project-root /path/to/project --reviewer HUMAN \
+  --actor-type human --authorized --recover-subject --reason TEXT
+```
+
+该命令只记录恢复事件，不记录评审决定；之后仍须执行正常 Review 与批准或驳回。
 
 面向机器的 `context --json` 会区分 `waiting_items`（未满足的 `depends_on`
 前置项）、`explicit_blockers`（生命周期状态为 `blocked`）和
@@ -95,7 +109,7 @@ Phase，并把 Workflow 留在 `refresh`；继续 Claim 或 Gate 评审前必须
 同时修改整组 Phase 指针也不能跳过治理流程。
 
 完整 CLI 命令面是 `init`、`tailor`、`refine`、`context`、`status`、`adopt-baseline`、`claim`、
-`close`、`review`、`approve`、`reject`、`refresh`、`verify`、
+`close`、`review`、`approve`、`reject`、`render-dashboard`、`refresh`、`verify`、
 `advance-phase`、`repository`、`reconcile` 和 `validate`。`validate --json`
 输出稳定的机器可读结果；普通 CLI 与 Dashboard 文案继续遵循项目 Locale。精确参数请运行
 `ipdctl COMMAND --help`，规范摘要见
@@ -291,7 +305,9 @@ Git/SVN。如果旧 Claim 恢复前受治理文件再次变化，授权人员可
 周期。并发修改会明确失败并可重试；多文件命令中断后，下一个命令读取事实前
 会先恢复原有项目 Bundle。
 
-Dashboard 入口是 `.ipd/dashboard/index.html`。独立资源位于 `assets/`，阶段视图位于 `phases/`，矩阵位于 `matrices/`，机器可读投影位于 `data/`。`manifest.json` 记录 locale、Binding/Eligibility 哈希以及全部受管理输出的哈希，使 `ipdctl verify` 能够识别过期或被修改的视图。
+Dashboard 入口是 `.ipd/dashboard/index.html`。独立资源位于 `assets/`，阶段视图位于 `phases/`，矩阵位于 `matrices/`，机器可读投影位于 `data/`。`manifest.json` 记录 locale、Binding/Eligibility 哈希以及全部受管理输出的哈希，使 `ipdctl verify` 能够识别过期或被修改的视图。生成的 `governance.md` 登记表与 Gate 计划还会根据规范版本、流程、状态、Deliverable 和 Gate 事实重新构造，因此即使同时修改正文与 Manifest Hash 也会校验失败。
+
+活动迭代期间需要查看当前界面时使用 `render-dashboard`；它保持 State 与 Runtime 字节不变。正式 `refresh` 只接受 `context`、`refresh` 或 `verify` 工作流边界，会同步版本库事实、只增加一次 State Revision，并进入 `verify`。
 
 结构契约位于 [schemas/](schemas/)。运行时还会验证依赖环、引用完整性、合法状态迁移、评审权限、证据存在性、Dashboard 新鲜度和版本库核对结果。不可裁剪的规则位于 [policies/default/tailoring_rules.yaml](policies/default/tailoring_rules.yaml)，通用任务类型规则位于 [policies/task-types/](policies/task-types/)，可复用 Capability Policy 位于 [policies/capabilities/](policies/capabilities/)。
 
@@ -334,3 +350,19 @@ python -B scripts/release_check.py .
 本项目使用 Apache-2.0 许可证，详见 [LICENSE](LICENSE)。
 
 规范仓库：[github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)
+
+### Dashboard 连线筛选与文件导航
+
+交互 Dashboard 默认仅显示“前置项 → 依赖项”连线，可多选支持、验证、
+取代和细化关系。筛选不改变节点位置或工作流事实，阶段切换保留本次会话的
+筛选与缩放。交互图内联到 HTML，支持离线使用；独立 SVG 导出仍保留声明的
+图关系。
+
+点击交付物后，侧栏显示归属文件、共享证据、绑定规则及已有证据。存在的
+文件提供打开和复制路径入口；缺失文件不生成打开链接。链接从
+`.ipd/dashboard/index.html` 相对定位到项目根目录，HTTP 使用时应提供项目
+根目录。浏览器支持的格式可以直接查看，其他格式可能下载；剪贴板不可用
+时保留可选择复制的路径。不展开文件系统链接、派生 Dashboard 和 `.ipd/generated` 目录，
+不把文件正文或电脑绝对路径复制到 Dashboard。
+
+[Dashboard 测试与本地 Golden 验收](docs/dashboard-testing.md)说明自包含回归、浏览器及外部本地项目的测试门。

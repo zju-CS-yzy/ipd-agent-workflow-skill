@@ -455,6 +455,26 @@ def verification_input_snapshot(
             if isinstance(event, dict)
             and event.get("action") == "process_refinement_applied"
         ],
+        "review_subject_recovery_history": [
+            {
+                key: event.get(key)
+                for key in (
+                    "action",
+                    "at",
+                    "subject",
+                    "subject_type",
+                    "actor",
+                    "actor_type",
+                    "authorized",
+                    "reason",
+                    "state_revision",
+                )
+                if key in event
+            }
+            for event in runtime.get("events", [])
+            if isinstance(event, dict)
+            and event.get("action") == "review_subject_recovered"
+        ],
         "evidence": evidence,
         "dashboard": dashboard,
         "repository": repository_record,
@@ -1951,6 +1971,9 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         "dcp": state["project"].get("current_dcp"),
         "gate": state["project"].get("current_gate"),
         "workflow_step": state["project"]["workflow_step"],
+        "current_iteration_subject": state["project"].get(
+            "current_iteration_subject"
+        ),
         "state_revision": state["revision"],
         "process_fingerprint": (
             process_fingerprint(process) if process is not None else None
@@ -1982,12 +2005,78 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     }
 
 
+def render_project_dashboard(project_root: str | Path) -> dict[str, Any]:
+    """Render current derived views without changing project or runtime facts."""
+
+    paths = project_paths(project_root)
+    locale = load_project_locale(paths["root"])
+    state, process = load_project(project_root)
+    if process is None:
+        raise ProjectError(get_translator(locale).text("error.tailored_process_missing"))
+    state_issues = validate_state(state)
+    if state_issues:
+        raise ProjectError(f"invalid project state: {state_issues[0]}")
+    runtime = load_runtime(paths["root"])
+    consistency = sorted(
+        set(
+            project_consistency_issues(state, process, runtime)
+            + phase_history_issues(state, process, runtime)
+        )
+    )
+    # Like Context, a current view must be able to explain an orphaned Claim.
+    # This exception authorizes rendering only; execution and Verify retain
+    # their recovery requirements and all other bundle errors remain fatal.
+    fatal_consistency = [
+        issue for issue in consistency
+        if issue != "workflow_step 'work' requires one active claim"
+        and not (
+            issue.startswith("in-progress deliverable ")
+            and issue.endswith(" has no active claim; recover it before verify")
+        )
+    ]
+    if fatal_consistency:
+        raise ProjectError(f"inconsistent project bundle: {fatal_consistency[0]}")
+    eligibility = binding_eligibility(
+        paths["root"], state, runtime, bindings_path=paths["bindings"]
+    )
+    bindings = None
+    if paths["bindings"].is_file():
+        try:
+            from .reconcile import load_artifact_bindings
+
+            bindings = load_artifact_bindings(paths["bindings"])
+        except (OSError, ValueError):
+            # The eligibility model carries the stable diagnostic.  Rendering
+            # remains useful because it exposes that blocker without changing
+            # any authoritative fact.
+            bindings = None
+    from .dashboard import render_dashboard
+
+    return render_dashboard(
+        paths["root"],
+        process,
+        state,
+        runtime=runtime,
+        bindings=bindings,
+        eligibility=eligibility,
+        locale=locale,
+    )
+
+
 def refresh_project(project_root: str | Path) -> dict[str, Any]:
     paths = project_paths(project_root)
     locale = load_project_locale(paths["root"])
     state, process = load_project(project_root)
     if process is None:
         raise ProjectError(get_translator(locale).text("error.tailored_process_missing"))
+    workflow_step = state.get("project", {}).get("workflow_step")
+    if workflow_step not in {"context", "refresh", "verify"}:
+        raise ProjectError(
+            get_translator(locale).text(
+                "error.refresh_workflow_stage",
+                current=workflow_step,
+            )
+        )
     current_runtime, _ = expire_claims(load_runtime(paths["root"]))
     consistency = sorted(
         set(
@@ -1997,8 +2086,16 @@ def refresh_project(project_root: str | Path) -> dict[str, Any]:
     )
     if consistency:
         raise ProjectError(f"inconsistent project bundle: {consistency[0]}")
+    repo = inspect_repository(paths["root"])
+    updated = revised_copy(state)
+    updated["project"]["workflow_step"] = "verify"
+    updated["project"]["current_iteration_subject"] = None
+    updated["project"]["repository"] = _portable_repository_record(repo)
+    issues = validate_state(updated)
+    if issues:
+        raise ProjectError(f"cannot refresh invalid state: {issues[0]}")
     eligibility = binding_eligibility(
-        paths["root"], state, current_runtime, bindings_path=paths["bindings"]
+        paths["root"], updated, current_runtime, bindings_path=paths["bindings"]
     )
     bindings = None
     if paths["bindings"].is_file():
@@ -2010,12 +2107,6 @@ def refresh_project(project_root: str | Path) -> dict[str, Any]:
             # Eligibility already carries a stable diagnostic.  Refresh still
             # publishes a Dashboard that can explain why work is blocked.
             bindings = None
-    repo = inspect_repository(paths["root"])
-    updated = revised_copy(state)
-    updated["project"]["repository"] = _portable_repository_record(repo)
-    issues = validate_state(updated)
-    if issues:
-        raise ProjectError(f"cannot refresh invalid state: {issues[0]}")
     from .dashboard import render_dashboard
 
     write_state(paths["state"], updated)
@@ -2136,8 +2227,36 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                     "message": message,
                 }
             )
+        from .governance_documents import governance_document_issues
+
+        governance_path = paths["dashboard"] / "governance.md"
+        try:
+            governance_text = (
+                governance_path.read_text(encoding="utf-8")
+                if governance_path.is_file()
+                else None
+            )
+        except OSError as exc:
+            issue_rows.append(
+                {
+                    "path": "$.dashboard.governance",
+                    "code": "governance_document_invalid",
+                    "message": str(exc),
+                }
+            )
+        else:
+            issue_rows.extend(
+                governance_document_issues(
+                    governance_text,
+                    process,
+                    state,
+                    translator=translator,
+                    locale=locale,
+                )
+            )
     required_outputs = {
         ".ipd/dashboard/index.html",
+        ".ipd/dashboard/governance.md",
         ".ipd/dashboard/assets/ipd_flow.svg",
         ".ipd/dashboard/assets/current_status_flow.svg",
         ".ipd/dashboard/assets/deliverable_dependency.svg",
@@ -2163,6 +2282,7 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
         "deliverable_dependency": "assets/deliverable_dependency.svg",
         "deliverable_matrix": "matrices/deliverable_matrix.html",
         "gate_matrix": "matrices/gate_matrix.html",
+        "governance": "governance.md",
         "state": "data/state.json",
         "graph": "data/graph.json",
         "phases": phase_views,
@@ -2185,7 +2305,7 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if not isinstance(manifest, dict):
                 raise ValueError("manifest root must be an object")
-            if manifest.get("schema_version") != "2.1":
+            if manifest.get("schema_version") != "2.2":
                 issue_rows.append(
                     {
                         "path": "$.dashboard.schema_version",

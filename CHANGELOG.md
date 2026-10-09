@@ -1,8 +1,66 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.0-beta` maps to package version `0.5.0b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.1-beta` maps to package version `0.5.1b1`.
 
 ## [Unreleased]
+
+## [0.5.1b1] - Unreleased
+
+### Added
+
+- Added multi-select relationship filters to the interactive Dashboard. Only
+  prerequisite-to-dependent edges are visible initially; all graph facts remain
+  available, and filtering preserves node positions, zoom and selection.
+- Added deliverable file navigation derived from Owner/shared-evidence bindings,
+  with portable open links, copy-path controls, binding patterns and missing-file
+  states. Generated views never embed document contents or absolute paths.
+- Added a self-contained 300-node renderer regression, actual-browser bilingual
+  checks and an external local-project Golden upgrade harness. Private fixtures
+  and detailed results remain outside the repository and release assets.
+- Added `project.current_iteration_subject` as the canonical review lock for
+  both Deliverables and Gates, plus an explicit authorized-human recovery path
+  for legacy projects that were already in `review` without that lock.
+- Added `ipdctl render-dashboard`, which rebuilds all derived Dashboard views
+  without changing project state or Agent Runtime facts.
+- Added the generated `.ipd/dashboard/governance.md` register and Gate plan.
+  `validate` and `verify` now report stable semantic-drift diagnostics for stale
+  framework versions, Gate identifiers, Gate status descriptions, and other
+  non-canonical governance content.
+
+### Changed
+
+- Formal `refresh` is restricted to safe workflow boundaries, changes the
+  project revision exactly once, and cannot be used as the rendering operation
+  for an active human review.
+- Dashboard manifest schema `2.2` declares the governance view. The canonical
+  Dashboard inventory is now 16 files.
+
+### Fixed
+
+- Installed-package CI and release smoke tests render the derived governance
+  view before validation. The retained v0.4.1 upgrade gate separately checks
+  the legacy 15-file and current 16-file Dashboard inventories.
+- Governance table headers are localized in both supported languages, and
+  upgrade instructions recover a missing legacy review lock before rendering.
+- Pure Dashboard rendering identifies expired Claim leases as recoverable
+  without changing Runtime facts or fabricating expiry audit events.
+- Review, approval, and rejection can no longer switch to a different subject
+  during the same iteration.
+- Human reviewers can render current review evidence and blockers without
+  advancing or rewriting workflow facts.
+- Generated governance documentation is now checked against canonical `.ipd`
+  facts instead of allowing stale version, Gate, and state descriptions to
+  pass verification unnoticed.
+
+### Compatibility
+
+- Published `v0.5.0-beta` projects upgrade in place without rerunning `init`.
+  Projects paused in a legacy mid-review state fail closed until an authorized
+  human explicitly binds the existing review subject and records a reason.
+- Artifact-path migration, independent content-readiness review, and scoped
+  baseline adoption remain deferred to a later release.
+- The single-Claim lifecycle, authorized-human final approval boundary, and
+  read-only Git/SVN integration remain unchanged.
 
 ## [0.5.0b1] - 2026-10-06
 

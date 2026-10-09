@@ -36,6 +36,7 @@ def create_initial_state(
             "task_types": list(task_types or ["software"]),
             "phase": "concept",
             "workflow_step": "context",
+            "current_iteration_subject": None,
             "current_tr": None,
             "current_dcp": None,
             "current_gate": None,

@@ -222,6 +222,8 @@ def validate_state(value: Any) -> list[ValidationIssue]:
     """Validate both the v0.2 contract and the non-negotiable IPD invariants."""
 
     issues: list[ValidationIssue] = []
+    workflow_step: str | None = None
+    current_iteration_subject: str | None = None
     if not isinstance(value, dict):
         return [ValidationIssue("$", "must be an object")]
 
@@ -257,6 +259,7 @@ def validate_state(value: Any) -> list[ValidationIssue]:
             "task_types",
             "phase",
             "workflow_step",
+            "current_iteration_subject",
             "current_tr",
             "current_dcp",
             "current_gate",
@@ -282,8 +285,31 @@ def validate_state(value: Any) -> list[ValidationIssue]:
         if "phase" in project:
             _enum_string(project["phase"], PROJECT_PHASES, "$.project.phase", issues)
         if "workflow_step" in project:
-            _enum_string(
+            workflow_step = _enum_string(
                 project["workflow_step"], WORKFLOW_STEPS, "$.project.workflow_step", issues
+            )
+        if "current_iteration_subject" in project:
+            raw_subject = project["current_iteration_subject"]
+            if raw_subject is not None:
+                current_iteration_subject = _identifier(
+                    raw_subject,
+                    "$.project.current_iteration_subject",
+                    issues,
+                )
+        if workflow_step == "review":
+            if current_iteration_subject is None:
+                issues.append(
+                    ValidationIssue(
+                        "$.project.current_iteration_subject",
+                        "must identify the globally locked review subject when workflow_step is 'review'",
+                    )
+                )
+        elif current_iteration_subject is not None:
+            issues.append(
+                ValidationIssue(
+                    "$.project.current_iteration_subject",
+                    "must be null outside workflow_step 'review'",
+                )
             )
         for field in ("current_tr", "current_dcp", "current_gate"):
             if field in project:
@@ -603,6 +629,18 @@ def validate_state(value: Any) -> list[ValidationIssue]:
         if isinstance(gate.get("id"), str) and gate.get("id")
     }
     gate_ids = set(gate_by_id)
+    if (
+        workflow_step == "review"
+        and current_iteration_subject is not None
+        and current_iteration_subject not in graph
+        and current_iteration_subject not in gate_ids
+    ):
+        issues.append(
+            ValidationIssue(
+                "$.project.current_iteration_subject",
+                f"references unknown Deliverable or Gate {current_iteration_subject!r}",
+            )
+        )
     phase_sequence = {phase: index for index, phase in enumerate(PROJECT_PHASES)}
 
     def depends_on_subject(start: str, target: str) -> bool:
