@@ -58,7 +58,7 @@ class CliLifecycleTests(unittest.TestCase):
                 ["refresh", str(root)]
             )
             self.assertEqual(refresh_code, 0, refresh_error)
-            self.assertIn("15 files including manifest", refresh_output)
+            self.assertIn("16 files including manifest", refresh_output)
             verify_code, verify_output, _ = self.invoke(["verify", str(root), "--json"])
             self.assertEqual(verify_code, 0, verify_output)
             self.assertEqual(json.loads(verify_output)["status"], "passed")

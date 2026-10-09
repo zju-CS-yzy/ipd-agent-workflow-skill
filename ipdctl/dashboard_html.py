@@ -1,8 +1,8 @@
 """Offline HTML renderers for the IPD dashboard.
 
 The module deliberately has no template or browser dependency.  Every renderer
-returns a deterministic, self-contained HTML document; SVG files are referenced
-by relative path and all project data is escaped before it reaches markup or
+returns a deterministic HTML document with renderer-owned inline SVGs when
+provided, portable export links, and escaped project data in markup or
 JavaScript.
 """
 
@@ -272,6 +272,12 @@ h1 { margin: 0; font-size: clamp(22px, 2.2vw, 34px); line-height: 1.14; letter-s
 .panel-body { padding: 16px 18px; }
 .diagram-frame { min-height: 360px; overflow: auto; border: 1px solid #EAECF0; background: #fff; }
 .diagram-frame.compact { min-height: 280px; }
+.diagram-frame > svg { display:block; width:100%; height:auto; transform-origin:0 0; }
+.relation-filtered .edge:not([data-relation="depends_on"]) { display:none; }
+.relation-tools { display:flex; flex-wrap:wrap; gap:12px; align-items:center; border:0; margin:0 0 12px; padding:0; grid-column:1 / -1; }
+.relation-tools label { display:flex; align-items:center; gap:5px; }
+.file-path { overflow-wrap:anywhere; }
+.file-actions { display:flex; gap:10px; margin:4px 0 10px; }
 .diagram-frame object { display: block; width: 100%; height: 520px; transform-origin: 0 0; transition: transform .16s ease; }
 .diagram-frame.compact object { height: 390px; }
 .diagram-pair { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
@@ -367,6 +373,11 @@ def _localize_static_html(template: str, translator: Any) -> str:
         "Current phase": _t(translator, "dashboard.current_phase", "Current phase"),
         "Current TR": _t(translator, "dashboard.current_tr", "Current TR"),
         "Current DCP / Gate": _t(translator, "dashboard.current_dcp_gate", "Current DCP / Gate"),
+        "Current review subject": _t(
+            translator,
+            "dashboard.current_iteration_subject",
+            "Current review subject",
+        ),
         "Progress": _t(translator, "dashboard.progress", "Progress"),
         "Accepted": _t(translator, "dashboard.accepted", "Accepted"),
         "Review queue": _t(translator, "dashboard.review_queue", "Review queue"),
@@ -649,6 +660,7 @@ def render_index(
     *,
     translator: Any | None = None,
     locale: str = "en",
+    diagrams: Mapping[str, str] | None = None,
 ) -> str:
     """Render the interactive dashboard landing page."""
 
@@ -790,6 +802,7 @@ def render_index(
     <div class="metric"><span class="metric-label">Current phase</span><strong class="metric-value">__CURRENT_PHASE__</strong></div>
     <div class="metric"><span class="metric-label">Current TR</span><strong class="metric-value">__CURRENT_TR__</strong></div>
     <div class="metric"><span class="metric-label">Current DCP / Gate</span><strong class="metric-value">__CURRENT_GATE__</strong></div>
+    <div class="metric"><span class="metric-label">Current review subject</span><strong class="metric-value">__CURRENT_ITERATION_SUBJECT__</strong></div>
     <div class="metric"><span class="metric-label">Progress</span><strong class="metric-value">__PROGRESS__%</strong><div class="progress" aria-hidden="true"><span style="width:__PROGRESS__%"></span></div></div>
     <div class="metric"><span class="metric-label">Accepted</span><strong class="metric-value">__ACCEPTED__ / __TOTAL__</strong></div>
     <div class="metric"><span class="metric-label">Review queue</span><strong class="metric-value">__REVIEW_QUEUE__</strong></div>
@@ -819,6 +832,7 @@ def render_index(
       <section class="panel" id="current-deliverables">
         <div class="panel-head"><div><h2>Current work and deliverable dependencies</h2><p>Active checkpoint path and actionable deliverable relationships.</p></div></div>
         <div class="panel-body diagram-pair">
+          __RELATION_CONTROLS__
           <div><div class="tools" data-zoom-for="status-flow"><strong>Current status</strong><button class="btn" type="button" data-zoom="out" aria-label="Zoom current status out">−</button><button class="btn" type="button" data-zoom="reset">100%</button><button class="btn" type="button" data-zoom="in" aria-label="Zoom current status in">+</button></div><div class="diagram-frame compact" id="status-flow"><object type="image/svg+xml" data="assets/current_status_flow.svg" aria-label="Current status flow"></object></div></div>
           <div><div class="tools"><label for="phase-view"><strong>Phase view</strong></label><select class="select" id="phase-view">__PHASE_OPTIONS__</select><span data-zoom-for="phase-diagram"><button class="btn" type="button" data-zoom="out" aria-label="Zoom phase diagram out">−</button><button class="btn" type="button" data-zoom="reset">100%</button><button class="btn" type="button" data-zoom="in" aria-label="Zoom phase diagram in">+</button></span></div><div class="diagram-frame compact" id="phase-diagram"><object type="image/svg+xml" data="__DEFAULT_PHASE_SRC__" aria-label="Phase deliverable dependency diagram"></object></div></div>
         </div>
@@ -843,6 +857,7 @@ def render_index(
   </div>
 </div>
 
+__SVG_TEMPLATES__
 <script id="ipd-state" type="application/json">__STATE_JSON__</script>
 <script id="ipd-graph" type="application/json">__GRAPH_JSON__</script>
 <script id="ipd-i18n" type="application/json">__I18N_JSON__</script>
@@ -867,6 +882,18 @@ def render_index(
   const deliverable = id => values(state.deliverables).find(item => String(item.id) === id);
   const activity = id => values(state.activities).find(item => String(item.id) === id);
   const phase = id => values(state.phases).find(item => String(item.id) === id);
+
+  const fileList = records => values(records).length ? `<ul class="detail-list">${values(records).map(record => {
+    const href = String(record.href || '');
+    const safe = /^(https?:\/\/|\.\.\/\.\.\/)/i.test(href);
+    return `<li><code class="file-path">${esc(record.path)}</code>${record.exists === false ? ` <span class="muted">${esc(ui('missing_file', 'Not generated or unavailable'))}</span>` : ''}<div class="file-actions">${safe ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(ui('open_file', 'Open file'))}</a>` : ''}<button class="btn" type="button" data-copy-path="${esc(record.path)}">${esc(ui('copy_path', 'Copy path'))}</button></div></li>`;
+  }).join('')}</ul>` : `<p class="muted">${esc(ui('no_files', 'No files recorded.'))}</p>`;
+  document.getElementById('detail-body').addEventListener('click', async event => {
+    const button = event.target.closest('[data-copy-path]'); if (!button) return;
+    const path = button.dataset.copyPath;
+    try { await navigator.clipboard.writeText(path); button.textContent = ui('copied', 'Copied'); }
+    catch (_) { const input = document.createElement('textarea'); input.value = path; button.parentElement.append(input); input.select(); const copied = document.execCommand('copy'); input.remove(); button.textContent = copied ? ui('copied', 'Copied') : ui('copy_failed', 'Select and copy the path'); }
+  });
 
   function showDetails(kind, id) {
     const item = kind === 'deliverable' ? deliverable(id) : kind === 'activity' ? activity(id) : kind === 'phase' ? phase(id) : checkpoint(kind, id);
@@ -902,7 +929,10 @@ def render_index(
           body += section(label('binding', 'blockers', 'Binding blockers'), list(item.actionability.binding_blockers, label('binding', 'no_blockers', 'No binding blockers')));
         }
       }
-      body += section(ui('evidence', 'Evidence'), list(item.evidence, ui('no_evidence', 'No evidence recorded.')));
+      body += section(ui('owned_files', 'Deliverable files'), fileList(item.owned_files));
+      body += section(ui('shared_files', 'Shared evidence files'), fileList(item.shared_files));
+      body += section(ui('binding_rules', 'File binding rules'), list(values(item.file_binding_rules).map(rule => `${rule.id} · ${rule.role} · ${values(rule.patterns).join(', ')}`)));
+      body += section(ui('evidence', 'Evidence'), fileList(item.evidence_files || values(item.evidence).map(path => ({path}))));
       const history = values(item.reviews).map(review => typeof review === 'object' ? [review.decision || review.result || review.status || ui('recorded', 'Recorded'), review.reviewer || review.actor || ui('unknown_reviewer', 'Unknown reviewer'), review.evidence || review.comment || review.notes || ''].filter(Boolean).join(' · ') : review);
       body += section(ui('review_history', 'Review history'), list(history, ui('no_review_history', 'No review history recorded.')));
       if (values(item.replacements).length) body += section(ui('replaced_by', 'Replaced by'), list(item.replacements));
@@ -950,10 +980,33 @@ def render_index(
   });
 
   const phaseSelect = document.getElementById('phase-view');
-  const phaseObject = document.querySelector('#phase-diagram object');
+  const phaseFrame = document.getElementById('phase-diagram');
+  const phaseObject = phaseFrame.querySelector('object');
+  const relationInputs = [...document.querySelectorAll('[data-relation-toggle]')];
+  function filterRelations() {
+    const selected = new Set(relationInputs.filter(input => input.checked).map(input => input.value));
+    document.querySelectorAll('.relation-filtered').forEach(svg => {
+      const edges = [...svg.querySelectorAll('.edge[data-relation]')];
+      edges.forEach(edge => { edge.style.display = selected.has(edge.dataset.relation) ? '' : 'none'; if (selected.has(edge.dataset.relation)) edge.style.display = 'inline'; });
+      const frame = svg.closest('.diagram-frame');
+      let count = frame.querySelector('.relation-count');
+      if (!count) { count = document.createElement('p'); count.className = 'relation-count muted'; count.setAttribute('aria-live', 'polite'); frame.prepend(count); }
+      count.textContent = `${ui('visible_edges', 'Visible relationships')}: ${edges.filter(edge => selected.has(edge.dataset.relation)).length} / ${edges.length}`;
+    });
+  }
+  relationInputs.forEach(input => input.addEventListener('change', filterRelations));
+  document.querySelectorAll('[data-relations-action]').forEach(button => button.addEventListener('click', () => {
+    relationInputs.forEach(input => { input.checked = button.dataset.relationsAction === 'all' || input.value === 'depends_on'; }); filterRelations();
+  }));
+  filterRelations();
   function selectPhase(phase) {
     const option = [...phaseSelect.options].find(item => item.value === phase);
-    if (option) { phaseSelect.value = phase; phaseObject.data = option.dataset.src; }
+    if (option) {
+      phaseSelect.value = phase;
+      const template = [...document.querySelectorAll('template[data-svg-src]')].find(t => t.dataset.svgSrc === option.dataset.src);
+      if (template) { phaseFrame.replaceChildren(template.content.cloneNode(true)); filterRelations(); const svg = phaseFrame.querySelector('svg'); if (svg) svg.style.transform = `scale(${scales.get('phase-diagram') || 1})`; }
+      else if (phaseObject) phaseObject.data = option.dataset.src;
+    }
     document.querySelectorAll('.phase-card').forEach(card => {
       const active = card.dataset.phase === phase;
       card.classList.toggle('active', active); card.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -966,7 +1019,7 @@ def render_index(
   const scales = new Map();
   document.querySelectorAll('[data-zoom-for]').forEach(toolbar => toolbar.addEventListener('click', event => {
     const control = event.target.closest('[data-zoom]'); if (!control) return;
-    const target = document.querySelector(`#${toolbar.dataset.zoomFor} object`); if (!target) return;
+    const target = document.querySelector(`#${toolbar.dataset.zoomFor} > svg, #${toolbar.dataset.zoomFor} object`); if (!target) return;
     const key = toolbar.dataset.zoomFor; let scale = scales.get(key) || 1;
     scale = control.dataset.zoom === 'in' ? Math.min(2, scale + .15) : control.dataset.zoom === 'out' ? Math.max(.55, scale - .15) : 1;
     scales.set(key, scale); target.style.transform = `scale(${scale})`;
@@ -993,6 +1046,13 @@ def render_index(
   document.querySelectorAll('object[type="image/svg+xml"]').forEach(object => object.addEventListener('load', () => {
     try { object.contentDocument.querySelectorAll('[data-node-id]').forEach(node => node.setAttribute('tabindex', '0')); } catch (_) { /* Local-file isolation still leaves SVG anchor navigation intact. */ }
   }));
+  document.querySelectorAll('.diagram-frame').forEach(frame => {
+    frame.querySelectorAll('[data-node-id]').forEach(node => node.setAttribute('tabindex', '0'));
+    frame.addEventListener('keydown', event => {
+      const node = event.target.closest('[data-node-id]');
+      if (node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); location.hash = `node=${String(node.dataset.nodeType).toLowerCase()}:${encodeURIComponent(node.dataset.nodeId)}`; }
+    });
+  });
   void graph;
 })();
 </script>
@@ -1022,6 +1082,9 @@ def render_index(
         ),
         "__CURRENT_TR__": _h(current.get("tr")),
         "__CURRENT_GATE__": escape(gate_or_dcp),
+        "__CURRENT_ITERATION_SUBJECT__": _h(
+            project.get("current_iteration_subject"), "—"
+        ),
         "__PROGRESS__": f"{progress_number:g}",
         "__ACCEPTED__": _count(summary.get("accepted_deliverables", 0)),
         "__TOTAL__": _count(summary.get("total_deliverables", len(deliverables))),
@@ -1159,6 +1222,7 @@ def render_index(
                     "unassigned": _t(translator, "common.unassigned", "Unassigned"),
                     "unknown_reviewer": _t(translator, "common.reviewer", "Unknown reviewer"),
                     "recorded": _t(translator, "common.recorded", "Recorded"),
+                    **{key: translator.text("navigation." + key) for key in ("owned_files", "shared_files", "binding_rules", "missing_file", "open_file", "copy_path", "copied", "copy_failed", "no_files", "visible_edges")},
                     "item": _t(translator, "common.item", "Item"),
                     "blocked": _t(translator, "common.blocked", "Blocked"),
                     "none": _t(translator, "common.none", "None"),
@@ -1169,7 +1233,36 @@ def render_index(
     }
     for marker, value in replacements.items():
         html = html.replace(marker, value)
-    return html
+    relations = ("depends_on", "supports", "verifies", "supersedes", "refines")
+    controls = '<fieldset class="relation-tools"><legend>' + escape(translator.text("navigation.relations")) + '</legend>'
+    controls += "".join('<label><input type="checkbox" data-relation-toggle value="' + relation + '"' + (' checked' if relation == "depends_on" else '') + '>' + escape(translator.text("navigation.depends_on") if relation == "depends_on" else translator.text("relation." + relation)) + '</label>' for relation in relations)
+    controls += '<button class="btn" type="button" data-relations-action="all">' + escape(translator.text("navigation.show_all")) + '</button><button class="btn" type="button" data-relations-action="default">' + escape(translator.text("navigation.restore_default")) + '</button></fieldset>'
+    html = html.replace("__RELATION_CONTROLS__", controls)
+    templates = []
+    if diagrams:
+        def inline_svg(source: str, prefix: str) -> str:
+            svg = re.sub(r'<\?xml[^>]*\?>', '', source)
+            ids = re.findall(r'(?<![-\w])id="([^"]+)"', svg)
+            for identifier in ids:
+                scoped = prefix + identifier
+                svg = re.sub(r'(?<![-\w])id="' + re.escape(identifier) + '"',
+                             lambda _: 'id="' + scoped + '"', svg)
+                svg = svg.replace('url(#' + identifier + ')', 'url(#' + scoped + ')')
+            svg = svg.replace('aria-labelledby="svg-title svg-desc"', 'aria-labelledby="' + prefix + 'svg-title ' + prefix + 'svg-desc"')
+            svg = svg.replace('../index.html#node=', '#node=')
+            svg = re.sub(r'(<g class="node [^"]+")', r'\1 tabindex="0"', svg)
+            if prefix != 'overview-': svg = svg.replace('<svg ', '<svg class="relation-filtered" ', 1)
+            return svg
+        def embed(match: Any) -> str:
+            source = match.group(1)
+            if source not in diagrams: return match.group(0)
+            prefix = 'overview-' if source == 'assets/ipd_flow.svg' else 'view-' + re.sub(r'[^a-zA-Z0-9]', '-', source) + '-'
+            return inline_svg(diagrams[source], prefix)
+        html = re.sub(r'<object type="image/svg\+xml" data="([^"]+)"[^>]*></object>', embed, html)
+        for phase, source in phase_files.items():
+            if source in diagrams:
+                templates.append('<template data-svg-src="' + escape(source, quote=True) + '">' + inline_svg(diagrams[source], 'phase-' + phase + '-') + '</template>')
+    return html.replace("__SVG_TEMPLATES__", "".join(templates))
 
 
 def _matrix_shell(

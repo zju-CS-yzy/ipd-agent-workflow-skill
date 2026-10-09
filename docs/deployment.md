@@ -21,6 +21,14 @@ Chinese distributions. Select presentation language per project with
 
 ## Clean package verification
 
+Choose the distribution for the surface you want to install:
+
+| Distribution | Installed surface |
+| --- | --- |
+| Skill ZIP or source checkout | Complete Skill instructions, bilingual guidance, and Python runtime; place the tree in the Skill directory |
+| Wheel | Python CLI, message catalog, policies, schemas, and runtime templates; install with pip |
+| Sdist | Sources for building and installing the Python CLI and its runtime resources with pip |
+
 Build outside the repository so packaging does not leave `build/`, `dist/`, or `*.egg-info/` residue in the release tree:
 
 ```bash
@@ -41,16 +49,22 @@ not release artifacts.
 
 Complete [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) before creating a tag. The source commit must be clean, CI must pass, package version and changelog must agree, and the release hygiene check must find no cache, build output, generated runtime data, credential-like files, or high-confidence secret patterns.
 
-The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.5.0-beta` (Python package version `0.5.0b1`).
+The canonical repository is [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill). Configure branch protection, security reporting, tag, and release settings on that repository before publishing `v0.5.1-beta` (Python package version `0.5.1b1`).
 
 The direct previous-version gate must build a governed project with the real
-`v0.4.1-beta` Tag and open it under v0.5 without reinitializing. It must prove
-that a profile without capabilities remains byte-compatible, context and
-Dashboard projections preserve existing state and history, and
-`tailor --preview --json` is zero-write. Explicitly enabling a v0.5 capability
-must show only the expected additive nodes and provenance; it must never happen
-as an implicit upgrade. A final `refresh`, `verify`, and `validate --json` must
-pass for the unchanged project.
+`v0.5.0-beta` Tag and open it under v0.5.1 without reinitializing. It must prove
+that a legacy mid-review state fails closed until an authorized human restores
+the exact review subject, every other subject remains blocked without writes,
+`render-dashboard` preserves state and Runtime bytes, active-review `refresh`
+is a zero-write failure, and one legal refresh advances exactly one revision.
+It must also upgrade Dashboard manifest `2.1` to `2.2`, generate the 16-file
+inventory, detect governance version/Gate/content drift, preserve Profile and
+Process bytes, and finish with passing `validate --json` plus `verify`.
+
+Retain the v0.4.1-to-v0.5 capability gate as a longer-horizon compatibility
+regression. It must continue to prove that capabilities are never enabled
+implicitly, preview is zero-write, and explicit capability selection adds only
+the expected nodes and provenance.
 
 Retain the v0.3.2-to-v0.4 process-schema upgrade gate as a longer-horizon
 compatibility regression. It must still preserve accepted state, evidence, and

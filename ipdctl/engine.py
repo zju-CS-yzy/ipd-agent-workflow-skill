@@ -41,7 +41,167 @@ def _find(items: list[dict[str, Any]], identifier: str, kind: str) -> dict[str, 
     raise TransitionError(f"unknown {kind}: {identifier!r}")
 
 
-def transition_workflow(state: dict[str, Any], target: str) -> dict[str, Any]:
+def _review_subject_kind(state: dict[str, Any], identifier: str) -> str:
+    """Return the canonical subject kind or fail closed for an unknown ID."""
+
+    if any(item.get("id") == identifier for item in state.get("deliverables", [])):
+        return "deliverable"
+    if any(item.get("id") == identifier for item in state.get("gates", [])):
+        return "gate"
+    raise TransitionError(
+        "REVIEW_SUBJECT_NOT_FOUND: "
+        f"unknown Deliverable or Gate review subject {identifier!r}"
+    )
+
+
+def assert_current_iteration_subject(
+    state: dict[str, Any], identifier: str, *, expected_kind: str | None = None
+) -> str:
+    """Assert that ``identifier`` is the globally locked review subject.
+
+    This check is intentionally read-only so callers can run it before any
+    review evidence or lifecycle state is changed.
+    """
+
+    project = state.get("project")
+    if not isinstance(project, dict) or project.get("workflow_step") != "review":
+        current = project.get("workflow_step") if isinstance(project, dict) else None
+        raise TransitionError(
+            "REVIEW_SUBJECT_INACTIVE: "
+            f"review operations require workflow_step 'review'; current step is {current!r}"
+        )
+    bound = project.get("current_iteration_subject")
+    if not isinstance(bound, str) or not bound:
+        raise TransitionError(
+            "REVIEW_SUBJECT_REQUIRED: workflow_step 'review' has no globally "
+            "locked current_iteration_subject; migrate or repair the state explicitly"
+        )
+    if bound != identifier:
+        raise TransitionError(
+            "REVIEW_SUBJECT_MISMATCH: "
+            f"current iteration reviews {bound!r}, not {identifier!r}"
+        )
+    _ensure_valid(state)
+    kind = _review_subject_kind(state, identifier)
+    if expected_kind is not None and kind != expected_kind:
+        raise TransitionError(
+            "REVIEW_SUBJECT_KIND_MISMATCH: "
+            f"subject {identifier!r} is a {kind}, not a {expected_kind}"
+        )
+    return kind
+
+
+def bind_current_iteration_subject(
+    state: dict[str, Any], identifier: str
+) -> dict[str, Any]:
+    """Atomically enter Review and bind its one canonical subject.
+
+    A legacy state already in Review without a subject is rejected rather than
+    guessed.  The caller must perform an explicit migration or repair.
+    """
+
+    project = state.get("project")
+    if not isinstance(project, dict):
+        raise TransitionError("state is invalid: $.project must be an object")
+    current = project.get("workflow_step")
+    bound = project.get("current_iteration_subject")
+    if current == "review":
+        assert_current_iteration_subject(state, identifier)
+        return state
+    _ensure_valid(state)
+    if current not in {"work", "close", "verify"}:
+        raise TransitionError(
+            "REVIEW_SUBJECT_INACTIVE: a review subject can only be bound from "
+            "workflow_step 'work' after Close, 'close', or 'verify'; "
+            f"current step is {current!r}"
+        )
+    if bound is not None:
+        raise TransitionError(
+            "REVIEW_SUBJECT_ACTIVE: current_iteration_subject must be null before "
+            "entering Review"
+        )
+    kind = _review_subject_kind(state, identifier)
+    if current in {"work", "close"}:
+        if kind != "deliverable":
+            raise TransitionError(
+                "REVIEW_SUBJECT_KIND_MISMATCH: Close can only bind a Deliverable"
+            )
+        deliverable = _find(state["deliverables"], identifier, "deliverable")
+        if deliverable.get("status") != "ready_for_review":
+            raise TransitionError(
+                "REVIEW_SUBJECT_NOT_READY: entering Review after Close requires "
+                "a ready_for_review Deliverable"
+            )
+    elif kind != "gate":
+        raise TransitionError(
+            "REVIEW_SUBJECT_KIND_MISMATCH: Verify can only bind a Gate"
+        )
+    else:
+        gate = _find(state["gates"], identifier, "gate")
+        if gate.get("status") != "ready":
+            raise TransitionError(
+                "REVIEW_SUBJECT_NOT_READY: entering Gate Review requires a ready Gate"
+            )
+    updated = revised_copy(state)
+    updated["project"]["workflow_step"] = "review"
+    updated["project"]["current_iteration_subject"] = identifier
+    return _finalize(updated)
+
+
+def recover_current_iteration_subject(
+    state: dict[str, Any], identifier: str
+) -> dict[str, Any]:
+    """Explicitly repair a legacy mid-Review state with a chosen subject.
+
+    The caller supplies the canonical ID; this helper never infers it from
+    statuses, review history, runtime events, or collection order.
+    """
+
+    project = state.get("project")
+    if not isinstance(project, dict):
+        raise TransitionError("state is invalid: $.project must be an object")
+    if project.get("workflow_step") != "review":
+        raise TransitionError(
+            "REVIEW_SUBJECT_RECOVERY_NOT_ALLOWED: recovery requires workflow_step "
+            f"'review'; current step is {project.get('workflow_step')!r}"
+        )
+    if project.get("current_iteration_subject") is not None:
+        raise TransitionError(
+            "REVIEW_SUBJECT_ACTIVE: recovery requires current_iteration_subject "
+            "to be absent or null"
+        )
+    issues = validate_state(state)
+    blocking = [
+        issue
+        for issue in issues
+        if not (
+            issue.path == "$.project.current_iteration_subject"
+            and "globally locked review subject" in issue.message
+        )
+    ]
+    if blocking:
+        raise TransitionError(f"state is invalid: {blocking[0]}")
+    _review_subject_kind(state, identifier)
+    updated = revised_copy(state)
+    updated["project"]["current_iteration_subject"] = identifier
+    return _finalize(updated)
+
+
+def clear_current_iteration_subject(
+    state: dict[str, Any], identifier: str
+) -> dict[str, Any]:
+    """Atomically leave Review for Refresh and clear the subject lock."""
+
+    assert_current_iteration_subject(state, identifier)
+    updated = revised_copy(state)
+    updated["project"]["workflow_step"] = "refresh"
+    updated["project"]["current_iteration_subject"] = None
+    return _finalize(updated)
+
+
+def transition_workflow(
+    state: dict[str, Any], target: str, *, subject: str | None = None
+) -> dict[str, Any]:
     """Move one step through the canonical seven-step Agent runtime loop."""
 
     _ensure_valid(state)
@@ -51,6 +211,25 @@ def transition_workflow(state: dict[str, Any], target: str) -> dict[str, Any]:
     if target != expected:
         raise TransitionError(
             f"workflow step {current!r} can only transition to {expected!r}"
+        )
+    if target == "review":
+        if subject is None:
+            raise TransitionError(
+                "REVIEW_SUBJECT_REQUIRED: entering workflow_step 'review' requires "
+                "a canonical Deliverable or Gate subject"
+            )
+        return bind_current_iteration_subject(state, subject)
+    if current == "review":
+        bound = state["project"].get("current_iteration_subject")
+        if not isinstance(bound, str) or not bound:
+            raise TransitionError(
+                "REVIEW_SUBJECT_REQUIRED: cannot leave Review without an explicit "
+                "current_iteration_subject"
+            )
+        return clear_current_iteration_subject(state, bound)
+    if subject is not None:
+        raise TransitionError(
+            "a workflow subject is only valid when entering workflow_step 'review'"
         )
     updated = revised_copy(state)
     updated["project"]["workflow_step"] = target
@@ -103,6 +282,7 @@ def record_deliverable_review(
 ) -> dict[str, Any]:
     """Append an auditable review record to a deliverable."""
 
+    assert_current_iteration_subject(state, identifier, expected_kind="deliverable")
     _ensure_valid(state)
     if reviewer_type not in REVIEWER_TYPES:
         raise TransitionError(f"invalid reviewer type: {reviewer_type!r}")
@@ -181,6 +361,7 @@ def close_deliverable(
 def start_deliverable_review(
     state: dict[str, Any], identifier: str
 ) -> dict[str, Any]:
+    assert_current_iteration_subject(state, identifier, expected_kind="deliverable")
     return set_deliverable_status(state, identifier, "in_review")
 
 
@@ -195,6 +376,7 @@ def approve_deliverable(
 ) -> dict[str, Any]:
     """Accept reviewed work only with an explicitly authorized human record."""
 
+    assert_current_iteration_subject(state, identifier, expected_kind="deliverable")
     if reviewer_type != "human" or not authorized:
         raise TransitionError(
             "final deliverable approval requires an authorized human reviewer"
@@ -222,6 +404,7 @@ def reject_deliverable(
 ) -> dict[str, Any]:
     """Reject reviewed work while preserving a human review record."""
 
+    assert_current_iteration_subject(state, identifier, expected_kind="deliverable")
     if reviewer_type != "human" or not authorized:
         raise TransitionError(
             "final deliverable rejection requires an authorized human reviewer"
@@ -251,6 +434,7 @@ def record_gate_review(
 ) -> dict[str, Any]:
     """Record review evidence; this does not itself approve the gate."""
 
+    assert_current_iteration_subject(state, gate_id, expected_kind="gate")
     _ensure_valid(state)
     if reviewer_type not in REVIEWER_TYPES:
         raise TransitionError(f"invalid reviewer type: {reviewer_type!r}")
@@ -360,6 +544,7 @@ def set_gate_ready(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
 def approve_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
     """Finalize a ready gate only when authorized human approval is recorded."""
 
+    assert_current_iteration_subject(state, gate_id, expected_kind="gate")
     _ensure_valid(state)
     updated = revised_copy(state)
     gate = _find(updated["gates"], gate_id, "gate")
@@ -392,6 +577,7 @@ def approve_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
 def reject_gate(state: dict[str, Any], gate_id: str) -> dict[str, Any]:
     """Reject a ready gate only when its latest human decision is a rejection."""
 
+    assert_current_iteration_subject(state, gate_id, expected_kind="gate")
     _ensure_valid(state)
     updated = revised_copy(state)
     gate = _find(updated["gates"], gate_id, "gate")

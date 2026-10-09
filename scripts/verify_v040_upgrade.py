@@ -518,9 +518,9 @@ def qualify() -> dict[str, Any]:
             for path in (project / ".ipd" / "dashboard").rglob("*")
             if path.is_file()
         )
-        if dashboard_files != 15:
+        if dashboard_files != 16:
             raise RuntimeError(
-                f"upgraded dashboard must contain 15 files, found {dashboard_files}"
+                f"upgraded dashboard must contain 16 files, found {dashboard_files}"
             )
 
         checks = {
@@ -553,7 +553,7 @@ def qualify() -> dict[str, Any]:
             "dependency_reapproval_required": True,
             "preview_zero_write": True,
             "migration_replay_idempotent": True,
-            "dashboard_files": 15,
+            "dashboard_files": 16,
             "final_verification": "passed",
             "final_validation": "passed",
         }

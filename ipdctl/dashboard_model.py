@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -570,7 +571,23 @@ def build_dashboard_model(
         "gate": project_state.get("current_gate"),
     }
     current_phase = _string(current["phase"])
-    active_claims = runtime.get("active_claims") if isinstance(runtime.get("active_claims"), Mapping) else {}
+    recorded_claims = runtime.get("active_claims") if isinstance(runtime.get("active_claims"), Mapping) else {}
+    # Lease liveness is a presentation projection. Do not synthesize expiry
+    # events or change the authoritative runtime when rendering a current view.
+    instant = datetime.now(timezone.utc)
+    active_claims = {}
+    for identifier, claim in recorded_claims.items():
+        expiry = claim.get("expires_at") if isinstance(claim, Mapping) else None
+        if isinstance(expiry, str):
+            try:
+                expires_at = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                if expires_at.tzinfo is not None and expires_at <= instant:
+                    continue
+            except ValueError:
+                # Direct renderer fixtures may omit lease contracts. Actual
+                # project commands validate Runtime before reaching this view.
+                pass
+        active_claims[identifier] = claim
 
     state_deliverables = _state_index(state, "deliverables", "deliverable_id")
     process_deliverables = _process_deliverables(process)
@@ -1181,6 +1198,9 @@ def build_dashboard_model(
             "state_revision": state.get("revision"),
             "process_schema_version": process.get("schema_version"),
             "workflow_step": _string(project_state.get("workflow_step"), "context"),
+            "current_iteration_subject": _safe_reference(
+                project_state.get("current_iteration_subject")
+            ),
             "current": current,
             "repository": {
                 "kind": _string(repository.get("kind"), "none"),

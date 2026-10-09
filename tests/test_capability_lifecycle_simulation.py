@@ -46,7 +46,7 @@ class CapabilityLifecycleSimulationTests(unittest.TestCase):
                 "governance_blockers": True,
             },
         )
-        self.assertEqual(checks["dashboard_files"], 15)
+        self.assertEqual(checks["dashboard_files"], 16)
         self.assertEqual(checks["final_verify"], "passed")
         self.assertEqual(checks["active_claims"], 0)
         self.assertEqual(checks["phase_advances"], 5)

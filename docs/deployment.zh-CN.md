@@ -19,6 +19,14 @@ python -B scripts/release_check.py .
 
 ## 干净包验证
 
+按需要安装的能力选择发布包：
+
+| 发布包 | 安装内容 |
+| --- | --- |
+| Skill ZIP 或源码检出 | 完整 Skill 指令、双语说明与 Python 执行层；将目录放入 Skill 目录 |
+| Wheel | Python CLI、消息目录、Policy、Schema 和运行时模板；通过 pip 安装 |
+| Sdist | 通过 pip 构建、安装 Python CLI 及其运行时资源的源码 |
+
 在仓库外构建，避免在发布树留下 `build/`、`dist/` 或 `*.egg-info/`：
 
 ```bash
@@ -35,14 +43,18 @@ ipdctl --help
 
 创建 Tag 前完成 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)。源 Commit 必须干净，CI 必须通过，包版本与 Changelog 必须一致，发布卫生检查必须确认不存在缓存、构建输出、运行时生成数据、凭据类文件或高置信度 Secret。
 
-规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.5.0-beta`（Python 包版本 `0.5.0b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
+规范仓库是 [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)。发布 `v0.5.1-beta`（Python 包版本 `0.5.1b1`）之前，应配置分支保护、安全报告、Tag 和 Release 设置。
 
-直接前序版本验证必须使用真实 `v0.4.1-beta` Tag 创建受控项目，在不重新初始化
-的前提下由 v0.5 读取。未启用 Capability 的 Profile 必须保持字节兼容，Context
-和 Dashboard 必须保留既有状态与历史，`tailor --preview --json` 必须零写入。
-显式启用 v0.5 Capability 时，Preview 只能出现预期的新增节点与 Provenance，升级
-过程不得自动启用任何 Capability。未变更项目最终的 `refresh`、`verify` 和
-`validate --json` 必须通过。
+直接前序版本验证必须使用真实 `v0.5.0-beta` Tag 创建受控项目，在不重新初始化的
+前提下由 v0.5.1 读取。旧版中途 Review 状态必须在授权人类恢复精确评审对象前
+Fail-closed，其他对象必须零写入失败；`render-dashboard` 必须保持 State 与 Runtime
+字节不变，Review 阶段的 `refresh` 必须零写入失败，一次合法 Refresh 只能推进一个
+Revision。该门还必须把 Dashboard Manifest `2.1` 升级到 `2.2`、生成 16 个文件、
+发现治理版本/Gate/正文漂移、保持 Profile 与 Process 字节不变，并最终通过
+`validate --json` 与 `verify`。
+
+同时保留 v0.4.1 到 v0.5 的 Capability 升级门作为长期兼容回归：继续证明升级不会
+隐式启用 Capability、Preview 零写入，而且显式选择只能新增预期节点与 Provenance。
 
 同时保留 v0.3.2 到 v0.4 的流程 Schema 升级门作为长期兼容回归：继续保留
 accepted 状态、Evidence 与 Review History；Capability 只能新增 planned 工作；

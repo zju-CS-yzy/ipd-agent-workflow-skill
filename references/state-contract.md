@@ -6,7 +6,7 @@ Read this reference when creating, changing, validating, or recovering `.ipd/pro
 
 - `schema_version`: canonical contract version `2.0`; the validator can still read v0.1 `1.0` JSON state for compatibility.
 - `revision`: non-negative integer incremented once per runtime transition.
-- `project`: name, task types, product phase, current workflow step, current TR/DCP/Gate, and optional repository metadata.
+- `project`: name, task types, product phase, current workflow step, current TR/DCP/Gate, the nullable `current_iteration_subject` review lock, and optional repository metadata. The lock is a canonical Deliverable or Gate ID and must be non-null exactly while `workflow_step` is `review`.
 - `claims`: assertions with `open`, `supported`, or `rejected` status and evidence references.
 - `deliverables`: work products, eight-state lifecycle, dependencies, evidence, review records, and optional compiled `provenance`, `maturity`, replacement, `definition_state`, trigger, and `refines` metadata.
 - `gates`: TR/DCP readiness, required deliverables, review records, concrete-requirement fingerprint, review epoch, and stale state.
@@ -35,6 +35,10 @@ An applied progressive refinement appends one strict
 result process fingerprints, authorized human Actor and reason, root, child
 IDs, state revision, and invalidated Gates. An exact replay is a no-op; an ID
 reuse with a changed digest or base is a conflict.
+An explicitly authorized repair of a v0.5.0 state already paused in Review
+appends one strict `review_subject_recovered` event with the selected canonical
+subject, subject type, human Actor, authorization, reason, timestamp, and state
+revision. The event repairs no other invalid state and carries no decision.
 
 The tailored process is a separate contract. New compilation emits process
 schema `2.0`, where Phase, Activity, Deliverable, TR, DCP, and Gate nodes carry
@@ -49,7 +53,7 @@ a profile without capabilities and an empty project extension.
 
 The runtime writes each file through a same-directory temporary file and atomically replaces the destination. A crash-released operating-system mutex keyed by the resolved project path serializes recovery and all project command access; its hashed lock file stays outside the project in the system temporary directory. Mutating CLI commands also hold a project-local recovery journal across their complete read/preflight/compute/write cycle. The canonical journal name is acquired before its snapshot; the transaction restores its state, runtime, report, and Dashboard scope after an exception or terminated process, then retires the active journal name before cleaning a committed backup. Concurrent commands fail explicitly instead of applying stale computed state. Recovery fails closed if the journal owner's liveness cannot be established. A failed validation or transition therefore does not publish a partial project bundle. Do not hand-edit `revision` to conceal a change.
 
-`.ipd/project_state.yaml` is source state and can be reviewed in version control. `.ipd/dashboard/`, reconciliation reports, and verification reports are generated views. The v0.1 `.ipd/project-state.json` path is discovered for read/validation compatibility but is never dual-written.
+`.ipd/project_state.yaml` is source state and can be reviewed in version control. `.ipd/dashboard/`, reconciliation reports, and verification reports are generated views. `.ipd/dashboard/governance.md` is a deterministic facts-derived registry and Gate plan; validation compares its exact expected content to the canonical versions, project pointers, Deliverables, and Gates. It is not an editable fact or acceptance record. The v0.1 `.ipd/project-state.json` path is discovered for read/validation compatibility but is never dual-written.
 
 ## CLI behavior
 
@@ -63,8 +67,10 @@ ipdctl adopt-baseline [TARGET] [--preview] [--json] [--actor HUMAN --actor-type 
 ipdctl claim DELIVERABLE [--project-root TARGET] [--actor NAME] [--lease-minutes N] [--recover]
 ipdctl close DELIVERABLE --evidence PATH [--evidence PATH ...] [--project-root TARGET] [--actor NAME] [--status ready_for_review|blocked] [--note TEXT]
 ipdctl review SUBJECT --reviewer NAME [--project-root TARGET] [--actor-type agent|human] [--authorized] [--decision approve|reject] [--evidence PATH]
+ipdctl review SUBJECT --reviewer HUMAN --project-root TARGET --actor-type human --authorized --recover-subject --reason TEXT
 ipdctl approve SUBJECT --reviewer NAME --actor-type human --authorized --evidence PATH [--project-root TARGET]
 ipdctl reject SUBJECT --reviewer NAME --actor-type human --authorized --evidence PATH [--project-root TARGET]
+ipdctl render-dashboard [TARGET]
 ipdctl refresh [TARGET]
 ipdctl verify [TARGET] [--json]
 ipdctl advance-phase [TARGET]
@@ -87,6 +93,14 @@ both valid and invalid input; it includes status, scope, target, state metadata,
 checks, and issues. Human-readable output remains locale-aware. The Windows CLI
 configures its real console streams for UTF-8 so Chinese text remains intact
 when redirected or captured.
+
+`render-dashboard` replaces only the derived Dashboard tree and leaves
+`project_state.yaml` plus `agent_runtime.yaml` byte-for-byte unchanged. It is
+the current-view command during `work`, `close`, or `review`. Formal `refresh`
+is accepted only from `context`, `refresh`, or `verify`; it synchronizes
+repository facts, increments state revision once, renders the Dashboard, and
+moves the workflow to `verify`. An invalid-stage `refresh` is a zero-write
+failure.
 
 `refine` defaults to preview unless `--apply` is explicit. Preview is
 zero-write and returns the plan/base/result fingerprints, semantic diff, Gate
@@ -112,7 +126,13 @@ the next claim.
 `SUBJECT` may be a Deliverable ID, canonical `gate.*` ID, or a process-level
 `tr.*` / `dcp.*` alias. State stores only canonical Gate facts. Every review is
 retained, while the latest authorized human decision determines whether a
-Deliverable or Gate is currently rejected or approved. `advance-phase` never
+Deliverable or Gate is currently rejected or approved. Entering Review binds
+the resolved canonical ID in `project.current_iteration_subject`; all review
+and final-decision commands must target that exact ID until approval or
+rejection clears it. A legacy Review without the field fails closed instead of
+guessing from status or history. Only an authorized human may select the exact
+eligible subject through `--recover-subject --reason`; normal review then
+continues separately. `advance-phase` never
 skips a Phase. Within each Phase the canonical decision order is TR, then DCP;
 generic Gates follow both in deterministic ID order. A stale hand-edited
 `current_gate` pointer is rejected rather than trusted. The current Phase must

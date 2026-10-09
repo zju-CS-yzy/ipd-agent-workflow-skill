@@ -36,7 +36,7 @@ NEW_CAPABILITY_DELIVERABLES = {
     "interface.integration_evidence",
     "interface.conformance_report",
 }
-EXPECTED_DASHBOARD_FILES = {
+LEGACY_DASHBOARD_FILES = {
     "index.html",
     "assets/ipd_flow.svg",
     "assets/current_status_flow.svg",
@@ -53,6 +53,7 @@ EXPECTED_DASHBOARD_FILES = {
     "data/graph.json",
     "manifest.json",
 }
+EXPECTED_DASHBOARD_FILES = LEGACY_DASHBOARD_FILES | {"governance.md"}
 
 
 def _run(
@@ -164,14 +165,17 @@ def _dashboard_inventory(project: Path) -> set[str]:
     }
 
 
-def _assert_dashboard_readable(project: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+def _assert_dashboard_readable(
+    project: Path, *, legacy: bool = False
+) -> tuple[dict[str, Any], dict[str, Any]]:
     dashboard = project / ".ipd" / "dashboard"
     inventory = _dashboard_inventory(project)
-    if inventory != EXPECTED_DASHBOARD_FILES:
+    expected = LEGACY_DASHBOARD_FILES if legacy else EXPECTED_DASHBOARD_FILES
+    if inventory != expected:
         raise RuntimeError(
             "Dashboard inventory mismatch: "
-            f"missing={sorted(EXPECTED_DASHBOARD_FILES - inventory)}, "
-            f"extra={sorted(inventory - EXPECTED_DASHBOARD_FILES)}"
+            f"missing={sorted(expected - inventory)}, "
+            f"extra={sorted(inventory - expected)}"
         )
     if len((dashboard / "index.html").read_text(encoding="utf-8")) < 100:
         raise RuntimeError("Dashboard index.html is empty or truncated")
@@ -458,7 +462,7 @@ def qualify() -> dict[str, Any]:
         legacy_runtime = _load(runtime_path)
         legacy_root = _record(legacy_state["deliverables"], REFINEMENT_ROOT)
         legacy_child = _record(legacy_state["deliverables"], REFINEMENT_CHILD)
-        legacy_dashboard_state, legacy_dashboard_graph = _assert_dashboard_readable(project)
+        legacy_dashboard_state, legacy_dashboard_graph = _assert_dashboard_readable(project, legacy=True)
         legacy_profile_hash = _sha256(profile_path)
         legacy_process_hash = _sha256(process_path)
         legacy_refinements = deepcopy(legacy_process.get("refinements", []))
@@ -474,6 +478,15 @@ def qualify() -> dict[str, Any]:
         # Switch only the implementation.  No current-source init or migration
         # command is allowed before proving the legacy project is readable.
         context = _json_output(_cli(ROOT, project, "context", str(project), "--json"))
+        # v0.5.1 adds a derived governance document. Render it before project
+        # validation while preserving the legacy authoritative facts exactly.
+        facts_before_render = {
+            path: path.read_bytes()
+            for path in (profile_path, process_path, state_path, runtime_path)
+        }
+        _cli(ROOT, project, "render-dashboard", str(project))
+        if any(path.read_bytes() != contents for path, contents in facts_before_render.items()):
+            raise RuntimeError("governance rendering changed legacy project facts")
         validation = _json_output(_cli(ROOT, project, "validate", str(project), "--json"))
         if validation.get("status") != "passed":
             raise RuntimeError(f"v0.4.1 project was not valid under v0.5: {validation}")
@@ -599,7 +612,7 @@ def qualify() -> dict[str, Any]:
             "reviews_preserved": True,
             "refinement_records_preserved": 1,
             "runtime_events_preserved": len(legacy_runtime_events),
-            "dashboard_files": 15,
+            "dashboard_files": 16,
             "capability_preview": "interface_contract_and_integration",
             "capability_deliverables_previewed": 3,
             "capability_preview_zero_write": True,

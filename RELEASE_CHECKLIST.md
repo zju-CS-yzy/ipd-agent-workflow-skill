@@ -1,8 +1,138 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.0b1` and public label `v0.5.0-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.1b1` and public label `v0.5.1-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
 
-## Repository baseline
+## v0.5.1-beta release readiness
+
+- [x] Confirm review, approval, and rejection are locked to one canonical `current_iteration_subject`, including Deliverable and Gate paths.
+- [x] Confirm an actual `v0.5.0-beta` project paused mid-review fails closed without a subject and can recover only through an explicit authorized-human action with a recorded reason.
+- [x] Confirm `render-dashboard` is byte-for-byte fact preserving, formal `refresh` rejects the review stage without writes, and one legal refresh increments state exactly once.
+- [x] Confirm `governance.md` is derived from canonical facts and that version, Gate-ID, Gate-status, and content drift are reported by stable diagnostics.
+- [x] Run the complete unit suite, compile check, Skill validator, lifecycle simulations, and `scripts/verify_v050_upgrade.py` from the final source.
+- [x] Qualify the frozen external real-project Golden in independent copies, preserve known failures and historical facts, verify the original directory remains untouched, and keep private assets outside Git.
+- [x] Pass the self-contained 300-node renderer regression and actual-browser bilingual file/HTTP checks, including all 32 relationship-filter combinations, file navigation, phase changes and keyboard interaction.
+- [x] Build the wheel and sdist in isolation; install the Skill ZIP, wheel, and sdist in both locales; require the exact 16-file Dashboard inventory and passed verification.
+- [x] Run `python -B scripts/release_check.py .`, `git diff --check`, and the final credential/project-output/source audit.
+- [ ] Publish only after the protected pull request, default-branch, Tag-test, and Tag-release workflows pass; then verify public assets and record immutable SHAs, hashes, workflow runs, and download-smoke results below.
+
+## Final v0.5.1-beta local qualification — 2026-10-09
+
+The two Dashboard additions and replacement Golden gates are qualified from
+one unchanged final program/test/script/schema input set on Windows x64:
+
+- All 34 modules pass Python 3.10.22 / 3.14.8 × `en` / `zh-CN`, with 296 tests
+  per combination, 1,184 executions in total, zero skips and zero failures.
+  Capability lifecycle, full project lifecycle and two-round progressive
+  refinement simulations complete their positive/negative governance paths.
+  The standard full lifecycle follows the matrix locale. Capability/refinement
+  retain fixture locale defaults; separate installed, model and browser checks
+  provide explicit bilingual coverage.
+- Five actual published-Tag upgrades pass on both Python endpoints: 10/10.
+  Earlier intermediate orchestration timeouts were retried; the final complete
+  upgrade run passes without timeouts.
+- A frozen external real v0.5.0 project passes the replacement upgrade gate on
+  both endpoint Pythons, including bilingual rendering, simulated authorized
+  legacy-review recovery, cross-subject rejection, deterministic pure rendering,
+  strict review-step refresh refusal and preservation of known diagnostics.
+  Expected failed project verification remains failed; no baseline adoption or
+  human approval was fabricated to make it green.
+- Chrome/Edge × bilingual × local-file/HTTP × synthetic/real-copy fixtures pass
+  16/16 browser cases. Each checks all 32 filter combinations, stable layout,
+  phase selection, mandatory actual SVG click/keyboard routing, file links,
+  clipboard/fallback behavior, zoom and unique DOM identifiers.
+- Self-contained 300-node graph and all-six-task-type bilingual output checks
+  pass. Original v1.4 resource identity or pixel equivalence is not claimed.
+- Isolated builds and independent Skill ZIP/wheel/sdist installations pass
+  12/12 endpoint/artifact/locale combinations, including canonical inline node
+  identities and the exact 16-file/manifest-2.2 output contract.
+- Compilation, Skill validation, nine Schema definitions, twelve generated fact
+  validations, release hygiene and repository-configured whitespace checks pass.
+
+The original project received subsequent changes while tests ran. This task
+used only enumeration, reads and hashes in that directory; no IPD/Git command,
+write, rollback or upgrade ran there. The captured fixture stays unchanged.
+Qualification covers that frozen baseline, not the later live project state.
+
+Private fixtures, their durable local archive, filenames, paths, detailed logs
+and screenshots remain outside Git and distributions. Local candidates are not
+public assets. The working tree is uncommitted; protected PR/default-branch/Tag
+workflows and public-download checks belong to the publication phase.
+
+Publication preparation also makes the browser job a required dependency of
+`governance-gate`. The release workflow waits for a successful test run of the
+same release Tag before uploading public assets; workflow structure and narrow
+read permissions were checked after this CI-only change.
+
+## Earlier v0.5.1-beta qualification — before Dashboard navigation additions
+
+The recovered working tree is a tested release candidate, not a published
+release. On Windows x64, all 33 test modules passed in every combination of
+Python 3.10.22 / 3.14.8 and `en` / `zh-CN`: 290 tests per combination, 1,160
+test executions in total, zero skips. This includes the full project lifecycle,
+capability lifecycle, and two-round progressive-refinement scenarios. The
+complete runtime, test, script, policy, and schema input hashes remained
+unchanged during the final matrix. The standard full-lifecycle scenario follows
+the locale setting; the capability and refinement scenarios currently retain
+their own fixture locale defaults. Installed all-capability bilingual smokes and the
+explicit locale regression tests supply separate language coverage.
+
+All five real published-Tag upgrade probes passed on both endpoint Python
+versions (10/10). Isolated PEP 517 wheel/sdist builds and independent Skill ZIP,
+wheel, and sdist installations passed both locales on both Python versions
+(12/12 artifact/version/locale combinations). Each installation ran outside the
+checkout, loaded all four Capability Policies, used explicit Owner bindings and
+an authorized test-fixture baseline, exercised review plus expired-Claim
+rendering/recovery, and finished with passed validation/verification and the
+exact 16-file Dashboard. The complete runtime modules, nine Schemas, four
+Capability Policies, message catalog, and applicable upgrade scripts were
+checked in the distributions. Skill instructions and bilingual guidance are
+supplied by the Skill ZIP; wheel/sdist install the Python execution surface.
+
+The actual compile check, Skill validator, release hygiene audit, and whitespace
+check passed. All nine JSON Schema definitions and twelve generated fact
+instances also passed Draft 2020-12 validation. Candidate packages and per-case
+logs are local qualification evidence, not public asset identifiers.
+
+The original external v1.4 Golden fixture was not recovered and is absent from
+the repository's Git object history. Its historical report remains explicitly
+labelled as historical. Current Golden-harness unit tests passed, but they do
+not constitute a fresh comparison against the missing original 286-node
+fixture. The user has approved replacement of that external dependency with a frozen
+local real-project Golden plus independent large-graph and browser regression
+gates; the new final qualification is recorded separately below. The working tree also remains uncommitted, so protected
+pull-request/default-branch and Tag workflows must still qualify the eventual
+release commit before publication.
+
+## Proposed follow-up priorities
+
+- **Before v0.5.1 publication:** pass the replacement Golden and interaction
+  gates, include all required untracked source
+  files in the release commit, and pass the protected CI and Tag workflows.
+- **v0.5.2:** unify the new local/CI qualification entry points and strengthen
+  deterministic expected-fact fixtures, Windows CI,
+  a real SVN fixture, configurable simulation locales, rendering-specific
+  failure injection, and a read-only Owner-coverage preflight, and file-navigation scans restricted
+  to explicit binding scopes for large repositories. Preserve the
+  single-Claim and authorized-human boundaries.
+- **v0.6.0:** add explicit, previewable Artifact/Evidence path migrations and
+  scoped baseline adoption. Require exact before/after hashes, an identified
+  authorized human and reason, preserved history/Owners/Claim trace links,
+  bounded scope, stale-verification handling, and auditable idempotent replay.
+- **v0.7.0:** add independent content-readiness review, immutable external
+  evidence snapshots/digests, and versioned reusable domain capabilities.
+  Structural validity, content readiness, and final human approval remain
+  distinct; remote content changes must invalidate the relevant verification.
+
+## v0.5.1-beta publication record
+
+- [ ] Record the immutable release commit and annotated Tag object after publication.
+- [ ] Record the successful branch, pull-request, default-branch, Tag-test, and Tag-release workflow runs.
+- [ ] Confirm the public prerelease exposes exactly one bilingual Skill ZIP, one wheel, one sdist, and `SHA256SUMS.txt`, with matching payload hashes.
+- [ ] Record all six public artifact/locale smoke results and removal of the temporary download root.
+
+No publication identifiers or artifact hashes are recorded until those events have occurred.
+
+## v0.5.0-beta repository baseline (historical)
 
 - [x] Public capability claims map to implemented modules and behavior tests.
 - [x] `SKILL.md` has valid frontmatter, a discriminating description, reference routing, and an explicit human-approval boundary.

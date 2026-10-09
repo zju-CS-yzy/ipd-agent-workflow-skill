@@ -134,6 +134,8 @@
           "action": { "type": "string", "minLength": 1 },
           "at": { "type": "string", "format": "date-time" },
           "deliverable": { "type": "string", "minLength": 1 },
+          "subject": { "type": "string", "minLength": 1 },
+          "subject_type": { "enum": ["deliverable", "gate"] },
           "actor": { "type": "string", "minLength": 1 },
           "from_phase": { "type": "string", "minLength": 1 },
           "to_phase": { "type": "string", "minLength": 1 },
@@ -278,6 +280,29 @@
                 "root",
                 "children",
                 "invalidated_gates"
+              ],
+              "properties": {
+                "actor_type": { "const": "human" },
+                "authorized": { "const": true }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": { "const": "review_subject_recovered" }
+              },
+              "required": ["action"]
+            },
+            "then": {
+              "required": [
+                "subject",
+                "subject_type",
+                "actor",
+                "actor_type",
+                "authorized",
+                "reason",
+                "state_revision"
               ],
               "properties": {
                 "actor_type": { "const": "human" },

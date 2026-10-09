@@ -44,10 +44,13 @@ class CliChineseErrorLocalizationTests(unittest.TestCase):
             self.assertNotIn(fragment, error)
         return error
 
-    def set_workflow_step(self, root: Path, step: str) -> None:
+    def set_workflow_step(
+        self, root: Path, step: str, *, subject: str | None = None
+    ) -> None:
         state_path = root / ".ipd" / "project_state.yaml"
         state = load_state(state_path)
         state["project"]["workflow_step"] = step
+        state["project"]["current_iteration_subject"] = subject
         write_state(state_path, state)
 
     def test_exception_adapter_preserves_english_and_unknown_diagnostics(self) -> None:
@@ -220,7 +223,9 @@ class CliChineseErrorLocalizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "project"
             self.initialize(root)
-            self.set_workflow_step(root, "review")
+            self.set_workflow_step(
+                root, "review", subject="gate.tr.concept"
+            )
             evidence = root / "docs" / "gate-review.md"
             evidence.write_text("review\n", encoding="utf-8")
 
@@ -261,6 +266,61 @@ class CliChineseErrorLocalizationTests(unittest.TestCase):
                     "concept.problem_definition",
                 ),
                 excludes=("gate prerequisites are not accepted",),
+            )
+
+    def test_review_subject_lock_failures_are_localized(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            self.initialize(root)
+            evidence = root / "docs" / "review-lock.md"
+            evidence.write_text("review\n", encoding="utf-8")
+            self.set_workflow_step(
+                root,
+                "review",
+                subject="concept.problem_definition",
+            )
+
+            self.assert_chinese_error(
+                self.invoke(
+                    [
+                        "approve",
+                        "plan.integrated_plan",
+                        "--project-root",
+                        str(root),
+                        "--reviewer",
+                        "governance-board",
+                        "--actor-type",
+                        "human",
+                        "--authorized",
+                        "--evidence",
+                        "docs/review-lock.md",
+                    ]
+                ),
+                contains=(
+                    "REVIEW_SUBJECT_MISMATCH",
+                    "本轮评审对象为 'concept.problem_definition'",
+                    "不能改为 'plan.integrated_plan'",
+                ),
+                excludes=("current iteration reviews",),
+            )
+
+            self.set_workflow_step(root, "review", subject=None)
+            self.assert_chinese_error(
+                self.invoke(
+                    [
+                        "review",
+                        "concept.problem_definition",
+                        "--project-root",
+                        str(root),
+                        "--reviewer",
+                        "review-agent",
+                    ]
+                ),
+                contains=(
+                    "REVIEW_SUBJECT_REQUIRED",
+                    "缺少全局锁定的 current_iteration_subject",
+                ),
+                excludes=("has no globally locked",),
             )
 
     def test_phase_and_stale_verification_failures_are_chinese(self) -> None:

@@ -44,11 +44,36 @@
         "workflow_step": {
           "enum": ["context", "claim", "work", "close", "review", "refresh", "verify"]
         },
+        "current_iteration_subject": {
+          "anyOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
         "current_tr": { "type": ["string", "null"], "minLength": 1 },
         "current_dcp": { "type": ["string", "null"], "minLength": 1 },
         "current_gate": { "type": ["string", "null"], "minLength": 1 },
         "repository": { "$ref": "#/$defs/repository" }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["workflow_step"],
+            "properties": { "workflow_step": { "const": "review" } }
+          },
+          "then": {
+            "required": ["current_iteration_subject"],
+            "properties": {
+              "current_iteration_subject": { "$ref": "#/$defs/identifier" }
+            }
+          },
+          "else": {
+            "properties": {
+              "current_iteration_subject": { "type": "null" }
+            }
+          }
+        }
+      ]
     },
     "claims": {
       "type": "array",

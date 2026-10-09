@@ -48,6 +48,7 @@ LEAF_FUSION_ACTIVITY = "concept.define_perception_fusion"
 EXPECTED_DASHBOARD_FILES = frozenset(
     {
         "index.html",
+        "governance.md",
         "assets/ipd_flow.svg",
         "assets/current_status_flow.svg",
         "assets/deliverable_dependency.svg",

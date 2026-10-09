@@ -89,6 +89,27 @@ _EXCEPTION_MESSAGE_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(
+            r"REVIEW_SUBJECT_REQUIRED: workflow_step 'review' has no globally "
+            r"locked current_iteration_subject; migrate or repair the state explicitly"
+        ),
+        "error.review_subject_required",
+    ),
+    (
+        re.compile(
+            r"REVIEW_SUBJECT_MISMATCH: current iteration reviews "
+            r"(?P<bound>.+?), not (?P<requested>.+)"
+        ),
+        "error.review_subject_mismatch",
+    ),
+    (
+        re.compile(
+            r"REVIEW_SUBJECT_INACTIVE: review operations require workflow_step "
+            r"'review'; current step is (?P<current>.+)"
+        ),
+        "error.review_subject_inactive",
+    ),
+    (
+        re.compile(
             r"deliverable status (?P<current>.+?) cannot transition to "
             r"(?P<target>.+?); allowed: (?P<allowed>.+)"
         ),

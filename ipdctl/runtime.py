@@ -150,6 +150,46 @@ def advance_phase_event_issues(event: Any) -> list[str]:
     return issues
 
 
+def review_subject_recovery_event_issues(event: Any) -> list[str]:
+    """Validate an authorized repair of a legacy mid-review subject lock."""
+
+    if not isinstance(event, dict) or event.get("action") != "review_subject_recovered":
+        return ["must be a review_subject_recovered event object"]
+    issues: list[str] = []
+    expected = {
+        "action",
+        "at",
+        "subject",
+        "subject_type",
+        "actor",
+        "actor_type",
+        "authorized",
+        "reason",
+        "state_revision",
+    }
+    if set(event) != expected:
+        issues.append("review subject recovery event has invalid fields")
+    for field in ("subject", "actor", "reason", "at"):
+        if not isinstance(event.get(field), str) or not event[field].strip():
+            issues.append(f"field {field!r} must be a non-empty string")
+    if event.get("subject_type") not in {"deliverable", "gate"}:
+        issues.append("field 'subject_type' must be 'deliverable' or 'gate'")
+    if event.get("actor_type") != "human":
+        issues.append("field 'actor_type' must be 'human'")
+    if event.get("authorized") is not True:
+        issues.append("field 'authorized' must be true")
+    revision = event.get("state_revision")
+    if type(revision) is not int or revision < 0:
+        issues.append("field 'state_revision' must be a non-negative integer")
+    event_at = event.get("at")
+    if isinstance(event_at, str) and event_at.strip():
+        try:
+            _parse_time(event_at)
+        except RuntimeError as exc:
+            issues.append(str(exc))
+    return issues
+
+
 def artifact_baseline_event_issues(event: Any) -> list[str]:
     """Validate an explicitly authorized artifact-baseline adoption event."""
 
@@ -592,6 +632,11 @@ def validate_runtime(runtime: Any) -> list[str]:
                 issues.extend(
                     f"runtime event {index} {issue}"
                     for issue in process_refinement_event_issues(event)
+                )
+            elif event.get("action") == "review_subject_recovered":
+                issues.extend(
+                    f"runtime event {index} {issue}"
+                    for issue in review_subject_recovery_event_issues(event)
                 )
             else:
                 event_at = event.get("at")

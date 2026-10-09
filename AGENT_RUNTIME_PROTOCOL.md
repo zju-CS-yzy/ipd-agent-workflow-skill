@@ -141,17 +141,25 @@ dependencies of an existing Deliverable with governed lifecycle history.
    controller. The Agent must preserve the deliverable ID and produce durable
    evidence.
 4. `ipdctl close <deliverable> --evidence <path>` submits the work as
-   `ready_for_review`; it never accepts the deliverable.
+   `ready_for_review`, enters `review`, and binds that canonical Deliverable ID
+   as `project.current_iteration_subject`; it never accepts the deliverable.
 5. `ipdctl review <subject>` starts review for a Deliverable, TR, DCP, or Gate.
    `tr.<phase>` and `dcp.<phase>` are resolved to their canonical
-   `gate.tr.<phase>` and `gate.dcp.<phase>` state facts. Agent reviews may
-   recommend a decision, but cannot create final approval.
+   `gate.tr.<phase>` and `gate.dcp.<phase>` state facts. Gate entry binds that
+   canonical Gate ID. The global lock permits review operations only for this
+   one subject; a different `review`, `approve`, or `reject` target fails before
+   writes. Agent reviews may recommend a decision, but cannot create final
+   approval.
 6. `ipdctl approve <subject>` or `ipdctl reject <subject>` records an explicitly
    authorized human decision. An Agent identity is rejected for either final
    decision. All review records remain auditable; the latest authorized human
    decision controls the current outcome.
-7. `ipdctl refresh` rebuilds dashboards, graphs, and matrices strictly from
-   process and state facts, then moves the workflow to `verify`.
+7. `ipdctl render-dashboard` rebuilds the current Dashboard strictly from
+   process, state, runtime, and binding facts without changing state or runtime.
+   It is the inspection command during an active Review. `ipdctl refresh` is
+   the formal synchronization step: it is accepted only at a safe `context`,
+   `refresh`, or `verify` boundary, updates repository facts, increments the
+   state revision once, rebuilds derived views, and moves to `verify`.
 8. `ipdctl verify` validates schemas, dependencies, review authority,
    traceability, evidence paths, repository reconciliation, and
    generated-output freshness. It records the current state revision and a
@@ -174,15 +182,25 @@ claiming any new child.
 blocker and moves directly to `refresh`, but it still cannot be followed by a
 new claim until `refresh` and `verify` complete.
 
+A v0.5.0 state already paused at `review` has no trustworthy subject lock to
+infer. Review and decision commands therefore fail closed until an authorized
+human explicitly selects an existing eligible subject with
+`review SUBJECT --recover-subject --reviewer HUMAN --actor-type human
+--authorized --reason TEXT`. Recovery records one strict
+`review_subject_recovered` event and no decision; normal review must follow.
+
 ## State ownership
 
 - `.ipd/task_profile.yaml` describes the project and tailoring inputs.
 - `.ipd/process_extensions.yaml` contains additive project-owned process facts and explicit migration mappings.
 - `.ipd/tailored_process.yaml` describes what the project is required to do.
-- `.ipd/project_state.yaml` records completed work, reviews, and gate facts.
+- `.ipd/project_state.yaml` records completed work, reviews, Gate facts, and the
+  one active `current_iteration_subject` while the workflow is at `review`.
 - `.ipd/agent_runtime.yaml` records temporary Agent claims and runtime events.
 - `.ipd/artifact_bindings.yaml` maps repository paths to deliverables.
 - `.ipd/dashboard/` is generated output and must not be edited as a fact source.
+  Its `governance.md` snapshot is regenerated from canonical facts and checked
+  for version, Gate ID, Gate status, workflow, and content drift.
 
 Artifact Binding globs are evaluated from the project root. A bare filename
 matches only that root file, `*` never crosses a path separator, and a complete

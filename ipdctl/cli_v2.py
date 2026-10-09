@@ -12,12 +12,15 @@ from .engine import (
     TransitionError,
     approve_deliverable,
     approve_gate,
+    bind_current_iteration_subject,
     claim_deliverable,
+    clear_current_iteration_subject,
     close_deliverable,
     record_deliverable_review,
     record_gate_review,
     reject_deliverable,
     reject_gate,
+    recover_current_iteration_subject,
     set_deliverable_status,
     set_gate_ready,
     start_deliverable_review,
@@ -56,6 +59,7 @@ from .project import (
     project_paths,
     project_traceability_projection,
     refresh_project,
+    render_project_dashboard,
     sync_state_with_process,
     verify_project,
 )
@@ -75,8 +79,9 @@ from .runtime import (
 from .state import StateError, load_state, resolve_state_path, revised_copy, write_state
 from .transaction import project_access_guard, project_mutation_guard
 from .validation import validate_state
+from .version import PUBLIC_VERSION
 
-VERSION = "0.5.0-beta"
+VERSION = PUBLIC_VERSION
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -354,6 +359,15 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
                 choices=["approve", "reject"],
                 help=translator.text("cli.argument.decision.help"),
             )
+            command.add_argument(
+                "--recover-subject",
+                action="store_true",
+                help=translator.text("cli.argument.recover_subject.help"),
+            )
+            command.add_argument(
+                "--reason",
+                help=translator.text("cli.argument.review_recovery_reason.help"),
+            )
         command.set_defaults(handler=handler)
 
     advance = commands.add_parser(
@@ -373,6 +387,15 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
     )
     _add_target(refresh, translator)
     refresh.set_defaults(handler=_cmd_refresh)
+
+    render_dashboard_command = commands.add_parser(
+        "render-dashboard",
+        help=translator.text("cli.command.render_dashboard.help"),
+        description=translator.text("cli.command.render_dashboard.help"),
+        translator=translator,
+    )
+    _add_target(render_dashboard_command, translator)
+    render_dashboard_command.set_defaults(handler=_cmd_render_dashboard)
 
     verify = commands.add_parser(
         "verify",
@@ -451,6 +474,7 @@ _COMMAND_NAMES = {
     "reject",
     "advance-phase",
     "refresh",
+    "render-dashboard",
     "verify",
     "repository",
     "reconcile",
@@ -471,6 +495,7 @@ _TRANSACTIONAL_COMMANDS = {
     "reject",
     "advance-phase",
     "refresh",
+    "render-dashboard",
     "verify",
     "reconcile",
     "status",
@@ -662,7 +687,7 @@ def _transaction_options(
         extras = (paths["extensions"], paths["process"], paths["bindings"])
     elif args.command == "refine":
         extras = (paths["extensions"], paths["process"], paths["bindings"])
-    elif args.command == "refresh":
+    elif args.command in {"refresh", "render-dashboard"}:
         include_dashboard = True
     elif args.command == "verify":
         extras = (paths["verify_report"],)
@@ -736,6 +761,17 @@ def _cmd_tailor(args: argparse.Namespace) -> int:
                     )
                 )
         return 0
+
+    if previous_state.get("project", {}).get("workflow_step") == "review":
+        raise ProjectError(
+            translator.text(
+                "error.process_active_review",
+                subject=previous_state.get("project", {}).get(
+                    "current_iteration_subject"
+                )
+                or "unknown",
+            )
+        )
 
     closed_phase_changes = (
         closed_phase_process_changes(
@@ -1184,6 +1220,19 @@ def _cmd_refine(args: argparse.Namespace) -> int:
                 ),
             }
         )
+    if state.get("project", {}).get("workflow_step") == "review":
+        blockers.append(
+            {
+                "code": "ACTIVE_REVIEW",
+                "message": translator.text(
+                    "error.process_active_review",
+                    subject=state.get("project", {}).get(
+                        "current_iteration_subject"
+                    )
+                    or "unknown",
+                ),
+            }
+        )
     if root_deliverable.get("phase") != state["project"].get("phase"):
         blockers.append(
             {
@@ -1367,6 +1416,12 @@ def _cmd_context(args: argparse.Namespace) -> int:
     print(translator.text("cli.context.gate", value=snapshot["gate"] or unavailable))
     print(
         translator.text(
+            "cli.context.current_iteration_subject",
+            value=snapshot["current_iteration_subject"] or unavailable,
+        )
+    )
+    print(
+        translator.text(
             "cli.context.available_tasks",
             value=", ".join(item["id"] for item in snapshot["available_tasks"]) or none,
         )
@@ -1468,15 +1523,44 @@ def _cmd_adopt_baseline(args: argparse.Namespace) -> int:
     return 0 if result.get("eligible") else 1
 
 
-def _set_workflow_step(state: dict[str, Any], target: str) -> dict[str, Any]:
+def _set_workflow_step(
+    state: dict[str, Any], target: str, *, subject: str | None = None
+) -> dict[str, Any]:
     """Set the next executable stage once; never synthesize skipped commands."""
 
     if target not in WORKFLOW_STEPS:
         raise TransitionError(f"unknown workflow step: {target!r}")
-    if state["project"]["workflow_step"] == target:
+    current = state["project"]["workflow_step"]
+    if target == "review":
+        if not isinstance(subject, str) or not subject:
+            raise TransitionError(
+                "REVIEW_SUBJECT_REQUIRED: entering Review requires a canonical subject"
+            )
+        return bind_current_iteration_subject(state, subject)
+    if current == "review":
+        if target != "refresh":
+            raise TransitionError(
+                "REVIEW_SUBJECT_ACTIVE: Review can only complete into Refresh"
+            )
+        bound = state["project"].get("current_iteration_subject")
+        if not isinstance(bound, str) or not bound:
+            raise TransitionError(
+                "REVIEW_SUBJECT_REQUIRED: cannot leave Review without a locked subject"
+            )
+        if subject is not None and subject != bound:
+            raise TransitionError(
+                f"REVIEW_SUBJECT_MISMATCH: current iteration reviews {bound!r}, not {subject!r}"
+            )
+        return clear_current_iteration_subject(state, bound)
+    if subject is not None:
+        raise TransitionError(
+            "a workflow subject is only valid when entering or completing Review"
+        )
+    if current == target:
         return state
     updated = revised_copy(state)
     updated["project"]["workflow_step"] = target
+    updated["project"]["current_iteration_subject"] = None
     issues = validate_state(updated)
     if issues:
         raise TransitionError(str(issues[0]))
@@ -1705,7 +1789,11 @@ def _cmd_close(args: argparse.Namespace) -> int:
     else:
         state = close_deliverable(state, args.deliverable, evidence=args.evidence)
     next_step = "refresh" if args.status == "blocked" else "review"
-    state = _set_workflow_step(state, next_step)
+    state = _set_workflow_step(
+        state,
+        next_step,
+        subject=args.deliverable if next_step == "review" else None,
+    )
     runtime = close_claim(
         runtime,
         args.deliverable,
@@ -1821,10 +1909,76 @@ def _cmd_review(args: argparse.Namespace) -> int:
     subject_type, subject_id = _resolve_subject(
         state, process, args.subject, translator
     )
+    if args.recover_subject:
+        if args.actor_type != "human" or not args.authorized:
+            raise TransitionError(
+                translator.text("error.review_recovery_authority")
+            )
+        if not isinstance(args.reason, str) or not args.reason.strip():
+            raise TransitionError(
+                translator.text("error.review_recovery_reason_required")
+            )
+        if args.decision is not None or args.evidence is not None:
+            raise TransitionError(
+                translator.text("error.review_recovery_decision_forbidden")
+            )
+        if subject_type == "deliverable":
+            subject_record = next(
+                item
+                for item in state.get("deliverables", [])
+                if item.get("id") == subject_id
+            )
+            if subject_record.get("status") not in {
+                "ready_for_review",
+                "in_review",
+            }:
+                raise TransitionError(
+                    translator.text(
+                        "error.review_recovery_status",
+                        subject=subject_id,
+                        status=subject_record.get("status"),
+                    )
+                )
+        else:
+            _require_current_gate(state, process, subject_id, translator)
+            status = _gate_status(state, subject_id)
+            if status != "ready":
+                raise TransitionError(
+                    translator.text(
+                        "error.review_recovery_status",
+                        subject=subject_id,
+                        status=status,
+                    )
+                )
+        state = recover_current_iteration_subject(state, subject_id)
+        details = {
+            "subject_type": subject_type,
+            "subject": subject_id,
+            "actor": args.reviewer,
+            "actor_type": "human",
+            "authorized": True,
+            "reason": args.reason.strip(),
+            "state_revision": state["revision"],
+        }
+        runtime = record_event(
+            runtime,
+            "review_subject_recovered",
+            details=details,
+        )
+        with project_mutation_guard(root):
+            write_state(paths["state"], state)
+            save_runtime(root, runtime)
+        print(
+            translator.text(
+                "cli.review.subject_recovered", subject=args.subject
+            )
+        )
+        return 0
     if subject_type == "deliverable":
         _require_workflow_step(
             state, {"review"}, action="review", translator=translator
         )
+        state = _set_workflow_step(state, "review", subject=subject_id)
         state = start_deliverable_review(state, subject_id)
     else:
         _require_workflow_step(
@@ -1848,6 +2002,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
                     "error.gate_review_status", gate=subject_id, status=status
                 )
             )
+        state = _set_workflow_step(state, "review", subject=subject_id)
     if args.decision:
         if not args.evidence:
             raise TransitionError(
@@ -1867,7 +2022,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
             decision=args.decision,
             evidence=args.evidence,
         )
-    state = _set_workflow_step(state, "review")
+    state = _set_workflow_step(state, "review", subject=subject_id)
     details = _runtime_subject_details(subject_type, subject_id)
     details["reviewer"] = args.reviewer
     details["reviewer_type"] = args.actor_type
@@ -1932,7 +2087,7 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         )
         state = approve_gate(state, subject_id)
         apply_phase_pointers(state, process)
-    state = _set_workflow_step(state, "refresh")
+    state = _set_workflow_step(state, "refresh", subject=subject_id)
     details = _runtime_subject_details(subject_type, subject_id)
     details["reviewer"] = args.reviewer
     details["reviewer_type"] = args.actor_type
@@ -1989,7 +2144,7 @@ def _cmd_reject(args: argparse.Namespace) -> int:
         )
         state = reject_gate(state, subject_id)
         apply_phase_pointers(state, process)
-    state = _set_workflow_step(state, "refresh")
+    state = _set_workflow_step(state, "refresh", subject=subject_id)
     details = _runtime_subject_details(subject_type, subject_id)
     details["reviewer"] = args.reviewer
     details["reviewer_type"] = args.actor_type
@@ -2059,15 +2214,24 @@ def _cmd_advance_phase(args: argparse.Namespace) -> int:
 def _cmd_refresh(args: argparse.Namespace) -> int:
     translator = _translator(args)
     root = Path(args.target).resolve()
-    paths = project_paths(root)
-    state = load_state(paths["state"])
     with project_mutation_guard(root, include_dashboard=True):
-        if state["project"].get("workflow_step") == "refresh":
-            state = _set_workflow_step(state, "verify")
-            write_state(paths["state"], state)
         manifest = refresh_project(args.target)
     outputs = manifest.get("outputs", []) if isinstance(manifest, dict) else []
     print(translator.text("cli.refresh.completed", count=len(outputs) + 1))
+    return 0
+
+
+def _cmd_render_dashboard(args: argparse.Namespace) -> int:
+    translator = _translator(args)
+    root = Path(args.target).resolve()
+    with project_mutation_guard(root, include_dashboard=True):
+        manifest = render_project_dashboard(root)
+    outputs = manifest.get("outputs", []) if isinstance(manifest, dict) else []
+    print(
+        translator.text(
+            "cli.render_dashboard.completed", count=len(outputs) + 1
+        )
+    )
     return 0
 
 
@@ -2153,6 +2317,9 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         "state": "not_run",
         "policy": "not_requested" if not args.policy else "not_run",
         "bindings": "not_applicable" if not project_target else "not_run",
+        "governance_document": (
+            "not_applicable" if not project_target else "not_run"
+        ),
     }
 
     def add_issue(code: str, message: str, *, issue_path: str | None = None) -> None:
@@ -2216,6 +2383,43 @@ def _cmd_validate(args: argparse.Namespace) -> int:
             checks["bindings"] = "passed"
     elif project_target:
         checks["bindings"] = "not_run"
+
+    if project_target and state is not None:
+        paths = project_paths(target)
+        if not paths["process"].is_file():
+            checks["governance_document"] = "not_applicable"
+        else:
+            try:
+                from .governance_documents import governance_document_issues
+
+                process = load_state(paths["process"])
+                governance_path = paths["dashboard"] / "governance.md"
+                governance_text = (
+                    governance_path.read_text(encoding="utf-8")
+                    if governance_path.is_file()
+                    else None
+                )
+                governance_issues = governance_document_issues(
+                    governance_text,
+                    process,
+                    state,
+                    translator=translator,
+                    locale=translator.locale,
+                )
+            except (OSError, StateError, TypeError, ValueError) as exc:
+                checks["governance_document"] = "failed"
+                add_issue(
+                    "GOVERNANCE_DOCUMENT_INPUT_INVALID",
+                    str(exc),
+                    issue_path=str(paths["dashboard"] / "governance.md"),
+                )
+            else:
+                checks["governance_document"] = (
+                    "failed" if governance_issues else "passed"
+                )
+                report_issues.extend(governance_issues)
+    elif project_target:
+        checks["governance_document"] = "not_run"
 
     if args.json:
         report = {

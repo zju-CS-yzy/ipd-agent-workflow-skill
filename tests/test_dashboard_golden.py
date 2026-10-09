@@ -342,7 +342,7 @@ class DashboardGoldenHarnessTests(unittest.TestCase):
         }
         current = {
             "required_files_present": True,
-            "file_count": 15,
+            "file_count": 16,
             "svg_count": 9,
             "html_count": 3,
             "xml_errors": [],

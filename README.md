@@ -4,7 +4,7 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-Current prerelease target: `v0.5.0-beta` (Python package `0.5.0b1`).
+Current prerelease target: `v0.5.1-beta` (Python package `0.5.1b1`).
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 
@@ -18,10 +18,11 @@ The runtime enforces a hard boundary: an AI agent can prepare and validate a gat
 - Run one serialized Agent protocol: `context -> claim -> work -> close -> review -> human approve/reject -> refresh -> verify`.
 - Enforce the eight-state deliverable lifecycle, dependency closure, evidence, review records, and authorized-human acceptance.
 - Preserve every review decision while using the latest authorized human decision as the current outcome, allowing rejected work to be corrected, reviewed, and approved without erasing its history.
-- Review Deliverable or Gate subjects explicitly and advance phases only after required governance checks pass.
+- Lock every review iteration to one canonical Deliverable or Gate subject and advance phases only after required governance checks pass.
 - Generate an offline interactive Dashboard with hierarchical phase swimlanes,
   typed SVG process/dependency views, node details, Deliverable Matrix, Gate
-  Matrix, and canonical JSON projections under `.ipd/dashboard/`.
+  Matrix, canonical JSON projections, and a facts-derived governance registry
+  and Gate plan under `.ipd/dashboard/`.
 - Present CLI and Dashboard text in `en` or `zh-CN` without changing YAML/JSON keys, IDs, statuses, relations, or graph topology.
 - Inspect Git or SVN branch/revision/dirty/remote metadata and reconcile changed paths without mutating the repository.
 - Enforce single-owner critical artifact bindings, per-iteration Claim windows, and explicitly authorized migration baselines for existing dirty projects.
@@ -66,6 +67,7 @@ ipdctl claim DELIVERABLE --project-root /path/to/project
 # perform the authorized work
 ipdctl close DELIVERABLE --project-root /path/to/project --evidence evidence/DELIVERABLE/result.md
 ipdctl review DELIVERABLE --project-root /path/to/project --reviewer REVIEWER
+ipdctl render-dashboard /path/to/project
 ipdctl approve DELIVERABLE --project-root /path/to/project --reviewer HUMAN --actor-type human --authorized --evidence evidence/DELIVERABLE/approval.md
 ipdctl refresh /path/to/project
 ipdctl verify /path/to/project
@@ -80,6 +82,21 @@ with `claim DELIVERABLE --recover`. An unexpired lease owned by another actor
 cannot be taken over. For an expired v0.3.1 Claim that has no binding window,
 record the exact authorized-human migration baseline first; its first recovery
 creates an immutable migration window that later recoveries reuse.
+
+`close` binds its canonical Deliverable ID as
+`project.current_iteration_subject`; Gate review binds the resolved canonical
+Gate ID. Until the human decision clears that lock, `review`, `approve`, and
+`reject` reject every other target without writing project facts. A v0.5.0
+project already paused in `review` cannot infer the missing subject safely. An
+authorized human must recover the exact eligible existing ID and reason first:
+
+```bash
+ipdctl review SUBJECT --project-root /path/to/project --reviewer HUMAN \
+  --actor-type human --authorized --recover-subject --reason TEXT
+```
+
+This records a recovery event, not a decision. Run normal review and approval
+or rejection afterward.
 
 For machine consumers, `context --json` separates `waiting_items` (unmet
 `depends_on` prerequisites), `explicit_blockers` (lifecycle status
@@ -101,7 +118,7 @@ ordered `advance_phase` event history, so editing all Phase pointers together
 cannot skip governance.
 
 The full CLI command surface is `init`, `tailor`, `refine`, `context`, `status`, `adopt-baseline`, `claim`,
-`close`, `review`, `approve`, `reject`, `refresh`, `verify`, `advance-phase`,
+`close`, `review`, `approve`, `reject`, `render-dashboard`, `refresh`, `verify`, `advance-phase`,
 `repository`, `reconcile`, and `validate`. `validate --json` emits a stable
 machine-readable result while normal CLI and Dashboard presentation remains
 locale-aware. Run `ipdctl COMMAND --help` for the exact options; the normative summary is in
@@ -323,7 +340,15 @@ The Dashboard entry point is `.ipd/dashboard/index.html`. Its standalone assets
 live under `assets/`, phase views under `phases/`, matrices under `matrices/`,
 and machine-readable projections under `data/`. `manifest.json` records the
 locale, binding/eligibility hashes, and hashes every managed output so
-`ipdctl verify` can detect stale or modified views.
+`ipdctl verify` can detect stale or modified views. The generated
+`governance.md` registry and Gate plan is independently reconstructed from
+canonical version, process, state, Deliverable, and Gate facts, so changing
+its prose together with a manifest hash still fails validation.
+
+Use `render-dashboard` for a current view during an active iteration; it
+leaves project state and runtime byte-for-byte unchanged. Formal `refresh` is
+accepted only from `context`, `refresh`, or `verify`, synchronizes repository
+facts, increments the state revision once, and moves the workflow to `verify`.
 
 The structural contracts live in [schemas/](schemas/). Runtime validation additionally enforces dependency cycles, referential integrity, legal transitions, review authority, evidence presence, dashboard freshness, and repository reconciliation.
 
@@ -370,3 +395,23 @@ The state schema and Python API may still change before `1.0`. Changes are recor
 Licensed under Apache-2.0. See [LICENSE](LICENSE).
 
 Canonical repository: [github.com/zju-CS-yzy/ipd-agent-workflow-skill](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill)
+
+### Dashboard relationship filters and file navigation
+
+The interactive Dashboard initially shows only prerequisite → dependent edges.
+Select any combination of support, verification, supersession and refinement
+relations to inspect their overlays without changing node positions or workflow
+facts. Phase changes preserve the active filters and zoom during the session.
+Clickable graphs are embedded in the HTML for offline use; standalone SVG
+exports remain available and retain their declared graph relationships.
+
+Selecting a Deliverable opens its bound files, shared evidence, binding patterns
+and recorded evidence in the sidebar. Existing project files have portable open
+links and copy-path controls; missing files have no open link. Links resolve from
+`.ipd/dashboard/index.html` to the project root, so serve the project root when
+using HTTP. Browser-supported types open directly; other types may download.
+Copy-path falls back to a selectable path when clipboard access is unavailable.
+Filesystem links, generated Dashboard trees and `.ipd/generated` are not expanded, and no
+file contents or machine-specific absolute paths are copied into the Dashboard.
+
+[Dashboard qualification](docs/dashboard-testing.md) documents the self-contained, browser and external local-project test gates.

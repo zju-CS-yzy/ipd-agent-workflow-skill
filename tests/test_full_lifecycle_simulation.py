@@ -44,7 +44,7 @@ class FullLifecycleSimulationTests(unittest.TestCase):
         self.assertTrue(checks["lifecycle_complete"])
         self.assertEqual(checks["active_claims"], 0)
 
-        self.assertEqual(checks["dashboard_files"], 15)
+        self.assertEqual(checks["dashboard_files"], 16)
         self.assertEqual(checks["dashboard_locale"], locale)
         self.assertEqual(
             checks["dashboard_state_revision"], checks["state_revision"]
