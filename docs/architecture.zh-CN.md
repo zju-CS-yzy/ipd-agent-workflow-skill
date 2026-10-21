@@ -82,3 +82,11 @@ Claim，也不能满足 Critical Path 的 Owner 要求。
 Re-tailor。
 
 运行时会为事件和 Claim Lease 自动记录 UTC 时间戳，但不会推断评审人权限，也不会在状态中捕获个人检出路径。调用方只能记录获得认可的外部标识或不可变 VCS Revision 作为证据。
+
+## 增量与模板发布契约
+
+显式启用需求模型后，新事件使用 Runtime 1.1，旧历史保持原文。
+`increment_context_start` 标明新契约事件起点；`increment_context` 绑定增量、
+前一交付基线及作用域摘要。旧工具拒绝新契约。独立不可变模板记录将包摘要与草稿、
+人工评审及授权发布关联；内置包也需项目明确采纳，不推断历史批准。
+单 Owner 受控转换生成新文件并保留旧实例。详见[使用说明](requirements-and-templates.zh-CN.md)。

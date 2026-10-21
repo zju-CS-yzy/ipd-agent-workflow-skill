@@ -1,0 +1,564 @@
+{
+  "schema": "worked-project-catalog/1",
+  "project": "offline-room-booking",
+  "version": 1,
+  "kind": "synthetic-educational-data-not-governance-state",
+  "increment": "mvp",
+  "constraints": {
+    "open_minute": 480,
+    "close_minute": 1080,
+    "slot_minutes": 15,
+    "capacity_minutes": 600,
+    "slots": 40,
+    "concurrency": "single-process-serial",
+    "persistence": false
+  },
+  "requirements": [
+    {
+      "id": "ir-01",
+      "version": 1,
+      "ref": "ir-01@1",
+      "kind": "IR",
+      "parent": null,
+      "scenario": "SC-1",
+      "module": "validation/ledger",
+      "statement": {
+        "zh-CN": "在单日开放时段内，用户可按 15 分钟粒度创建预约并获得明确确认；无效输入必须明确拒绝。",
+        "en": "Within the operating day, a user can create a booking on a 15-minute grid and receive confirmation; invalid inputs are explicitly rejected."
+      },
+      "argument": {
+        "zh-CN": "BRIEF@1/U1 要求能预约并知道结果；C1/C2 将范围限定为一间房、08:00—18:00 和 15 分钟粒度。把“能预约”整理为合法输入被确认、非法输入被拒绝两个可观察结果。",
+        "en": "BRIEF@1/U1 requests booking with a clear outcome. C1/C2 bound it to one room, 08:00–18:00 and a 15-minute grid. Consolidate the need into acceptance of valid input and explicit rejection of invalid input."
+      },
+      "choice": {
+        "zh-CN": "采用命令/API 演示而非图形界面；不承诺交互耗时或持久保存。",
+        "en": "Use a command/API demonstration rather than a GUI; promise neither interaction latency nor persistence."
+      },
+      "code": "Calendar.book",
+      "criterion": "C-IR-01",
+      "case": "V-IR-01",
+      "record": "d-ir-01",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "ir-02",
+      "version": 1,
+      "ref": "ir-02@1",
+      "kind": "IR",
+      "parent": null,
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "有效预约不得重叠，相邻预约允许；用户取消有效预约后可立即重新预约该时段。",
+        "en": "Active bookings must not overlap, adjacent bookings are allowed, and a cancelled slot can immediately be booked again."
+      },
+      "argument": {
+        "zh-CN": "BRIEF@1/U2 关心抢占与取消后的可用性。C3 明确相邻边界不冲突，C4 只讨论单进程串行调用，因而目标可分为冲突控制和取消释放两部分。",
+        "en": "BRIEF@1/U2 concerns contention and availability after cancellation. C3 permits touching boundaries and C4 limits calls to serial execution in one process, yielding conflict control and cancellation/release objectives."
+      },
+      "choice": {
+        "zh-CN": "不扩展为并发锁或认证；相邻是否冲突必须在输入中明确，不能由代码猜测。",
+        "en": "Do not extend this to concurrent locking or authentication; adjacency semantics are an explicit input, not a code assumption."
+      },
+      "code": "Calendar.book/cancel",
+      "criterion": "C-IR-02",
+      "case": "V-IR-02",
+      "record": "d-ir-02",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "ir-03",
+      "version": 1,
+      "ref": "ir-03@1",
+      "kind": "IR",
+      "parent": null,
+      "scenario": "SC-3",
+      "module": "presentation/metrics",
+      "statement": {
+        "zh-CN": "用户可查看按时间排序的有效预约，以及当天已用/空闲分钟数、时段数和利用率。",
+        "en": "The user can view active bookings in time order and see occupied/free minutes, slot counts and daily utilization."
+      },
+      "argument": {
+        "zh-CN": "BRIEF@1/U3 需要安排后续会议。C1 给出固定开放容量；有效列表与利用率分别回答“什么时候空闲”与“用了多少”，不能只显示一个百分数。",
+        "en": "BRIEF@1/U3 supports planning later meetings. C1 fixes capacity. The agenda and utilization answer when the room is free and how much is used; a percentage alone is insufficient."
+      },
+      "choice": {
+        "zh-CN": "只汇总当前进程的一天，不做跨日统计或人员数据分析。",
+        "en": "Summarize one day in the current process only; exclude cross-day analytics and personal data."
+      },
+      "code": "Calendar.agenda/summary",
+      "criterion": "C-IR-03",
+      "case": "V-IR-03",
+      "record": "d-ir-03",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-01",
+      "version": 1,
+      "ref": "sr-01@1",
+      "kind": "SR",
+      "parent": "ir-01@1",
+      "scenario": "SC-1",
+      "module": "validation",
+      "statement": {
+        "zh-CN": "系统只接受 HH:MM 格式、真实时钟值且满足 08:00≤start<end≤18:00、端点均在 15 分钟网格上的预约。",
+        "en": "Accept only HH:MM clock values satisfying 08:00≤start<end≤18:00 with both endpoints on the 15-minute grid."
+      },
+      "argument": {
+        "zh-CN": "将 SC-1 的输入转为距午夜分钟 m=60h+min。开放容量=(18−8)×60=600 分钟，共 600/15=40 格；合法端点为 480+15k，k=0…40，且开始端点小于结束端点。格式、时钟值与业务窗口须分层检查。",
+        "en": "Convert SC-1 input to minutes m=60h+min. Capacity=(18−8)×60=600 minutes=600/15=40 slots. Endpoints are 480+15k for k=0…40, with start<end. Check format, clock validity and business window separately."
+      },
+      "choice": {
+        "zh-CN": "使用整数分钟避免浮点边界；09:20 虽是时钟值，仍因不在网格上被拒绝。",
+        "en": "Use integer minutes to avoid floating boundaries; 09:20 is a valid clock value but not on the grid."
+      },
+      "code": "parse_time/validate_window",
+      "criterion": "C-SR-01",
+      "case": "V-SR-01",
+      "record": "d-sr-01",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-02",
+      "version": 1,
+      "ref": "sr-02@1",
+      "kind": "SR",
+      "parent": "ir-01@1",
+      "scenario": "SC-1",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "合法且无冲突的请求应创建一条有效预约，返回本进程内不复用的 ID、起止时间和时长；拒绝不得改变有效列表或消耗 ID。",
+        "en": "A valid conflict-free request creates one active booking and returns a non-reused process-local ID, times and duration; rejection changes neither active state nor the next ID."
+      },
+      "argument": {
+        "zh-CN": "用户必须能把确认与后续取消对象对应，所以确认含稳定 ID 和输入窗口；仅返回成功标志不够。先检查再写入，避免错误路径留下预约或跳过编号。",
+        "en": "The user must associate confirmation with later cancellation, so return a stable ID and window rather than a bare success flag. Validate before mutation so rejected paths leave no booking or consumed ID."
+      },
+      "choice": {
+        "zh-CN": "递增编号只保证本进程唯一；不宣称跨重启唯一或磁盘事务原子性。",
+        "en": "A monotonic counter guarantees process-local uniqueness only, not uniqueness across restarts or durable transactions."
+      },
+      "code": "Calendar.book/Booking.record",
+      "criterion": "C-SR-02",
+      "case": "V-SR-02",
+      "record": "d-sr-02",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-03",
+      "version": 1,
+      "ref": "sr-03@1",
+      "kind": "SR",
+      "parent": "ir-02@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "按半开区间 [start,end) 判断冲突；相邻端点允许，任意正长度重叠拒绝且原列表不变。",
+        "en": "Use half-open intervals [start,end): touching endpoints are allowed; reject any positive overlap without changing the active list."
+      },
+      "argument": {
+        "zh-CN": "两段不相交当且仅当 b≤c 或 d≤a；取反得到 a<d 且 c<b。用严格小于才能使 [08:00,09:00) 与 [09:00,09:30) 相邻而不重叠；包含、被包含和相同区间仍冲突。",
+        "en": "Disjoint intervals satisfy b≤c or d≤a; negation gives a<d and c<b. Strict inequalities permit [08:00,09:00) next to [09:00,09:30), while containment and identical intervals still conflict."
+      },
+      "choice": {
+        "zh-CN": "扫描当前有效预约，复杂度 O(n)；本例最多 40 条正长度预约，无需区间树。",
+        "en": "Scan active bookings in O(n); at most 40 positive-length bookings fit, so an interval tree is unnecessary."
+      },
+      "code": "overlaps/Calendar.book",
+      "criterion": "C-SR-03",
+      "case": "V-SR-03",
+      "record": "d-sr-03",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-04",
+      "version": 1,
+      "ref": "sr-04@1",
+      "kind": "SR",
+      "parent": "ir-02@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "取消已存在 ID 应移除其有效预约并释放时段；未知或重复取消返回 NOT_FOUND，不影响其他预约且旧 ID 不再复用。",
+        "en": "Cancelling an existing ID removes its active booking and releases the slot; unknown or repeated cancellation returns NOT_FOUND without affecting others, and old IDs are not reused."
+      },
+      "argument": {
+        "zh-CN": "释放意味着该条记录不再参与冲突扫描；立即以相同窗口重新创建必须成功。若复用旧 ID，延迟到达的重复取消可能误删新预约，因此编号在取消后也只能继续递增。",
+        "en": "Release means removing the entry from conflict scanning; immediately rebooking its exact window must succeed. Reusing IDs could make a delayed repeat cancel delete a new booking, so the counter stays monotonic after cancellation."
+      },
+      "choice": {
+        "zh-CN": "未知取消明确报错，不把重试说成已再次取消；不设计分布式幂等协议。",
+        "en": "Report unknown cancellation explicitly rather than claiming it was cancelled again; no distributed idempotency protocol is introduced."
+      },
+      "code": "Calendar.cancel/book",
+      "criterion": "C-SR-04",
+      "case": "V-SR-04",
+      "record": "d-sr-04",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-05",
+      "version": 1,
+      "ref": "sr-05@1",
+      "kind": "SR",
+      "parent": "ir-03@1",
+      "scenario": "SC-3",
+      "module": "presentation",
+      "statement": {
+        "zh-CN": "日程只列有效预约，按开始分钟、结束分钟、ID 排序，输出标准 HH:MM 及时长；修改返回数据不得改变系统状态。",
+        "en": "List only active bookings sorted by start minute, end minute and ID, with normalized HH:MM and duration; mutating returned data must not alter system state."
+      },
+      "argument": {
+        "zh-CN": "SC-3 可以先预订晚会议再订早会议，故创建顺序不等于日程顺序。每条输出来自当前有效集；返回新字典而不暴露内部对象，使查看操作保持只读。",
+        "en": "SC-3 may book a later meeting first, so creation order is not agenda order. Render from the active set and return fresh dictionaries so viewing remains read-only."
+      },
+      "choice": {
+        "zh-CN": "稳定排序规则显式声明；单房间无重叠时同开始时间不会共存，但次级键使格式确定。",
+        "en": "Declare deterministic ordering. Equal starts cannot coexist in this non-overlapping single room, but secondary keys keep formatting deterministic."
+      },
+      "code": "Calendar.agenda/Booking.record",
+      "criterion": "C-SR-05",
+      "case": "V-SR-05",
+      "record": "d-sr-05",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "sr-06",
+      "version": 1,
+      "ref": "sr-06@1",
+      "kind": "SR",
+      "parent": "ir-03@1",
+      "scenario": "SC-3",
+      "module": "metrics",
+      "statement": {
+        "zh-CN": "以 600 分钟为固定分母，计算有效预约的占用/空闲分钟、15 分钟格数及一位小数的利用率；取消后即时重算。",
+        "en": "Use a fixed 600-minute denominator to compute occupied/free minutes, 15-minute slots and utilization to one decimal; recompute after cancellation."
+      },
+      "argument": {
+        "zh-CN": "SR-03 保证有效区间不重叠，所以并集长度=Σ(end−start)。两段 08:00—09:00 与 09:30—10:30 共 60+60=120 分钟，空闲 480，已用格 8，空闲格 32，利用率 120/600×100=20.0%。",
+        "en": "SR-03 guarantees disjoint active intervals, so union length=Σ(end−start). 08:00–09:00 plus 09:30–10:30 gives 60+60=120 occupied minutes, 480 free, 8 used slots, 32 free slots and 120/600×100=20.0% utilization."
+      },
+      "choice": {
+        "zh-CN": "每格占比 15/600×100=2.5%，一位小数足够精确；不以当天最早/最晚会议跨度作分母。",
+        "en": "Each slot is 15/600×100=2.5%, exactly representable to one decimal; never use the first-to-last booking span as denominator."
+      },
+      "code": "Calendar.occupied_minutes/summary",
+      "criterion": "C-SR-06",
+      "case": "V-SR-06",
+      "record": "d-sr-06",
+      "owner": "demo-systems"
+    },
+    {
+      "id": "ar-01",
+      "version": 1,
+      "ref": "ar-01@1",
+      "kind": "AR",
+      "parent": "sr-01@1",
+      "scenario": "SC-1",
+      "module": "validation",
+      "statement": {
+        "zh-CN": "解析器将两位 HH:MM 且 0≤h≤23、0≤m≤59 转为 60h+m；其他输入返回明确格式或时钟错误。",
+        "en": "Parse two-digit HH:MM with 0≤h≤23 and 0≤m≤59 to 60h+m; otherwise return an explicit format or clock error."
+      },
+      "argument": {
+        "zh-CN": "SR-01 的业务比较需先得到统一整数。08:00=480、09:15=555、18:00=1080；9:00 缺前导零，09:75 分钟越界，二者不能被宽松转换为预约。",
+        "en": "SR-01 needs a common integer representation: 08:00=480, 09:15=555, 18:00=1080. Reject missing zero in 9:00 and invalid minutes in 09:75 instead of permissive conversion."
+      },
+      "choice": {
+        "zh-CN": "解析器只判断时钟合法性，开放时段交由 AR-02，避免职责混杂。",
+        "en": "Clock validity belongs here; operating hours belong to AR-02, keeping responsibilities separate."
+      },
+      "code": "parse_time",
+      "criterion": "C-AR-01",
+      "case": "V-AR-01",
+      "record": "d-ar-01",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-02",
+      "version": 1,
+      "ref": "ar-02@1",
+      "kind": "AR",
+      "parent": "sr-01@1",
+      "scenario": "SC-1",
+      "module": "validation",
+      "statement": {
+        "zh-CN": "窗口校验器强制 480≤start<end≤1080，且 (start−480)%15=(end−480)%15=0，失败不得进入创建。",
+        "en": "Enforce 480≤start<end≤1080 and (start−480)%15=(end−480)%15=0 before creation."
+      },
+      "argument": {
+        "zh-CN": "SR-01 直接给出窗口与网格。17:45=1065，18:00=1080，持续 15 分钟有效；零长度、07:45、18:15 越界或 09:20 脱网格均拒绝。",
+        "en": "SR-01 defines the bounds and grid. 17:45=1065 to 18:00=1080 is a valid 15-minute booking; reject zero length, 07:45/18:15 boundary violations or off-grid 09:20."
+      },
+      "choice": {
+        "zh-CN": "两端校验保证最短正长度自动为 15 分钟，无须独立浮点时长阈值。",
+        "en": "Checking both endpoints makes the minimum positive duration 15 minutes without a separate floating duration threshold."
+      },
+      "code": "validate_window",
+      "criterion": "C-AR-02",
+      "case": "V-AR-02",
+      "record": "d-ar-02",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-03",
+      "version": 1,
+      "ref": "ar-03@1",
+      "kind": "AR",
+      "parent": "sr-02@1",
+      "scenario": "SC-1",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "台账仅在创建成功后分配递增 B001、B002…，拒绝与取消均不推进或回退编号。",
+        "en": "Allocate increasing B001, B002… only for successful creations; rejection does not advance and cancellation does not rewind the counter."
+      },
+      "argument": {
+        "zh-CN": "成功次数 k 对应下一编号 k+1；拒绝不增加成功次数，取消不减少历史成功次数，因此确认可稳定定位且不复用。",
+        "en": "With k successful creations, the next counter is k+1. Rejection adds no success and cancellation removes no historical success, preserving stable non-reused identifiers."
+      },
+      "choice": {
+        "zh-CN": "编号至少三位，超过 999 可增长；本例最多 40 个同时有效预约，但允许多次取消和再创建。",
+        "en": "Use at least three digits, allowing growth beyond 999; at most 40 are active, but repeated cancel/rebook cycles are allowed."
+      },
+      "code": "Calendar.book",
+      "criterion": "C-AR-03",
+      "case": "V-AR-03",
+      "record": "d-ar-03",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-04",
+      "version": 1,
+      "ref": "ar-04@1",
+      "kind": "AR",
+      "parent": "sr-02@1",
+      "scenario": "SC-1",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "完成输入与冲突预检后只新增一条预约，返回 ID、标准时间与 end−start 分钟；拒绝路径不修改台账。",
+        "en": "After input and conflict prechecks, add exactly one booking and return ID, normalized times and end−start minutes; rejected paths do not mutate the ledger."
+      },
+      "argument": {
+        "zh-CN": "先校验再创建保证被拒绝请求没有部分有效记录。08:00—09:00 的确认必须是 B001、08:00、09:00、60，且日程中恰有同一条。",
+        "en": "Prechecks before creation prevent rejected requests from leaving partial active entries. The first 08:00–09:00 confirmation is B001, 08:00, 09:00, 60, with exactly that entry in the agenda."
+      },
+      "choice": {
+        "zh-CN": "只承诺预期输入错误下的单进程行为，不声称内存耗尽或断电后的持久事务。",
+        "en": "Guarantee serial behavior for expected input rejection, not durable transactions under memory exhaustion or power loss."
+      },
+      "code": "Calendar.book/Booking.record",
+      "criterion": "C-AR-04",
+      "case": "V-AR-04",
+      "record": "d-ar-04",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-05",
+      "version": 1,
+      "ref": "ar-05@1",
+      "kind": "AR",
+      "parent": "sr-03@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "冲突谓词对已校验正长度区间返回 start<other_end 且 other_start<end，边界相等不冲突。",
+        "en": "For validated positive-length intervals, return start<other_end and other_start<end; equality at a boundary is not a conflict."
+      },
+      "argument": {
+        "zh-CN": "将 SR-03 的区间论证直接落实为纯函数。480—540 对 540—555 为假；对 525—555、相同区间、内部区间及覆盖区间为真；对 465—480 为假。",
+        "en": "Implement the SR-03 interval argument as a pure function: 480–540 against 540–555 is false; overlap, identical, contained and containing intervals are true; 465–480 is false."
+      },
+      "choice": {
+        "zh-CN": "使用严格小于而非小于等于；后者会错误拒绝相邻预约。",
+        "en": "Use strict rather than inclusive inequalities; inclusive comparison would wrongly reject adjacent bookings."
+      },
+      "code": "overlaps",
+      "criterion": "C-AR-05",
+      "case": "V-AR-05",
+      "record": "d-ar-05",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-06",
+      "version": 1,
+      "ref": "ar-06@1",
+      "kind": "AR",
+      "parent": "sr-03@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "创建前检查全部有效预约，有任意冲突即返回 CONFLICT，且有效列表和下一成功 ID 不变。",
+        "en": "Check all active bookings before creation; any conflict returns CONFLICT without changing the active list or the next successful ID."
+      },
+      "argument": {
+        "zh-CN": "只检查某一条会漏掉其他占用区间；扫描所有当前有效记录后才提交。已有 B001 时拒绝重叠请求，下次合法请求应为 B002 而非 B003。",
+        "en": "Checking only one entry can miss another occupied interval. Scan the whole active set before committing. After B001 and a rejected overlap, the next valid request must be B002, not B003."
+      },
+      "choice": {
+        "zh-CN": "最多 40 条有效记录，线性扫描可解释且足够；不把此结论推广到大型并发服务。",
+        "en": "With at most 40 active entries a linear scan is adequate and transparent, without extrapolating to a large concurrent service."
+      },
+      "code": "Calendar.book",
+      "criterion": "C-AR-06",
+      "case": "V-AR-06",
+      "record": "d-ar-06",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-07",
+      "version": 1,
+      "ref": "ar-07@1",
+      "kind": "AR",
+      "parent": "sr-04@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "取消只删除存在的目标 ID，返回已取消确认；不存在的 ID 返回 NOT_FOUND，其他记录不变。",
+        "en": "Cancel only an existing target ID and return confirmation; an absent ID returns NOT_FOUND without affecting other entries."
+      },
+      "argument": {
+        "zh-CN": "SR-04 的释放对应有效集合减去该 ID。删除 B001 后有效集为空；取消 missing 仍为空，明确错误避免误导。",
+        "en": "SR-04 release is active-set removal of the target ID. After removing sole B001 the set is empty; cancelling missing keeps it empty and reports a clear error."
+      },
+      "choice": {
+        "zh-CN": "以 ID 定位而非时间模糊匹配，防止误删相邻预约。",
+        "en": "Locate by ID instead of approximate time matching to avoid deleting an adjacent booking."
+      },
+      "code": "Calendar.cancel",
+      "criterion": "C-AR-07",
+      "case": "V-AR-07",
+      "record": "d-ar-07",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-08",
+      "version": 1,
+      "ref": "ar-08@1",
+      "kind": "AR",
+      "parent": "sr-04@1",
+      "scenario": "SC-2",
+      "module": "ledger",
+      "statement": {
+        "zh-CN": "取消后同窗口可用新 ID 再预约；重复取消旧 ID 不得删除新预约。",
+        "en": "After cancellation the same window can be rebooked with a new ID; repeating the old cancellation must not remove the new entry."
+      },
+      "argument": {
+        "zh-CN": "B001 删除后同窗口可建 B002，表明取消已移出冲突集。再次 cancel(B001) 必须 NOT_FOUND 且 B002 保留，联合验证释放和不复用。",
+        "en": "After removing B001 the same window accepts B002, proving removal from the conflict set. A repeat cancel(B001) must return NOT_FOUND while B002 remains, jointly checking release and non-reuse."
+      },
+      "choice": {
+        "zh-CN": "由单调编号与有效集组合实现，无需新增另一套取消状态数据库。",
+        "en": "Combine monotonic identifiers with the active set; no second cancellation-state database is needed."
+      },
+      "code": "Calendar.cancel/book",
+      "criterion": "C-AR-08",
+      "case": "V-AR-08",
+      "record": "d-ar-08",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-09",
+      "version": 1,
+      "ref": "ar-09@1",
+      "kind": "AR",
+      "parent": "sr-05@1",
+      "scenario": "SC-3",
+      "module": "presentation",
+      "statement": {
+        "zh-CN": "日程从当前有效集按 (start,end,id) 升序生成；创建顺序不影响显示顺序。",
+        "en": "Generate the agenda from the active set sorted by (start,end,id), regardless of creation order."
+      },
+      "argument": {
+        "zh-CN": "先建 09:30—10:30 为 B001，再建 08:00—09:00 为 B002，预期顺序为 B002、B001，不能直接遍历插入顺序。",
+        "en": "Book 09:30–10:30 as B001 then 08:00–09:00 as B002: expect B002 then B001, not insertion order."
+      },
+      "choice": {
+        "zh-CN": "n≤40，O(n log n) 排序可接受；取消项自然不在输入集合中。",
+        "en": "For n≤40, O(n log n) sorting is adequate; cancelled entries are absent from the input set."
+      },
+      "code": "Calendar.agenda",
+      "criterion": "C-AR-09",
+      "case": "V-AR-09",
+      "record": "d-ar-09",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-10",
+      "version": 1,
+      "ref": "ar-10@1",
+      "kind": "AR",
+      "parent": "sr-05@1",
+      "scenario": "SC-3",
+      "module": "presentation",
+      "statement": {
+        "zh-CN": "输出标准 HH:MM、整数时长和新字典；修改确认或日程列表不得影响内部预约。",
+        "en": "Return normalized HH:MM, integer duration and fresh dictionaries; mutating confirmations or agenda lists must not affect internal bookings."
+      },
+      "argument": {
+        "zh-CN": "分钟 m 输出为 m//60 与 m%60 的两位字符串，时长=end−start。对返回值改写 00:00 或追加 ghost 后，再读取仍为原预约，证明只读边界。",
+        "en": "Render minute m using two-digit m//60 and m%60; duration=end−start. After mutating a returned time or appending ghost, rereading must return the original booking, demonstrating the read-only boundary."
+      },
+      "choice": {
+        "zh-CN": "用不可变记录和新输出对象隔离调用者，避免复制整个服务状态。",
+        "en": "Use immutable records and fresh output objects rather than copying the entire service."
+      },
+      "code": "Booking.record/Calendar.agenda",
+      "criterion": "C-AR-10",
+      "case": "V-AR-10",
+      "record": "d-ar-10",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-11",
+      "version": 1,
+      "ref": "ar-11@1",
+      "kind": "AR",
+      "parent": "sr-06@1",
+      "scenario": "SC-3",
+      "module": "metrics",
+      "statement": {
+        "zh-CN": "对当前有效集累加 end−start 得到占用分钟，空集为零；取消项不得计入。",
+        "en": "Sum end−start over the active set for occupied minutes, with zero for an empty set and no cancelled entries."
+      },
+      "argument": {
+        "zh-CN": "SR-03 保证不重叠，故可直接求和。两个 60 分钟区间之和为 120；取消其中一项后为 60，而不是把 08:00—10:30 的 150 分钟全部计入。",
+        "en": "SR-03 ensures non-overlap, allowing direct summation. Two 60-minute intervals give 120; cancel one and obtain 60, not the entire 150-minute span from 08:00 to 10:30."
+      },
+      "choice": {
+        "zh-CN": "显式依赖不重叠不变量；未来若允许重叠必须改为区间并集算法。",
+        "en": "This explicitly depends on non-overlap; supporting overlapping bookings would require an interval-union algorithm."
+      },
+      "code": "Calendar.occupied_minutes",
+      "criterion": "C-AR-11",
+      "case": "V-AR-11",
+      "record": "d-ar-11",
+      "owner": "demo-dev"
+    },
+    {
+      "id": "ar-12",
+      "version": 1,
+      "ref": "ar-12@1",
+      "kind": "AR",
+      "parent": "sr-06@1",
+      "scenario": "SC-3",
+      "module": "metrics",
+      "statement": {
+        "zh-CN": "以固定 600 分钟计算 free=600−occupied、used_slots=occupied/15、free_slots=free/15，利用率保留一位小数且不使用不适用分母。",
+        "en": "With fixed capacity 600 compute free=600−occupied, used_slots=occupied/15, free_slots=free/15 and utilization to one decimal with that denominator."
+      },
+      "argument": {
+        "zh-CN": "每格为 2.5%，故十分之一百分比单位=occupied×1000/600，是整数，不需舍入。空日为 0/600=0.0%，满日为 600/600=100.0%，120 分钟为 20.0%。",
+        "en": "Each slot contributes 2.5%, so percentage tenths=occupied×1000/600 is an exact integer. Empty is 0/600=0.0%, full is 600/600=100.0%, and 120 minutes gives 20.0%."
+      },
+      "choice": {
+        "zh-CN": "使用整数十分位，避免浮点显示误差；600 固定且非零，无空列表除零。",
+        "en": "Use integer tenths to avoid floating display error; fixed nonzero capacity avoids division by zero on an empty agenda."
+      },
+      "code": "Calendar.summary",
+      "criterion": "C-AR-12",
+      "case": "V-AR-12",
+      "record": "d-ar-12",
+      "owner": "demo-dev"
+    }
+  ]
+}

@@ -31,6 +31,10 @@ venv/
 # Local migration working note; intentionally excluded from public releases
 MIGRATION_REPORT.md
 
+# Local version roadmap; intentionally excluded from version control
+/VERSION_ROADMAP.local.md
+/.release-qa/
+
 # Editors, operating systems, and transient files
 .idea/
 .vscode/

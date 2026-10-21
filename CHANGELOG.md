@@ -4,6 +4,33 @@ This project follows Keep a Changelog conventions and uses PEP 440 package versi
 
 ## [Unreleased]
 
+## [0.5.3b1] - Unreleased
+
+- Add opt-in IR/SR/AR versioned requirements, progressive Gate checks, scoped criteria,
+  typed trace links, change-impact preview and explicit authorization.
+- Add serial increments, immutable delivery snapshots and exact-version evidence reuse.
+- Ship 18 Markdown template types in English and Chinese, pinned pack metadata,
+  multi-instance obligations, Claim/Owner-aware creation and structural lint.
+- Organize IR/SR/AR as multi-row registers with shared HTML cells and row-level
+  reference checks. Add TR1–TR4 overall document discussion drafts; preserve the
+  original template pack for existing pins.
+- Revise the four stage drafts to 0.2.0 with first-use writing sequences,
+  chapter purposes/inputs/outputs, individual IR→SR and SR→AR derivation records,
+  and combined parent-coverage arguments. Archive pack 1.1.0 and select 1.2.0.
+- Add a completed bilingual room-booking worked project with 3 IRs, 6 SRs,
+  12 ARs, stage snapshots, executable software evidence and traceability checks.
+  Its first-use findings inform stage 0.2.1/register 1.1.1 in pack 1.2.1;
+  pack 1.2.0 remains archived unchanged.
+- Bind requirement/document inputs to Review and Verify; show independent coverage
+  and requirement navigation in the read-only Dashboard.
+- Preserve legacy behavior and provide bilingual contracts and operating guidance.
+- Bind new model-enabled Runtime events to increment, base delivery baseline and
+  scope digest using Runtime 1.1; preserve legacy events and reject older tools.
+- Require immutable QA draft/review/publication records before using a template
+  pack. Support explicit, Owner-claimed replacement into new document files.
+- Exercise two complete delivery increments with B1/B2, companion stage documents,
+  IR/SR/AR registers and freshly executed software tests in both languages.
+
 ## [0.5.1b1] - Unreleased
 
 ### Added

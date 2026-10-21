@@ -142,6 +142,10 @@ def render_dashboard(
     )
     from .dashboard_files import project_file_navigation
     project_file_navigation(Path(project_root), state_data["deliverables"], bindings)
+    from .requirements_view import panel as requirement_panel
+    requirement_data, requirement_html = requirement_panel(Path(project_root), locale)
+    if requirement_data is not None:
+        state_data["requirements"] = requirement_data
     current_phase = _string(state_data["project"]["current"].get("phase"))
     available_ids = [item["id"] for item in state_data["available_tasks"]]
     blocked_ids = [
@@ -236,7 +240,7 @@ def render_dashboard(
                 diagrams={path.relative_to(staging).as_posix(): path.read_text(encoding="utf-8")
                           for path in sorted(staging.rglob("*.svg"))},
                 translator=translator,
-            ),
+            ).replace("</body>", requirement_html + "</body>"),
         )
         _atomic_write(
             staging / "matrices" / "deliverable_matrix.html",
@@ -300,6 +304,8 @@ def render_dashboard(
                 "phases": phase_files,
             },
         }
+        if requirement_data is not None:
+            manifest["requirements_sha256"] = requirement_data["input_sha256"]
         _atomic_write(staging / "manifest.json", _json_text(manifest))
         _publish_dashboard_tree(staging, output)
         return manifest

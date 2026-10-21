@@ -4,7 +4,13 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-当前预发布目标：`v0.5.1-beta`（Python 包 `0.5.1b1`）。
+当前开发目标：`v0.5.3-beta`（Python 包 `0.5.3b1`）。最新已发布版本仍为 v0.5.1-beta，后续发布须通过资格门。
+
+渐进式 IR/SR/AR、串行增量与 18 类中英文 Markdown 模板的用法见
+[需求与模板说明](docs/requirements-and-templates.zh-CN.md)。
+可运行 `ipdctl templates --type interface_spec --locale zh-CN` 查看真实模板。
+多条需求表及 TR1—TR4 总体文档讨论稿见[阶段交付件草稿](docs/stage-deliverable-drafts.zh-CN.md)。
+已填写的中英文 TR1—TR4、需求表和实际运行证据见[会议室预约器示例](docs/worked-projects/room-booking/index.zh-CN.md)。
 
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 

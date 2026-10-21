@@ -376,6 +376,9 @@ def verification_input_snapshot(
     # Framework-owned .ipd writes happen as part of verify itself.  Only
     # engineering-path dirtiness may invalidate the verification snapshot.
     repository_record["dirty"] = bool(engineering_changes)
+    if (root / ".ipd/requirements.yaml").is_file():
+        from .requirements import source_snapshot
+        file_hashes["incremental_requirements"] = _stable_value_hash(source_snapshot(root))
     return {
         "files": file_hashes,
         "active_claims": runtime.get("active_claims", {}),
@@ -1964,7 +1967,7 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
     repo = inspect_repository(paths["root"])
     from .refinement import process_fingerprint
 
-    return {
+    result = {
         "project": state["project"]["name"],
         "phase": state["project"]["phase"],
         "tr": state["project"].get("current_tr"),
@@ -2003,6 +2006,10 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         "eligibility": eligibility,
         "repository": repo.as_dict(),
     }
+    if (paths["root"] / ".ipd/requirements.yaml").is_file():
+        from .requirements import projection
+        result["requirements"] = projection(paths["root"])
+    return result
 
 
 def render_project_dashboard(project_root: str | Path) -> dict[str, Any]:
@@ -2141,6 +2148,8 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
     issue_rows = [
         {"path": issue.path, "message": issue.message} for issue in validate_state(state)
     ]
+    from .requirements import validation_issues as requirement_validation_issues
+    issue_rows.extend(requirement_validation_issues(paths["root"], state))
     eligibility = binding_eligibility(
         paths["root"], state, runtime, bindings_path=paths["bindings"]
     )
@@ -2313,6 +2322,11 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                         "message": translator.text("report.dashboard.schema_unsupported"),
                     }
                 )
+            if (paths["root"] / ".ipd/requirements.yaml").is_file():
+                from .requirements import source_snapshot
+                if manifest.get("requirements_sha256") != _stable_value_hash(source_snapshot(paths["root"])):
+                    issue_rows.append({"path": "$.dashboard", "code": "REQUIREMENTS_VIEW_STALE",
+                                       "message": "requirement Dashboard inputs changed"})
             expected_contract = {
                 "project": state.get("project", {}).get("name"),
                 "source_revision": state.get("revision"),
@@ -2662,6 +2676,18 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
         "reconciliation": reconciliation,
         "eligibility": eligibility,
     }
+    if (paths["root"] / ".ipd/requirements.yaml").is_file():
+        from .requirements import projection, read_registry, readiness
+        requirement_registry = read_registry(paths["root"])
+        if requirement_registry is not None:
+            pending = readiness(paths["root"], requirement_registry, state, stage="TR4", all_documents=True) if requirement_registry["active_increment"] else []
+            report["requirements"] = {
+                "scope": "structural_and_governed_facts",
+                "increment": requirement_registry["active_increment"],
+                "acceptance": "not_ready" if pending else "ready_for_human_decision" if requirement_registry["active_increment"] else "no_active_increment",
+                "diagnostics": pending,
+                "coverage": projection(paths["root"])["coverage"],
+            }
     write_state(paths["verify_report"], report)
     verify_details: dict[str, Any] = {
         "status": report["status"],

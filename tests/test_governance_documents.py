@@ -14,6 +14,7 @@ from ipdctl.governance_documents import (
     render_governance_document,
 )
 from ipdctl.state import load_state, write_state
+from ipdctl.version import PUBLIC_VERSION
 
 
 def facts() -> tuple[dict, dict]:
@@ -88,7 +89,7 @@ class GovernanceDocumentTests(unittest.TestCase):
         self.assertEqual(process, before_process)
         self.assertEqual(state, before_state)
         for text in (first, chinese):
-            self.assertIn('framework_version: 0.5.1-beta', text)
+            self.assertIn(f'framework_version: {PUBLIC_VERSION}', text)
             self.assertIn('gate.tr.concept', text)
             self.assertIn('planned', text)
             self.assertIn('concept.problem_definition', text)
@@ -117,7 +118,7 @@ class GovernanceDocumentTests(unittest.TestCase):
         canonical = render_governance_document(process, state)
         cases = {
             "governance_document_version_stale": canonical.replace(
-                "framework_version: 0.5.1-beta",
+                f"framework_version: {PUBLIC_VERSION}",
                 "framework_version: 0.5.0-beta",
                 1,
             ),
@@ -259,7 +260,7 @@ class GovernanceDocumentTests(unittest.TestCase):
             governance = root / ".ipd" / "dashboard" / "governance.md"
             governance.write_text(
                 governance.read_text(encoding="utf-8").replace(
-                    "framework_version: 0.5.1-beta",
+                    f"framework_version: {PUBLIC_VERSION}",
                     "framework_version: 0.5.0-beta",
                     1,
                 ),

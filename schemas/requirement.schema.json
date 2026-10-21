@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "IR",
+        "SR",
+        "AR"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "priority": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parent": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "derived": {
+      "type": "boolean"
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "criterion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "test",
+              "analysis",
+              "inspection",
+              "demonstration"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "criterion",
+          "method"
+        ]
+      },
+      "minItems": 1
+    },
+    "maturity": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "defined"
+      ]
+    },
+    "decomposition": {
+      "type": "string",
+      "enum": [
+        "open",
+        "complete"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "kind",
+    "title",
+    "statement",
+    "source",
+    "rationale",
+    "priority",
+    "owner",
+    "module",
+    "parent",
+    "derived",
+    "acceptance",
+    "maturity",
+    "decomposition"
+  ]
+}

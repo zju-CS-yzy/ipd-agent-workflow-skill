@@ -1,1 +1,5 @@
 recursive-include scripts *.py
+recursive-include ipdctl/document_templates *.json *.md
+recursive-include docs/worked-projects/room-booking *.md *.json *.py
+recursive-include docs/qualification *.json
+exclude VERSION_ROADMAP.local.md MIGRATION_REPORT.md

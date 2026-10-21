@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-21",
+  "version": "0.5.3b1",
+  "closed_findings": [
+    "R1",
+    "R4"
+  ],
+  "publication_ready": false,
+  "remaining_functional_contracts": [
+    "R2",
+    "R3"
+  ],
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "PyYAML": "6.0.3"
+  },
+  "source_sha256": {
+    "ipdctl/requirements.py": "4c70a6e3330a2f53f2e3c8ac4284baffcd0fe15582081a783b83ddf2a346dfcf",
+    "ipdctl/requirement_verification.py": "5e5bc5444814f212eb093707aeb090cfd4abca442010f5ac2b1015263888d268",
+    "ipdctl/requirement_contract.py": "0d2ab97c3b93ec6488d5eb9a00fe76f7ee4a51d13c291d9983575ffe51ab9c2c",
+    "ipdctl/documents.py": "b6a3a381541ad09bcbf057f826292097d53a17be56f8efad976a1c4ec0422bd4",
+    "ipdctl/document_tables.py": "579f23762cc9815c49d17ea9012701edff2de2be743805cf5ff7a0159a770556",
+    "ipdctl/requirements_view.py": "89a85c0fbf2c8f6157f1d8f98b139178fd528d650dec13e1d168780d9f73c2bf",
+    "ipdctl/requirements_messages.py": "071765cacc03b38cdf43d24e6cc38a6f0fe2f2db6878bfd782f1d884bf21d3e6",
+    "schemas/requirements.schema.json": "86579ddca289a33f3edce92daef0e7c50c2e4f76b77df6d468bc1a0386cea130",
+    "scripts/verify_room_booking_walkthrough.py": "7ae0ce42643493d3d3a19b0f309156927693096463494f7ca1e3a08f06433900",
+    "tests/test_requirement_verification.py": "283fabb8b865f59dc5921958aa70f5fcc474f8a02869c763dfbec6e36cde85ee",
+    "tests/test_requirements.py": "6c3806efab5ba4c60a583a2621c740c7a997c9846ab1be1f5505eada444f899b",
+    "tests/test_document_tables.py": "902971453d2f9bb345218a385d94916bd7814dcebedd335c55299eb2f908d083"
+  },
+  "regression": {
+    "tests": 339,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 212.391,
+    "excluded_long_scenarios": [
+      "test_all_v05_capabilities_complete_one_refined_lifecycle",
+      "test_realistic_project_completes_without_missing_outputs_or_severe_issues",
+      "test_two_governed_increments_preserve_baselines_partial_ir_and_exact_reuse",
+      "test_two_round_public_cli_simulation"
+    ],
+    "source_unchanged_during_run": true,
+    "source_sha256": {
+      "ipdctl/requirements.py": "4c70a6e3330a2f53f2e3c8ac4284baffcd0fe15582081a783b83ddf2a346dfcf",
+      "ipdctl/requirement_verification.py": "5e5bc5444814f212eb093707aeb090cfd4abca442010f5ac2b1015263888d268",
+      "ipdctl/requirement_contract.py": "0d2ab97c3b93ec6488d5eb9a00fe76f7ee4a51d13c291d9983575ffe51ab9c2c",
+      "ipdctl/documents.py": "b6a3a381541ad09bcbf057f826292097d53a17be56f8efad976a1c4ec0422bd4",
+      "ipdctl/document_tables.py": "579f23762cc9815c49d17ea9012701edff2de2be743805cf5ff7a0159a770556",
+      "ipdctl/requirements_view.py": "89a85c0fbf2c8f6157f1d8f98b139178fd528d650dec13e1d168780d9f73c2bf"
+    }
+  },
+  "governed_increment": {
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 280.032
+  },
+  "exact_replay": {
+    "tests": 1,
+    "failures": 0,
+    "errors": 0
+  },
+  "unique_passed_tests": 341,
+  "discovered_tests": 344,
+  "not_rerun_long_simulations": [
+    "full lifecycle",
+    "Capability lifecycle",
+    "progressive refinement"
+  ],
+  "legacy_model_adoption": {
+    "status": "passed",
+    "source_tag": "v0.5.1-beta",
+    "preview_writes": 0,
+    "history_preserved": true,
+    "revision_delta": 1,
+    "locale": "zh-CN"
+  },
+  "worked_project": {
+    "documents": 16,
+    "requirements": {
+      "IR": 3,
+      "SR": 6,
+      "AR": 12
+    },
+    "local_links": 306,
+    "software_cases": 21,
+    "fresh_execution": true,
+    "source_file_writes": 0,
+    "governance_approval": "not_granted"
+  },
+  "package": {
+    "wheel_sha256": "2fd94d6bd1b102909627c1fe3441e6f6c3c447cc89fad84e81c5f4917751c8ad",
+    "module_and_schema": "passed",
+    "installed_smoke": "installed wheel bilingual reference checks passed",
+    "unchanged_template_assets_and_manifests": 140,
+    "scope": "local fix candidate; not final publication artifacts"
+  },
+  "behavioral_checks": [
+    "old and preassessment results rejected",
+    "fresh current-context result releases reverify; failed result does not",
+    "reassessment starts another epoch",
+    "later requirement version does not discard earlier reverify",
+    "future out-of-scope versions do not block current work",
+    "requirement, instance, Deliverable and Gate assessment targets covered",
+    "document and template inputs invalidate current result context",
+    "matching historical reuse allowed; new reverify rejects old baseline reuse",
+    "exact request replay is a no-op, not fresh proof",
+    "legacy unbound proof remains readable but unknown",
+    "current Dashboard counts stale results as unknown",
+    "bilingual parent references checked for existence, level and exact canonical relationship",
+    "shared parent cells checked row by row",
+    "explicit derived requirements accepted with reason",
+    "missing canonical context or controlled parent columns rejected",
+    "negative gate checks and rejected reuse leave project facts unchanged",
+    "frozen baseline bytes unchanged"
+  ],
+  "compatibility": [
+    "registry 1.0 reads optional context_sha256 and assessment_revision",
+    "new result context generated internally; caller stamping rejected",
+    "old template assets and frozen baselines retained byte for byte",
+    "active private/legacy formats without parent columns need a controlled conversion path with R3"
+  ],
+  "scope": "Local targeted fix qualification; not full final-source release qualification"
+}

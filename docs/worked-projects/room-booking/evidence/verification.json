@@ -1,0 +1,615 @@
+{
+  "schema": "worked-project-evidence/1",
+  "kind": "synthetic-software-execution",
+  "exercise_date": "2026-10-20",
+  "executed_at_utc": "2026-10-20T15:06:45+00:00",
+  "environment": {
+    "python": "3.12.14",
+    "os": "Windows"
+  },
+  "source_sha256": {
+    "booking.py": "4c4dabae0c4b3e6028b8aecf83a04afd1efbc2badd39e8adfd4cf6609ef3afc4",
+    "verify_demo.py": "b04348d1165fb4f19147ad8701e0d12da4cffed6cb6b595b5e47173af35dea32"
+  },
+  "human_acceptance": "not_performed",
+  "governance_approval": "not_granted",
+  "cases": [
+    {
+      "id": "V-AR-01",
+      "requirement": "ar-01@1",
+      "level": "AR",
+      "criterion": "C-AR-01",
+      "expected": [
+        480,
+        555,
+        1080,
+        "INVALID_FORMAT",
+        "INVALID_TIME"
+      ],
+      "actual": [
+        480,
+        555,
+        1080,
+        "INVALID_FORMAT",
+        "INVALID_TIME"
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-02",
+      "requirement": "ar-02@1",
+      "level": "AR",
+      "criterion": "C-AR-02",
+      "expected": [
+        [
+          1065,
+          1080
+        ],
+        "INVALID_WINDOW",
+        "INVALID_WINDOW",
+        "INVALID_GRID",
+        "INVALID_WINDOW"
+      ],
+      "actual": [
+        [
+          1065,
+          1080
+        ],
+        "INVALID_WINDOW",
+        "INVALID_WINDOW",
+        "INVALID_GRID",
+        "INVALID_WINDOW"
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-03",
+      "requirement": "ar-03@1",
+      "level": "AR",
+      "criterion": "C-AR-03",
+      "expected": [
+        "B001",
+        "B002"
+      ],
+      "actual": [
+        "B001",
+        "B002"
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-04",
+      "requirement": "ar-04@1",
+      "level": "AR",
+      "criterion": "C-AR-04",
+      "expected": {
+        "confirmation": {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "agenda": [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      },
+      "actual": {
+        "confirmation": {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "agenda": [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      },
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-05",
+      "requirement": "ar-05@1",
+      "level": "AR",
+      "criterion": "C-AR-05",
+      "expected": [
+        false,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      "actual": [
+        false,
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-06",
+      "requirement": "ar-06@1",
+      "level": "AR",
+      "criterion": "C-AR-06",
+      "expected": [
+        "CONFLICT",
+        true,
+        "B002"
+      ],
+      "actual": [
+        "CONFLICT",
+        true,
+        "B002"
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-07",
+      "requirement": "ar-07@1",
+      "level": "AR",
+      "criterion": "C-AR-07",
+      "expected": [
+        {
+          "id": "B001",
+          "cancelled": true
+        },
+        [],
+        "NOT_FOUND",
+        []
+      ],
+      "actual": [
+        {
+          "id": "B001",
+          "cancelled": true
+        },
+        [],
+        "NOT_FOUND",
+        []
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-08",
+      "requirement": "ar-08@1",
+      "level": "AR",
+      "criterion": "C-AR-08",
+      "expected": [
+        "B002",
+        "NOT_FOUND",
+        [
+          "B002"
+        ]
+      ],
+      "actual": [
+        "B002",
+        "NOT_FOUND",
+        [
+          "B002"
+        ]
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-09",
+      "requirement": "ar-09@1",
+      "level": "AR",
+      "criterion": "C-AR-09",
+      "expected": [
+        "B002",
+        "B001"
+      ],
+      "actual": [
+        "B002",
+        "B001"
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-10",
+      "requirement": "ar-10@1",
+      "level": "AR",
+      "criterion": "C-AR-10",
+      "expected": [
+        {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        }
+      ],
+      "actual": [
+        {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-11",
+      "requirement": "ar-11@1",
+      "level": "AR",
+      "criterion": "C-AR-11",
+      "expected": 120,
+      "actual": 120,
+      "result": "passed"
+    },
+    {
+      "id": "V-AR-12",
+      "requirement": "ar-12@1",
+      "level": "AR",
+      "criterion": "C-AR-12",
+      "expected": [
+        {
+          "occupied_min": 0,
+          "free_min": 600,
+          "used_slots": 0,
+          "free_slots": 40,
+          "utilization_percent": "0.0"
+        },
+        {
+          "occupied_min": 600,
+          "free_min": 0,
+          "used_slots": 40,
+          "free_slots": 0,
+          "utilization_percent": "100.0"
+        }
+      ],
+      "actual": [
+        {
+          "occupied_min": 0,
+          "free_min": 600,
+          "used_slots": 0,
+          "free_slots": 40,
+          "utilization_percent": "0.0"
+        },
+        {
+          "occupied_min": 600,
+          "free_min": 0,
+          "used_slots": 40,
+          "free_slots": 0,
+          "utilization_percent": "100.0"
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-01",
+      "requirement": "sr-01@1",
+      "level": "SR",
+      "criterion": "C-SR-01",
+      "expected": [
+        "INVALID_GRID",
+        {
+          "id": "B001",
+          "start": "17:45",
+          "end": "18:00",
+          "duration_min": 15
+        }
+      ],
+      "actual": [
+        "INVALID_GRID",
+        {
+          "id": "B001",
+          "start": "17:45",
+          "end": "18:00",
+          "duration_min": 15
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-02",
+      "requirement": "sr-02@1",
+      "level": "SR",
+      "criterion": "C-SR-02",
+      "expected": {
+        "confirmation": {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "agenda": [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      },
+      "actual": {
+        "confirmation": {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "agenda": [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      },
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-03",
+      "requirement": "sr-03@1",
+      "level": "SR",
+      "criterion": "C-SR-03",
+      "expected": [
+        "CONFLICT",
+        [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          },
+          {
+            "id": "B002",
+            "start": "09:00",
+            "end": "09:30",
+            "duration_min": 30
+          }
+        ]
+      ],
+      "actual": [
+        "CONFLICT",
+        [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          },
+          {
+            "id": "B002",
+            "start": "09:00",
+            "end": "09:30",
+            "duration_min": 30
+          }
+        ]
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-04",
+      "requirement": "sr-04@1",
+      "level": "SR",
+      "criterion": "C-SR-04",
+      "expected": [
+        "B002",
+        "NOT_FOUND",
+        [
+          "B002"
+        ]
+      ],
+      "actual": [
+        "B002",
+        "NOT_FOUND",
+        [
+          "B002"
+        ]
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-05",
+      "requirement": "sr-05@1",
+      "level": "SR",
+      "criterion": "C-SR-05",
+      "expected": [
+        {
+          "id": "B002",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        {
+          "id": "B001",
+          "start": "09:30",
+          "end": "10:30",
+          "duration_min": 60
+        }
+      ],
+      "actual": [
+        {
+          "id": "B002",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        {
+          "id": "B001",
+          "start": "09:30",
+          "end": "10:30",
+          "duration_min": 60
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-SR-06",
+      "requirement": "sr-06@1",
+      "level": "SR",
+      "criterion": "C-SR-06",
+      "expected": [
+        {
+          "occupied_min": 120,
+          "free_min": 480,
+          "used_slots": 8,
+          "free_slots": 32,
+          "utilization_percent": "20.0"
+        },
+        {
+          "occupied_min": 60,
+          "free_min": 540,
+          "used_slots": 4,
+          "free_slots": 36,
+          "utilization_percent": "10.0"
+        }
+      ],
+      "actual": [
+        {
+          "occupied_min": 120,
+          "free_min": 480,
+          "used_slots": 8,
+          "free_slots": 32,
+          "utilization_percent": "20.0"
+        },
+        {
+          "occupied_min": 60,
+          "free_min": 540,
+          "used_slots": 4,
+          "free_slots": 36,
+          "utilization_percent": "10.0"
+        }
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-IR-01",
+      "requirement": "ir-01@1",
+      "level": "IR",
+      "criterion": "C-IR-01",
+      "expected": [
+        {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "INVALID_GRID",
+        [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      ],
+      "actual": [
+        {
+          "id": "B001",
+          "start": "08:00",
+          "end": "09:00",
+          "duration_min": 60
+        },
+        "INVALID_GRID",
+        [
+          {
+            "id": "B001",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          }
+        ]
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-IR-02",
+      "requirement": "ir-02@1",
+      "level": "IR",
+      "criterion": "C-IR-02",
+      "expected": [
+        "B002",
+        "CONFLICT",
+        {
+          "id": "B001",
+          "cancelled": true
+        },
+        "B003",
+        2
+      ],
+      "actual": [
+        "B002",
+        "CONFLICT",
+        {
+          "id": "B001",
+          "cancelled": true
+        },
+        "B003",
+        2
+      ],
+      "result": "passed"
+    },
+    {
+      "id": "V-IR-03",
+      "requirement": "ir-03@1",
+      "level": "IR",
+      "criterion": "C-IR-03",
+      "expected": {
+        "agenda": [
+          {
+            "id": "B002",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          },
+          {
+            "id": "B001",
+            "start": "09:30",
+            "end": "10:30",
+            "duration_min": 60
+          }
+        ],
+        "summary": {
+          "occupied_min": 120,
+          "free_min": 480,
+          "used_slots": 8,
+          "free_slots": 32,
+          "utilization_percent": "20.0"
+        }
+      },
+      "actual": {
+        "agenda": [
+          {
+            "id": "B002",
+            "start": "08:00",
+            "end": "09:00",
+            "duration_min": 60
+          },
+          {
+            "id": "B001",
+            "start": "09:30",
+            "end": "10:30",
+            "duration_min": 60
+          }
+        ],
+        "summary": {
+          "occupied_min": 120,
+          "free_min": 480,
+          "used_slots": 8,
+          "free_slots": 32,
+          "utilization_percent": "20.0"
+        }
+      },
+      "result": "passed"
+    }
+  ],
+  "passed": 21,
+  "total": 21
+}
