@@ -4,7 +4,7 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-Current development target: `v0.5.3-beta` (Python package `0.5.3b1`). The latest published release remains v0.5.1-beta until publication gates pass.
+This version: `v0.5.3-beta` (Python package `0.5.3b1`). Download availability is listed in [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases), subject to the [qualification gates](RELEASE_CHECKLIST.md). This cycle has no private Golden fixture; evidence is limited to public synthetic projects and does not establish real-project acceptance.
 
 For progressive IR/SR/AR requirements, serial increments and the 18 bilingual
 Markdown template types, see [requirements and templates](docs/requirements-and-templates.md).

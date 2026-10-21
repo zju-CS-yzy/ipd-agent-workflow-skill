@@ -2,6 +2,17 @@
 
 Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.3b1` and public label `v0.5.3-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
 
+## v0.5.3-beta final candidate scope — 2026-10-22
+
+- [x] GitHub HTTPS login is available. Candidate source and qualification records are pushed in [PR #12](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12).
+- [x] The project owner confirmed that no authorized private Golden fixture is currently available. Private Golden and real-project acceptance remain **unexecuted**, rather than passed. This beta is qualified through public synthetic fixtures; planned private Golden coverage and the remaining P1/v0.5.2 backlog are retained as outstanding work. TR1–TR4 overview documents remain drafts and stage obligations need explicit project configuration.
+- [x] Local source, failure/recovery, two-increment, historical-upgrade, package and browser evidence is retained in `docs/qualification/`. Release preparation changes documentation only; the 200 frozen production inputs and all 140 template assets are unchanged.
+- [ ] Require the final candidate's complete Windows/Linux × Python 3.10/3.14 × English/Chinese CI, packaging, historical upgrades, browser job and `governance-gate` to pass. [PR checks](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12/checks) provide the current commit's results. Superseded or cancelled runs are not passes.
+- [ ] Integrate the qualified candidate, create the release Tag on the accepted commit, and require that Tag's own test run to succeed before publication. The release workflow enforces this separate Tag gate.
+- [ ] Verify the four published assets, GitHub digests and `SHA256SUMS.txt`, then install the public downloads in isolated projects. Record publication separately without moving the release Tag.
+
+This is the prepublication scope record. Earlier dated sections are historical observations; their unavailable-credential and missing-fixture statements describe those earlier attempts.
+
 ## v0.5.3-beta candidate commit and real SVN — 2026-10-21
 
 - [x] Commit the candidate as `f2c532a5c593a3a33d6c6b7d082c884e707d0be7`; exclude the local roadmap and qualification workspaces. The remote `main` still matches the candidate's base, `7def7636efdf5473a0a29abc56df70d5d39cf421`.

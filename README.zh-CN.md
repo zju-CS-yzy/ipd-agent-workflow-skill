@@ -4,7 +4,7 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-当前开发目标：`v0.5.3-beta`（Python 包 `0.5.3b1`）。最新已发布版本仍为 v0.5.1-beta，后续发布须通过资格门。
+本版：`v0.5.3-beta`（Python 包 `0.5.3b1`）。可下载版本以 [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases) 为准，发布须通过 [资格门](RELEASE_CHECKLIST.md)。本轮无可用私有 Golden，资格证据限定为公开合成夹具，真实项目验收仍待开展。
 
 渐进式 IR/SR/AR、串行增量与 18 类中英文 Markdown 模板的用法见
 [需求与模板说明](docs/requirements-and-templates.zh-CN.md)。

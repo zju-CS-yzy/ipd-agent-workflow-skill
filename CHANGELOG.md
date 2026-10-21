@@ -1,10 +1,10 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.1-beta` maps to package version `0.5.1b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.3-beta` maps to package version `0.5.3b1`.
 
 ## [Unreleased]
 
-## [0.5.3b1] - Unreleased
+## [0.5.3b1] - 2026-10-22
 
 - Add opt-in IR/SR/AR versioned requirements, progressive Gate checks, scoped criteria,
   typed trace links, change-impact preview and explicit authorization.
@@ -30,6 +30,11 @@ This project follows Keep a Changelog conventions and uses PEP 440 package versi
   pack. Support explicit, Owner-claimed replacement into new document files.
 - Exercise two complete delivery increments with B1/B2, companion stage documents,
   IR/SR/AR registers and freshly executed software tests in both languages.
+- Qualify read-only adapters with real isolated SVN repositories and two working
+  copies in both languages; include the check in the OS/Python/locale CI matrix.
+- Limit this beta's qualification evidence to public synthetic fixtures. No
+  authorized private Golden project was available this cycle; real-project
+  acceptance and the remaining P1/v0.5.2 backlog are not claimed complete.
 
 ## [0.5.1b1] - Unreleased
 

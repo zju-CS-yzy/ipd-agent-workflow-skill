@@ -1,6 +1,6 @@
 # Progressive requirements, increments and Markdown templates
 
-The v0.5.3-beta development target adds an explicit opt-in IR/SR/AR registry. Existing projects keep their current behavior. Release qualification is recorded separately in RELEASE_CHECKLIST.md.
+The v0.5.3-beta version adds an explicit opt-in IR/SR/AR registry. Existing projects keep their current behavior. Release qualification is recorded separately in RELEASE_CHECKLIST.md; this cycle uses public synthetic fixtures because no private Golden project was available.
 
 ## Inspect the starter templates
 

@@ -1,5 +1,13 @@
 # v0.5.3-beta 发布就绪核对
 
+## 最终候选范围与公开 CI（2026-10-22）
+
+GitHub HTTPS 登录已完成，候选分支已推送并建立 [PR #12](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12)。本轮发布准备只调整文档，200 份冻结生产输入及全部 140 份模板资产不变。最终提交仍须完整通过 [PR 检查](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12/checks)；过期或取消的运行不计为通过。
+
+项目所有者已明确本轮**没有可用的私有 Golden 项目**。因此私有 Golden 和真实项目验收标为未执行，本次 beta 资格范围为公开合成夹具；不将合成数据改称真实 Golden，也不将 v0.5.2 资格待办或 P1 功能自动标为完成。发布后的新项目测试用于进一步验证实际需求、迭代体验和模板可用性。
+
+发布流程仍要求：最终候选跨平台矩阵、打包、历史升级、浏览器及汇总门通过；集成后的发布 Tag 自身测试通过；随后核对公开下载摘要和隔离安装。此处为发布前记录，公开发布状态以 [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases) 及后续发布记录为准。以下各节保留早期候选的历史证据。
+
 ## 候选源码提交与 SVN 补充验证（2026-10-21）
 
 候选源码已提交为 `f2c532a5c593a3a33d6c6b7d082c884e707d0be7`。公开 GitHub API 确认远端 `main` 仍为其基底 `7def7636efdf5473a0a29abc56df70d5d39cf421`。本地规划和测试项目继续被 Git 忽略。
