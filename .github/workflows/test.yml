@@ -28,6 +28,24 @@ jobs:
         run: python -B scripts/release_check.py .
       - name: Install package
         run: python -m pip install .
+      - name: Install isolated SVN test tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y subversion
+      - name: Load portable SVN test tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'subversion.zip'
+          $tools = Join-Path $env:RUNNER_TEMP 'subversion'
+          Invoke-WebRequest 'https://www.visualsvn.com/files/Apache-Subversion-1.15.0-x64.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '98BB798DD6C70CC875B9BDACD600594351CF88F0A39A831A5055DF061C871BB5') { throw 'SVN archive checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $tools
+          if ((Get-AuthenticodeSignature (Join-Path $tools 'bin/svn.exe')).Status -ne 'Valid') { throw 'SVN signature is invalid' }
+          Join-Path $tools 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Qualify real read-only SVN adapters
+        run: python -B scripts/verify_svn_repository.py --locale "${{ matrix.locale }}" --output "${{ runner.temp }}/svn-qualification.json"
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests

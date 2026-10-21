@@ -2,6 +2,17 @@
 
 Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.3b1` and public label `v0.5.3-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
 
+## v0.5.3-beta candidate commit and real SVN — 2026-10-21
+
+- [x] Commit the candidate as `f2c532a5c593a3a33d6c6b7d082c884e707d0be7`; exclude the local roadmap and qualification workspaces. The remote `main` still matches the candidate's base, `7def7636efdf5473a0a29abc56df70d5d39cf421`.
+- [x] Real SVN 1.15.0, both locales, two working copies per local repository: reproduce accepted facts, reject unaccepted governance bytes, map Unicode/space/`@` paths, classify unbound changes, and retain repository/working-copy bytes during every adapter operation. Each locale recorded 77 read commands, including 32 revision-pinned `cat` calls. This covers local `file://`, not remote authentication, mixed-revision detection or team writes.
+- [x] Add the isolated SVN check to the configured OS/Python/locale CI matrix and the release workflow; require it in release-tree validation. Eight supplementary release-check/governance-document tests pass. All 200 previously frozen production files remain unchanged.
+- [ ] Push the candidate and observe successful accepted-commit Windows/Linux, Python 3.10/3.14 CI. SSH host trust and HTTPS credentials are unavailable on this host; user login/configuration is pending.
+- [ ] Run the authorized private Golden in independent copies once its local path is available; record actual applicability before publication.
+- [ ] Close remaining applicable qualification gates before tagging or publishing. No release tag or public release has been created.
+
+See [post-commit evidence](docs/qualification/v0.5.3-beta-post-commit.json). Earlier candidate and audit sections below are historical snapshots.
+
 ## v0.5.3-beta R2/R3 candidate qualification — 2026-10-21
 
 R2/R3 implementations, final-source workflows, package installation and browser checks passed locally. See [qualification evidence](docs/qualification/v0.5.3-beta-release-candidate.json) and the [scope report](docs/release-readiness-v0.5.3-beta.zh-CN.md). This qualifies a candidate for commit and CI; it does not close unexecuted publication gates. This is an uncommitted local candidate; no tag, push or publication has occurred. Earlier sections below describe earlier source and are retained as history.

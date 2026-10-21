@@ -46,6 +46,7 @@ REQUIRED_FILES = (
     "schemas/requirements.schema.json",
     "schemas/template_publication.schema.json",
     "scripts/verify_local_golden.py",
+    "scripts/verify_svn_repository.py",
     "scripts/verify_dashboard_browser.py",
     "ipdctl/dashboard_files.py",
     "scripts/simulate_capability_lifecycle.py",
@@ -300,6 +301,16 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             ".github/workflows/release.yml",
             r"python -B scripts/verify_v050_upgrade\.py",
             "release workflow must qualify the direct v0.5.0 in-place upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"python -B scripts/verify_svn_repository\.py",
+            "test workflow must qualify the real isolated SVN adapter",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"python -B scripts/verify_svn_repository\.py --locale en.*?python -B scripts/verify_svn_repository\.py --locale zh-CN",
+            "release workflow must qualify the real SVN adapter in both locales",
         ),
         (
             ".github/workflows/release.yml",
