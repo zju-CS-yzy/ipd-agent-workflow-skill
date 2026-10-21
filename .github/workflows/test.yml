@@ -10,14 +10,17 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.14"]
         locale: ["en", "zh-CN"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -25,12 +28,36 @@ jobs:
         run: python -B scripts/release_check.py .
       - name: Install package
         run: python -m pip install .
+      - name: Install isolated SVN test tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y subversion
+      - name: Load portable SVN test tools (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'subversion.zip'
+          $tools = Join-Path $env:RUNNER_TEMP 'subversion'
+          Invoke-WebRequest 'https://www.visualsvn.com/files/Apache-Subversion-1.15.0-x64.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '98BB798DD6C70CC875B9BDACD600594351CF88F0A39A831A5055DF061C871BB5') { throw 'SVN archive checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $tools
+          if ((Get-AuthenticodeSignature (Join-Path $tools 'bin/svn.exe')).Status -ne 'Valid') { throw 'SVN signature is invalid' }
+          Join-Path $tools 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Qualify real read-only SVN adapters
+        run: python -B scripts/verify_svn_repository.py --locale "${{ matrix.locale }}" --output "${{ runner.temp }}/svn-qualification.json"
+      - name: Check filled bilingual stage templates
+        run: python -B scripts/verify_room_booking_walkthrough.py --execute
+      - name: Qualify explicit v0.5.1 model adoption
+        run: python -B scripts/verify_v051_upgrade.py
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
         env:
           IPD_TEST_LOCALE: ${{ matrix.locale }}
         run: python -B -m unittest discover -s tests -v
+      - name: Qualify two complete governed increments
+        run: python -B scripts/simulate_incremental_development.py --locale "${{ matrix.locale }}"
       - name: Smoke-test lifecycle
         shell: bash
         run: |
@@ -58,6 +85,9 @@ jobs:
           wheel="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$RUNNER_TEMP/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
+          python -m zipfile -l "$wheel" | grep 'ipdctl/document_templates/en/interface_spec.md'
+          python -m zipfile -l "$wheel" | grep 'ipdctl/document_templates/zh-CN/interface_spec.md'
+          python -m zipfile -l "$wheel" | grep 'schemas/requirements.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/process_extensions.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/refinement_plan.schema.json'
@@ -67,6 +97,9 @@ jobs:
           python -m zipfile -l "$wheel" | grep 'policies/capabilities/release_and_lifecycle_assurance.yaml'
           python -m zipfile -l "$wheel" | grep 'templates/project/.ipd/process_extensions.yaml'
           tar -tzf "$sdist" | grep '/ipdctl/messages.yaml$'
+          tar -tzf "$sdist" | grep '/ipdctl/document_templates/en/interface_spec.md$'
+          tar -tzf "$sdist" | grep '/ipdctl/document_templates/zh-CN/interface_spec.md$'
+          tar -tzf "$sdist" | grep '/scripts/verify_v051_upgrade.py$'
           tar -tzf "$sdist" | grep '/schemas/capability_policy.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/process_extensions.schema.json$'
           tar -tzf "$sdist" | grep '/schemas/refinement_plan.schema.json$'

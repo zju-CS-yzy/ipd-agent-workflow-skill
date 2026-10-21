@@ -256,3 +256,24 @@ Dashboard text use `.ipd/task_profile.yaml` at `presentation.locale`, with
 supported values `en` and `zh-CN`. A missing field defaults to `en`; changing
 the locale changes presentation only and requires `refresh` followed by
 `verify`.
+
+## Model-enabled increments (Runtime 1.1)
+
+Explicit requirement-model adoption upgrades only the active Runtime contract
+from `1.0` to `1.1`. New events carry `increment_context` with `increment`,
+`base_baseline` and `scope_sha256`. The canonical increment and immutable delivery
+snapshot retain the complete scope. `increment_context_start` marks the event
+index from which context is mandatory. Earlier events remain unchanged.
+
+This applies to Claim/Close, Review/decision, phase advancement, Refresh/Verify,
+`lifecycle_complete` and requirement operations. Baseline acceptance captures the
+accepted increment before clearing it. `begin` starts a fresh active Runtime
+bound to the preceding delivery baseline; the frozen earlier Runtime remains
+resolvable. Product retirement is a separate authorized event.
+
+Older tools reject Runtime 1.1. Do not edit the schema version to bypass that
+boundary. Projects without explicit model adoption continue using Runtime 1.0.
+Template draft/review/publication identities remain local human declarations;
+trusted repository identity mapping is outside this contract. See the
+[English operating guide](docs/requirements-and-templates.md) and
+[中文使用说明](docs/requirements-and-templates.zh-CN.md).

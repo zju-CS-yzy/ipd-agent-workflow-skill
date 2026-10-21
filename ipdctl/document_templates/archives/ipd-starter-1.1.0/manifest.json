@@ -1,0 +1,1075 @@
+{
+  "schema_version": "1.0",
+  "id": "ipd-starter",
+  "version": "1.1.0",
+  "contract": "0.5.3",
+  "layer": "core",
+  "templates": [
+    {
+      "document_type": "ir_spec",
+      "id": "ipd-starter.ir_spec",
+      "version": "1.1.0",
+      "locale": "en",
+      "path": "en/ir_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "d0968ddfe3cdd1c72d886999c3216a72bce7f7dd7f869e2985a113387f7dbec0",
+      "requirement_kinds": [
+        "IR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "ir_spec",
+      "id": "ipd-starter.ir_spec",
+      "version": "1.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/ir_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "f4927c13b7461baad83f97a00d2090b4e4e450751bb2dcec53478850df9bd2a3",
+      "requirement_kinds": [
+        "IR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "sr_spec",
+      "id": "ipd-starter.sr_spec",
+      "version": "1.1.0",
+      "locale": "en",
+      "path": "en/sr_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "05368a5c5e9e55ddc66d52c5969dbef5890dd6c4ac20fe998bb55577d829d9b3",
+      "requirement_kinds": [
+        "SR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "sr_spec",
+      "id": "ipd-starter.sr_spec",
+      "version": "1.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/sr_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "778275db8a93cf68d3d9be1f0d782f4e6de4f8f14c582d9f6bc2f59713c0b1eb",
+      "requirement_kinds": [
+        "SR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "ar_spec",
+      "id": "ipd-starter.ar_spec",
+      "version": "1.1.0",
+      "locale": "en",
+      "path": "en/ar_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "ab19f372a39ed8de5063e43675724eba02b7a0e264042905f06680c485398674",
+      "requirement_kinds": [
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "ar_spec",
+      "id": "ipd-starter.ar_spec",
+      "version": "1.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/ar_spec.md",
+      "sections": [
+        "guidance",
+        "register",
+        "coverage"
+      ],
+      "sha256": "67158b8f994742889a5b65a5f8d42577486c9001db041efa3d7d898258b589e2",
+      "requirement_kinds": [
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "architecture_design",
+      "id": "ipd-starter.architecture_design",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/architecture_design.md",
+      "sections": [
+        "scope",
+        "structure",
+        "interfaces",
+        "decisions",
+        "traceability",
+        "records"
+      ],
+      "sha256": "fd4b20b85fffa91a1175d33919f81791b5a63da67255666e94f843a67f200753",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "architecture_design",
+      "id": "ipd-starter.architecture_design",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/architecture_design.md",
+      "sections": [
+        "scope",
+        "structure",
+        "interfaces",
+        "decisions",
+        "traceability",
+        "records"
+      ],
+      "sha256": "b068d9b291d0758505c3968f9cbcca0719625bf1b243266a92ae7a7d05cead3e",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "detailed_design",
+      "id": "ipd-starter.detailed_design",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/detailed_design.md",
+      "sections": [
+        "scope",
+        "design",
+        "interfaces",
+        "decisions",
+        "verification",
+        "records"
+      ],
+      "sha256": "b158065201424d6a75b42e7b2e89e4307eb10769193f454952b8a6694cddb3dd",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "detailed_design",
+      "id": "ipd-starter.detailed_design",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/detailed_design.md",
+      "sections": [
+        "scope",
+        "design",
+        "interfaces",
+        "decisions",
+        "verification",
+        "records"
+      ],
+      "sha256": "4ddfb25140ff4efda82fefd24a74fbda21368d2f4e3314d38c8c471af503462f",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "interface_spec",
+      "id": "ipd-starter.interface_spec",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/interface_spec.md",
+      "sections": [
+        "identity",
+        "contract",
+        "timing",
+        "errors",
+        "verification",
+        "records"
+      ],
+      "sha256": "3b69ef020c02bb872ae1fef9d5da83beaef7bf0a83c196adb88aaa121706f6bd",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "interface_spec",
+      "id": "ipd-starter.interface_spec",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/interface_spec.md",
+      "sections": [
+        "identity",
+        "contract",
+        "timing",
+        "errors",
+        "verification",
+        "records"
+      ],
+      "sha256": "a5e99bc19cf5a403822ec3ab38c797af2d78d18be6e5b50454e1a84885f56a41",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "implementation_record",
+      "id": "ipd-starter.implementation_record",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/implementation_record.md",
+      "sections": [
+        "inputs",
+        "changes",
+        "checks",
+        "deviations",
+        "traceability",
+        "records"
+      ],
+      "sha256": "4c01b4ea4f00c57d46bd964237956e8f5050b2045378b014c6037f5a84cf06b7",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "implementation_record",
+      "id": "ipd-starter.implementation_record",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/implementation_record.md",
+      "sections": [
+        "inputs",
+        "changes",
+        "checks",
+        "deviations",
+        "traceability",
+        "records"
+      ],
+      "sha256": "458d5fefa34cdfdfb30b434866885acb4b3b11cf1d77ef2241095e4d7f6e3f76",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_plan",
+      "id": "ipd-starter.test_plan",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/test_plan.md",
+      "sections": [
+        "scope",
+        "strategy",
+        "environment",
+        "coverage",
+        "risks",
+        "records"
+      ],
+      "sha256": "dc5335691cedbddf23bd93939efff785775ce1ca65ddd8ad5589974f960b06e4",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_plan",
+      "id": "ipd-starter.test_plan",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/test_plan.md",
+      "sections": [
+        "scope",
+        "strategy",
+        "environment",
+        "coverage",
+        "risks",
+        "records"
+      ],
+      "sha256": "99a4c9be27ebb9af1bcb3b62f259d8447a7f1b162c84550ef6762ebd286f03fa",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_procedure",
+      "id": "ipd-starter.test_procedure",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/test_procedure.md",
+      "sections": [
+        "identity",
+        "setup",
+        "steps",
+        "evidence",
+        "exceptions",
+        "records"
+      ],
+      "sha256": "2f8fe731bb754c503f929a422a1519acfad5dd718cb26875a4173a127ec0a25a",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_procedure",
+      "id": "ipd-starter.test_procedure",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/test_procedure.md",
+      "sections": [
+        "identity",
+        "setup",
+        "steps",
+        "evidence",
+        "exceptions",
+        "records"
+      ],
+      "sha256": "87684871e696b9d187ab889f9d984a17a2c8200b4d17a7f71cd1bb8b7d41b4fa",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_report",
+      "id": "ipd-starter.test_report",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/test_report.md",
+      "sections": [
+        "subject",
+        "results",
+        "defects",
+        "coverage",
+        "conclusion",
+        "records"
+      ],
+      "sha256": "686e94328eb59719d188850b08ba8b3558161f00e4b629e4fea101f866b5ef85",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "test_report",
+      "id": "ipd-starter.test_report",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/test_report.md",
+      "sections": [
+        "subject",
+        "results",
+        "defects",
+        "coverage",
+        "conclusion",
+        "records"
+      ],
+      "sha256": "aabbe33b43b82efde912ffab9ceb3748f675a0d2fea4afdd8cf72ef66bd4c4b5",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "system_verification_report",
+      "id": "ipd-starter.system_verification_report",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/system_verification_report.md",
+      "sections": [
+        "subject",
+        "results",
+        "integration",
+        "deviations",
+        "conclusion",
+        "records"
+      ],
+      "sha256": "f371d5e0920c2091edc087427642ec9b75da9fc06658c1c0036a4edc0b230d7d",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "system_verification_report",
+      "id": "ipd-starter.system_verification_report",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/system_verification_report.md",
+      "sections": [
+        "subject",
+        "results",
+        "integration",
+        "deviations",
+        "conclusion",
+        "records"
+      ],
+      "sha256": "7c8525eb0bc654070e75bb89f8a32ee5b670b01d344a99b86e55f98a89eee40c",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "acceptance_report",
+      "id": "ipd-starter.acceptance_report",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/acceptance_report.md",
+      "sections": [
+        "scope",
+        "configuration",
+        "results",
+        "issues",
+        "decision",
+        "records"
+      ],
+      "sha256": "2fe6ea401daa56a2a4a40b506c062d5f8c85a931ae07c8c9937332f27092a6a6",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "acceptance_report",
+      "id": "ipd-starter.acceptance_report",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/acceptance_report.md",
+      "sections": [
+        "scope",
+        "configuration",
+        "results",
+        "issues",
+        "decision",
+        "records"
+      ],
+      "sha256": "6d952e019ea3618ef15e537bee520e2004709a640b05ffc291861ac29574b1ee",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "change_impact",
+      "id": "ipd-starter.change_impact",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/change_impact.md",
+      "sections": [
+        "request",
+        "diff",
+        "impact",
+        "disposition",
+        "decision",
+        "records"
+      ],
+      "sha256": "a08600ee100206821ee6df9086fb1125bf1ee1846726307946a20df85414361a",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "change_impact",
+      "id": "ipd-starter.change_impact",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/change_impact.md",
+      "sections": [
+        "request",
+        "diff",
+        "impact",
+        "disposition",
+        "decision",
+        "records"
+      ],
+      "sha256": "253cfcade3fdaa49bd09c281313cd74e01ce954311a7295e82fc1b96f5532488",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "trace_review",
+      "id": "ipd-starter.trace_review",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/trace_review.md",
+      "sections": [
+        "subject",
+        "matrix",
+        "findings",
+        "coverage",
+        "decision",
+        "records"
+      ],
+      "sha256": "b1c687bb99111fbe8a9aa8cf550a9ccd74ec77d7799f84393e3b5ccd7f693787",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "trace_review",
+      "id": "ipd-starter.trace_review",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/trace_review.md",
+      "sections": [
+        "subject",
+        "matrix",
+        "findings",
+        "coverage",
+        "decision",
+        "records"
+      ],
+      "sha256": "b408f190723672227406cf0fc834293c583fca82f964cfa93ae2b4b6660e6dbf",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr1_requirements_feasibility",
+      "id": "ipd-starter.tr1_requirements_feasibility",
+      "version": "0.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/tr1_requirements_feasibility.md",
+      "sections": [
+        "baseline",
+        "context",
+        "scope",
+        "ir",
+        "feasibility",
+        "risks",
+        "deliverables",
+        "review"
+      ],
+      "sha256": "9f75b6542c17c0c26be62235e8a4cbcc7fe15c16b7f19b90b44f50775afe6f36",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr1_requirements_feasibility",
+      "id": "ipd-starter.tr1_requirements_feasibility",
+      "version": "0.1.0",
+      "locale": "en",
+      "path": "en/tr1_requirements_feasibility.md",
+      "sections": [
+        "baseline",
+        "context",
+        "scope",
+        "ir",
+        "feasibility",
+        "risks",
+        "deliverables",
+        "review"
+      ],
+      "sha256": "c2909330812de4c0f94b5e57ceb17380ff65b9742000eb776b1b29c89401c035",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr2_scenarios_allocation",
+      "id": "ipd-starter.tr2_scenarios_allocation",
+      "version": "0.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/tr2_scenarios_allocation.md",
+      "sections": [
+        "baseline",
+        "scenarios",
+        "sr",
+        "allocation",
+        "interfaces",
+        "verification",
+        "deliverables",
+        "review"
+      ],
+      "sha256": "3b0eea0eef2428c06c7e1dc266372abdcb9654e871a061a37150dfd1c857e8ac",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr2_scenarios_allocation",
+      "id": "ipd-starter.tr2_scenarios_allocation",
+      "version": "0.1.0",
+      "locale": "en",
+      "path": "en/tr2_scenarios_allocation.md",
+      "sections": [
+        "baseline",
+        "scenarios",
+        "sr",
+        "allocation",
+        "interfaces",
+        "verification",
+        "deliverables",
+        "review"
+      ],
+      "sha256": "430de02525427891a1638b5e34f3d2f791aceaa190fe43308736a2b2080aa2b2",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr3_high_level_design",
+      "id": "ipd-starter.tr3_high_level_design",
+      "version": "0.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/tr3_high_level_design.md",
+      "sections": [
+        "baseline",
+        "architecture",
+        "behavior",
+        "ar",
+        "quality",
+        "implementation_plan",
+        "verification",
+        "deliverables"
+      ],
+      "sha256": "e0b4f7b819f75996a80ce16c56fb328aa76cec3daa2252e2d2172146a9423709",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr3_high_level_design",
+      "id": "ipd-starter.tr3_high_level_design",
+      "version": "0.1.0",
+      "locale": "en",
+      "path": "en/tr3_high_level_design.md",
+      "sections": [
+        "baseline",
+        "architecture",
+        "behavior",
+        "ar",
+        "quality",
+        "implementation_plan",
+        "verification",
+        "deliverables"
+      ],
+      "sha256": "10967a83eacf5c21f4a2227c70f8192204c302de71b3e166d232aa5ba5b51513",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr4_detail_implementation_test",
+      "id": "ipd-starter.tr4_detail_implementation_test",
+      "version": "0.1.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/tr4_detail_implementation_test.md",
+      "sections": [
+        "baseline",
+        "detail",
+        "implementation",
+        "ar_verification",
+        "system_acceptance",
+        "regression",
+        "delivery",
+        "review"
+      ],
+      "sha256": "b18feb0532f08fa3c96c9f2442e066c26b987cdd36a86d11fb90afcdb813a7a2",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "tr4_detail_implementation_test",
+      "id": "ipd-starter.tr4_detail_implementation_test",
+      "version": "0.1.0",
+      "locale": "en",
+      "path": "en/tr4_detail_implementation_test.md",
+      "sections": [
+        "baseline",
+        "detail",
+        "implementation",
+        "ar_verification",
+        "system_acceptance",
+        "regression",
+        "delivery",
+        "review"
+      ],
+      "sha256": "27d88441d67f729b6f99241003afad081459ca192c6488e44286570c3f67a7ca",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ],
+      "filename_pattern": "^.+\\.md$"
+    }
+  ]
+}

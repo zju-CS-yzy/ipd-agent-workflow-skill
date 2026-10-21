@@ -98,3 +98,14 @@ relations, and report codes remain English in every locale. Framework-owned
 presentation labels may be localized; user-authored names, paths, evidence, and
 descriptions are preserved verbatim. Machine-readable JSON retains stable
 English fields and enums even when its optional display labels are localized.
+
+## Increment and template publication contracts
+
+Opt-in model adoption uses Runtime 1.1 for future events and retains legacy
+history verbatim. `increment_context_start` establishes the new-event boundary;
+`increment_context` binds the increment, preceding delivery baseline and scope
+digest. Older clients reject the new contract. Independent immutable template
+records bind a pack digest to its draft, human review and authorized publication.
+The built-in pack also requires explicit project QA adoption; no historical
+approval is inferred. Single-Owner conversion creates replacement files while
+retaining old instances. See [the operating guide](requirements-and-templates.md).

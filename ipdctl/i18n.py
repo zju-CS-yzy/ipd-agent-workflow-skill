@@ -385,6 +385,10 @@ def localized_exception_message(error: BaseException, translator: Translator) ->
     """
 
     message = str(error)
+    from .documents import RequirementError
+    if isinstance(error, RequirementError):
+        from .requirements_messages import localized
+        return localized(error, translator.locale)
     for pattern, key in _EXCEPTION_MESSAGE_RULES:
         match = pattern.fullmatch(message)
         if match is not None:

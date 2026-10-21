@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-21",
+  "version": "v0.5.3-beta",
+  "package_version": "0.5.3b1",
+  "publication_ready": false,
+  "candidate_source_commit": "f2c532a5c593a3a33d6c6b7d082c884e707d0be7",
+  "remote_main_observed": "7def7636efdf5473a0a29abc56df70d5d39cf421",
+  "production_files_unchanged_since_full_local_qualification": 200,
+  "candidate_git_blobs_match_normalized_qualified_inputs": true,
+  "qualification_inputs_sha256": {
+    "scripts/verify_svn_repository.py": "6732a6bafc8e34fe5cae7351ae8faeb848e1b9699df62d5355a667aeb00478a2",
+    "scripts/release_check.py": "45bfa5e281422f1dd17a19c8f01e667b6f143d21c11242998fda274f357e263a",
+    ".github/workflows/test.yml": "081e5ca420b0ddbc93f617c479fc390f55e6d851ad0c8af25a82840975e4c5fd",
+    ".github/workflows/release.yml": "e81f26e50c61d3dd306373b4387fa862bede2e2716f1e90c92d2b2a8d65bc596"
+  },
+  "real_svn": {
+    "distribution": "VisualSVN portable Apache Subversion 1.15.0 x64",
+    "download": "https://www.visualsvn.com/files/Apache-Subversion-1.15.0-x64.zip",
+    "archive_sha256": "98bb798dd6c70cc875b9bdacd600594351cf88f0a39a831a5055df061c871bb5",
+    "windows_authenticode": "Valid; VisualSVN Software Limited",
+    "cases": [
+      {
+        "status": "passed",
+        "locale": "en",
+        "svn_version": "1.15.0",
+        "working_copies": 2,
+        "accepted_revision": "2",
+        "accepted_facts_identical": true,
+        "unaccepted_facts_rejected": true,
+        "unicode_and_space_paths": true,
+        "readonly_bytes_unchanged": true,
+        "adapter_read_commands": 77,
+        "revision_pinned_cat_commands": 32,
+        "scope": "local file://; metadata, change mapping, read-only reconciliation and accepted-source comparison",
+        "not_qualified": [
+          "remote authentication",
+          "mixed-revision detection",
+          "team operation acceptance"
+        ]
+      },
+      {
+        "status": "passed",
+        "locale": "zh-CN",
+        "svn_version": "1.15.0",
+        "working_copies": 2,
+        "accepted_revision": "2",
+        "accepted_facts_identical": true,
+        "unaccepted_facts_rejected": true,
+        "unicode_and_space_paths": true,
+        "readonly_bytes_unchanged": true,
+        "adapter_read_commands": 77,
+        "revision_pinned_cat_commands": 32,
+        "scope": "local file://; metadata, change mapping, read-only reconciliation and accepted-source comparison",
+        "not_qualified": [
+          "remote authentication",
+          "mixed-revision detection",
+          "team operation acceptance"
+        ]
+      }
+    ]
+  },
+  "supplementary_regressions": {
+    "modules": [
+      "tests.test_release_check",
+      "tests.test_governance_documents"
+    ],
+    "passed": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "elapsed_seconds": 4.099,
+    "initial_attempt": "Invalid sandbox temporary-directory configuration produced permission errors; corrected to an isolated writable directory before the passing run."
+  },
+  "workflow_yaml_parse": "passed",
+  "clean_source_hygiene": {"status": "passed", "text_files_scanned": 346},
+  "new_script_python_3_10_grammar": "passed; not runtime qualification",
+  "push": {
+    "status": "not_pushed",
+    "ssh": "host key verification failed",
+    "https": "no noninteractive credentials available"
+  },
+  "private_golden": {
+    "status": "pending_input",
+    "fixture_available": false,
+    "counted_as_passed": false
+  },
+  "release_tag_created": false,
+  "public_release_created": false,
+  "remaining_gates": [
+    "Candidate push and accepted-commit OS/Python/locale CI",
+    "Authorized private Golden fixture availability/applicability",
+    "Remaining applicable release gates and public artifact qualification"
+  ]
+}

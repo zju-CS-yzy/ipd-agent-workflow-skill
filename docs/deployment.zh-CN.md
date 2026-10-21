@@ -2,6 +2,10 @@
 
 [English](deployment.md) | [简体中文](deployment.zh-CN.md)
 
+当前开发目标是 `v0.5.3-beta`（`0.5.3b1`）。升级门覆盖 `v0.5.0-beta`，并增加从
+`v0.5.1-beta` 项目显式启用需求模型的探测。启用前请阅读
+[需求与模板说明](requirements-and-templates.zh-CN.md)，实现与发布资格分别记录。
+
 ## 源码检出
 
 使用 Python 3.10 或更高版本。运行时依赖 PyYAML 6.x，以安全地读取和写入可读的流程状态与 Policy 文件。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify an in-place v0.5.0-beta project upgrade to v0.5.1 source.
+"""Qualify an in-place v0.5.0-beta project upgrade to current source.
 
 The fixture is created exclusively with the published v0.5.0-beta Git tag.
 Current source is then used without replaying ``init``.  The probe exercises the
@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ import yaml
 
 RELEASE_TAG = "v0.5.0-beta"
 ROOT = Path(__file__).resolve().parents[1]
+CURRENT_PUBLIC_VERSION = runpy.run_path(str(ROOT / "ipdctl" / "version.py"))["PUBLIC_VERSION"]
 REVIEW_SUBJECT = "concept.problem_definition"
 OTHER_SUBJECT = "plan.integrated_plan"
 EXPECTED_DASHBOARD_FILES = {
@@ -458,7 +460,7 @@ def qualify() -> dict[str, Any]:
         # independent version, Gate-ID, and Gate-status probes.
         _assert_governance_drift(
             project,
-            "framework_version: 0.5.1-beta",
+            f"framework_version: {CURRENT_PUBLIC_VERSION}",
             "framework_version: 0.5.0-beta",
             "governance_document_version_stale",
             exercise_verify=True,

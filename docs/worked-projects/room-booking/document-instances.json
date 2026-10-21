@@ -1,0 +1,546 @@
+{
+  "schema": "worked-document-instances/1",
+  "pack": {
+    "id": "ipd-starter",
+    "version": "1.2.1",
+    "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+  },
+  "documents": [
+    {
+      "path": "zh-CN/IR-TR1.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ir-tr1-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1"
+        ],
+        "document_type": "ir_spec",
+        "template_id": "ipd-starter.ir_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "f0b798c9724e55a2513221105c96441bca1fad42490f4db03588fbc6d0d1cc40",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/SR-TR2.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-sr-tr2-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1"
+        ],
+        "document_type": "sr_spec",
+        "template_id": "ipd-starter.sr_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "9087bd24906e3e4ea277b5a870b90d11ecdd427e4036ca06d6a8191e4f17e93e",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/AR-TR3.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ar-tr3-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "ar_spec",
+        "template_id": "ipd-starter.ar_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "22f419fc4c4e690a6f7e8f86cef4d8931376cb9db3cb43bc7e3c0683376dc5f6",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/AR-TR4.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ar-tr4-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "ar_spec",
+        "template_id": "ipd-starter.ar_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "22f419fc4c4e690a6f7e8f86cef4d8931376cb9db3cb43bc7e3c0683376dc5f6",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "en/IR-TR1.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ir-tr1-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1"
+        ],
+        "document_type": "ir_spec",
+        "template_id": "ipd-starter.ir_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "17a731e3871d038bbf0fb7abe9b795aa32568694c1dd8a8dda137512aded0937",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/SR-TR2.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-sr-tr2-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1"
+        ],
+        "document_type": "sr_spec",
+        "template_id": "ipd-starter.sr_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "e15323dde50b98e7f7dedafdf2e69b60762eb7712a915529734635f3c110e3f4",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/AR-TR3.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ar-tr3-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "ar_spec",
+        "template_id": "ipd-starter.ar_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "0bcfaa12a67f4b92fa782a53dcedbf5ffb497572b4d8f3ac72f74b0bfe4bfc3d",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/AR-TR4.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-ar-tr4-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "ar_spec",
+        "template_id": "ipd-starter.ar_spec",
+        "template_version": "1.1.1",
+        "template_sha256": "0bcfaa12a67f4b92fa782a53dcedbf5ffb497572b4d8f3ac72f74b0bfe4bfc3d",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "zh-CN/TR1.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr1-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1"
+        ],
+        "document_type": "tr1_requirements_feasibility",
+        "template_id": "ipd-starter.tr1_requirements_feasibility",
+        "template_version": "0.2.1",
+        "template_sha256": "6ca42f2619ffa18092323e559933c649de1d920087415127c3185738eb10384d",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/TR2.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr2-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1",
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1"
+        ],
+        "document_type": "tr2_scenarios_allocation",
+        "template_id": "ipd-starter.tr2_scenarios_allocation",
+        "template_version": "0.2.1",
+        "template_sha256": "c370ab7f69dc7381d9a116dd0f98b66642f8aff9b7d4c0ba4167a2f27c2c6aa2",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/TR3.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr3-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1",
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "tr3_high_level_design",
+        "template_id": "ipd-starter.tr3_high_level_design",
+        "template_version": "0.2.1",
+        "template_sha256": "965c3fceba758b9443906e1df3ad47270cc7337ab07616bb292203ab85b6a656",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "zh-CN/TR4.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr4-zh-cn",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1",
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1",
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "tr4_detail_implementation_test",
+        "template_id": "ipd-starter.tr4_detail_implementation_test",
+        "template_version": "0.2.1",
+        "template_sha256": "63059b2ad163898d1a229bb0e7bfcf41c6df2de2e6af3a4abcc9a98631e189d3",
+        "locale": "zh-CN",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "离线单会议室预约器"
+      }
+    },
+    {
+      "path": "en/TR1.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr1-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1"
+        ],
+        "document_type": "tr1_requirements_feasibility",
+        "template_id": "ipd-starter.tr1_requirements_feasibility",
+        "template_version": "0.2.1",
+        "template_sha256": "042732fcbc5ef871cbb7582014c827ee05d3277bd10482939c516378e96cb900",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/TR2.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr2-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1",
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1"
+        ],
+        "document_type": "tr2_scenarios_allocation",
+        "template_id": "ipd-starter.tr2_scenarios_allocation",
+        "template_version": "0.2.1",
+        "template_sha256": "821546ec635e9ce0e9f62af1a0bd478920840d30a68d9e3e5334b809d023f5fc",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/TR3.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr3-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1",
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "tr3_high_level_design",
+        "template_id": "ipd-starter.tr3_high_level_design",
+        "template_version": "0.2.1",
+        "template_sha256": "3291a43bb14c7f79f9c90c10bed67de08b32870452256f77a8832607091fea16",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    },
+    {
+      "path": "en/TR4.md",
+      "revision": "1",
+      "pack": {
+        "id": "ipd-starter",
+        "version": "1.2.1",
+        "sha256": "fa520c94b3a7b6d7bfb0886d0fdfc34640ab853991b824afc08d32f9a09f92fb"
+      },
+      "instance": {
+        "id": "room-tr4-en",
+        "increment": "mvp",
+        "owner": "demo-doc-owner",
+        "requirements": [
+          "ir-01@1",
+          "ir-02@1",
+          "ir-03@1",
+          "sr-01@1",
+          "sr-02@1",
+          "sr-03@1",
+          "sr-04@1",
+          "sr-05@1",
+          "sr-06@1",
+          "ar-01@1",
+          "ar-02@1",
+          "ar-03@1",
+          "ar-04@1",
+          "ar-05@1",
+          "ar-06@1",
+          "ar-07@1",
+          "ar-08@1",
+          "ar-09@1",
+          "ar-10@1",
+          "ar-11@1",
+          "ar-12@1"
+        ],
+        "document_type": "tr4_detail_implementation_test",
+        "template_id": "ipd-starter.tr4_detail_implementation_test",
+        "template_version": "0.2.1",
+        "template_sha256": "905f2ebeb8e92884abb1265e0b2985756b22edf7101d345dd961ba61cc74fba2",
+        "locale": "en",
+        "scope": "Synthetic standalone writing exercise; no governance acceptance",
+        "title": "Offline single-room booking"
+      }
+    }
+  ]
+}

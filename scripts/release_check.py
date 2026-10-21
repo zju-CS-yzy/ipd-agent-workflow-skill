@@ -11,12 +11,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.1b1"
-PUBLIC_VERSION = "0.5.1-beta"
+PACKAGE_VERSION = "0.5.3b1"
+PUBLIC_VERSION = "0.5.3-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
 REQUIRED_FILES = (
+    ".gitattributes",
     "README.md",
     "README.zh-CN.md",
     "SKILL.md",
@@ -32,7 +33,21 @@ REQUIRED_FILES = (
     "scripts/verify_v040_upgrade.py",
     "scripts/verify_v041_upgrade.py",
     "scripts/verify_v050_upgrade.py",
+    "scripts/verify_v051_upgrade.py",
+    "scripts/simulate_incremental_development.py",
+    "scripts/verify_room_booking_walkthrough.py",
+    "ipdctl/template_publications.py",
+    "ipdctl/requirements.py",
+    "ipdctl/documents.py",
+    "ipdctl/document_templates/manifest.json",
+    "ipdctl/document_templates/en/interface_spec.md",
+    "ipdctl/document_templates/zh-CN/interface_spec.md",
+    "docs/requirements-and-templates.md",
+    "docs/requirements-and-templates.zh-CN.md",
+    "schemas/requirements.schema.json",
+    "schemas/template_publication.schema.json",
     "scripts/verify_local_golden.py",
+    "scripts/verify_svn_repository.py",
     "scripts/verify_dashboard_browser.py",
     "ipdctl/dashboard_files.py",
     "scripts/simulate_capability_lifecycle.py",
@@ -190,13 +205,18 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             "pyproject.toml",
-            r'\[tool\.setuptools\.package-data\].*?^ipdctl\s*=\s*\[\s*"messages\.yaml"\s*\]',
+            r'\[tool\.setuptools\.package-data\].*?^ipdctl\s*=\s*\[[^\]]*"messages\.yaml"[^\]]*\]',
             "ipdctl/messages.yaml must be declared as package data",
         ),
         (
             "MANIFEST.in",
             r"^recursive-include scripts \*\.py\s*$",
             "sdist must include the release simulation scripts",
+        ),
+        (
+            "MANIFEST.in",
+            r"^include \.gitattributes\s*$",
+            "sdist must preserve the worked-project byte-evidence checkout rules",
         ),
         (
             "ipdctl/version.py",
@@ -287,6 +307,16 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             ".github/workflows/release.yml",
             r"python -B scripts/verify_v050_upgrade\.py",
             "release workflow must qualify the direct v0.5.0 in-place upgrade",
+        ),
+        (
+            ".github/workflows/test.yml",
+            r"python -B scripts/verify_svn_repository\.py",
+            "test workflow must qualify the real isolated SVN adapter",
+        ),
+        (
+            ".github/workflows/release.yml",
+            r"python -B scripts/verify_svn_repository\.py --locale en.*?python -B scripts/verify_svn_repository\.py --locale zh-CN",
+            "release workflow must qualify the real SVN adapter in both locales",
         ),
         (
             ".github/workflows/release.yml",
@@ -575,7 +605,7 @@ def audit_repository(root: Path) -> tuple[list[Finding], int]:
             path = current_path / filename
             relative = path.relative_to(root)
             rendered = relative.as_posix()
-            if rendered == "MIGRATION_REPORT.md":
+            if rendered in {"MIGRATION_REPORT.md", "VERSION_ROADMAP.local.md"}:
                 continue
             if filename in GENERATED_FILES or path.suffix.lower() in GENERATED_SUFFIXES:
                 findings.append(Finding(rendered, "generated or temporary file is present"))

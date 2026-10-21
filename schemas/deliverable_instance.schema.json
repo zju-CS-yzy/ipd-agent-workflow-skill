@@ -1,0 +1,132 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "increment": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+      },
+      "minItems": 1
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "document_type": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "en",
+        "zh-CN"
+      ]
+    },
+    "template_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "template_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template_sha256": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "pack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "path": {
+          "type": "string"
+        },
+        "layer": {
+          "type": "string",
+          "enum": [
+            "core",
+            "organization",
+            "project"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "sha256",
+        "path",
+        "layer"
+      ]
+    },
+    "supersedes": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "key",
+    "increment",
+    "requirements",
+    "owner",
+    "document_type",
+    "path",
+    "title",
+    "scope",
+    "locale",
+    "template_id",
+    "template_version",
+    "template_sha256",
+    "pack"
+  ]
+}

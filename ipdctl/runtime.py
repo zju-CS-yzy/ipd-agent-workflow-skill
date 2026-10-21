@@ -52,6 +52,44 @@ def runtime_path(project_root: str | Path) -> Path:
     return Path(project_root) / RUNTIME_RELATIVE_PATH
 
 
+def bind_increment(runtime: dict, registry: dict) -> dict:
+    """Bind future events only; never attribute legacy events retroactively."""
+    import hashlib
+    import json
+    updated = deepcopy(runtime)
+    updated.setdefault("increment_context_start", len(updated["events"]))
+    increment = next((i for i in registry["increments"]
+                      if i["id"] == registry["active_increment"]), None)
+    updated["schema_version"] = "1.1"
+    updated["increment_context"] = {
+        "increment": increment["id"] if increment else None,
+        "base_baseline": increment["base_baseline"] if increment else
+            (registry["baselines"][-1]["id"] if registry["baselines"] else None),
+        "scope_sha256": hashlib.sha256(json.dumps(
+            increment["scope"] if increment else [], ensure_ascii=False,
+            sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+    }
+    return updated
+
+
+def _append_event(runtime: dict, event: dict) -> None:
+    if "increment_context" in runtime:
+        event = deepcopy(event)
+        event["increment_context"] = deepcopy(runtime["increment_context"])
+    runtime["events"].append(event)
+
+
+def _context_issues(value: Any) -> list[str]:
+    if not isinstance(value, dict) or set(value) != {"increment", "base_baseline", "scope_sha256"}:
+        return ["invalid increment_context fields"]
+    if any(value[k] is not None and (not isinstance(value[k], str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value[k]))
+           for k in ("increment", "base_baseline")):
+        return ["invalid increment_context reference"]
+    if not isinstance(value["scope_sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", value["scope_sha256"]):
+        return ["invalid increment_context scope fingerprint"]
+    return []
+
+
 def _binding_window_issues(value: Any) -> list[str]:
     """Validate the portable binding facts captured when a Claim opens."""
 
@@ -167,7 +205,7 @@ def review_subject_recovery_event_issues(event: Any) -> list[str]:
         "reason",
         "state_revision",
     }
-    if set(event) != expected:
+    if set(event) - {"increment_context"} != expected:
         issues.append("review subject recovery event has invalid fields")
     for field in ("subject", "actor", "reason", "at"):
         if not isinstance(event.get(field), str) or not event[field].strip():
@@ -466,7 +504,7 @@ def process_refinement_event_issues(event: Any) -> list[str]:
     }
     issues: list[str] = []
     missing = sorted(expected - set(event))
-    unknown = sorted(set(event) - expected)
+    unknown = sorted(set(event) - expected - {"increment_context"})
     for field in missing:
         issues.append(f"field {field!r} is required")
     for field in unknown:
@@ -541,10 +579,19 @@ def validate_runtime(runtime: Any) -> list[str]:
     }
     for field in sorted(required - set(runtime)):
         issues.append(f"Agent runtime field {field!r} is missing")
-    for field in sorted(set(runtime) - required):
+    for field in sorted(set(runtime) - required - {"increment_context", "increment_context_start"}):
         issues.append(f"Agent runtime field {field!r} is unknown")
-    if runtime.get("schema_version") != "1.0":
+    if runtime.get("schema_version") not in {"1.0", "1.1"}:
         issues.append("unsupported Agent runtime schema")
+    if runtime.get("schema_version") == "1.1":
+        issues.extend(_context_issues(runtime.get("increment_context")))
+        start = runtime.get("increment_context_start")
+        if type(start) is not int or start < 0 or not isinstance(runtime.get("events"), list) or start > len(runtime["events"]):
+            issues.append("invalid increment_context_start")
+        elif any(not isinstance(e, dict) or "increment_context" not in e for e in runtime["events"][start:]):
+            issues.append("model-enabled events require increment_context")
+    elif "increment_context" in runtime or "increment_context_start" in runtime:
+        issues.append("increment_context requires Runtime schema 1.1")
     revision = runtime.get("revision")
     if type(revision) is not int or revision < 0:
         issues.append("runtime revision must be a non-negative integer")
@@ -603,6 +650,8 @@ def validate_runtime(runtime: Any) -> list[str]:
             if not isinstance(event, dict):
                 issues.append(f"runtime event {index} must be an object")
                 continue
+            if "increment_context" in event:
+                issues.extend(_context_issues(event["increment_context"]))
             for field in ("action", "at"):
                 if not isinstance(event.get(field), str) or not event[field].strip():
                     issues.append(
@@ -661,6 +710,9 @@ def load_runtime(project_root: str | Path) -> dict[str, Any]:
     issues = validate_runtime(value)
     if issues:
         raise RuntimeError(issues[0])
+    registry = Path(project_root) / ".ipd/requirements.yaml"
+    if registry.is_file():
+        value = bind_increment(value, load_state(registry))
     return value
 
 
@@ -695,7 +747,7 @@ def _expire_claims(runtime: dict[str, Any], now: datetime) -> None:
             )
         parsed = _parse_time(expires_at)
         if parsed <= now:
-            runtime["events"].append(
+            _append_event(runtime,
                 {
                     "action": "claim_expired",
                     "deliverable": deliverable_id,
@@ -776,7 +828,7 @@ def claim(
     event["state_revision"] = state_revision
     if binding_window is not None:
         event["binding_window"] = deepcopy(binding_window)
-    updated["events"].append(event)
+    _append_event(updated, event)
     return updated
 
 
@@ -812,7 +864,7 @@ def close_claim(
         for key, value in details.items():
             if key not in event:
                 event[key] = deepcopy(value)
-    updated["events"].append(event)
+    _append_event(updated, event)
     return updated
 
 
@@ -823,7 +875,7 @@ def record_event(
     event = {"action": action, "at": format_time(utc_now())}
     if details:
         event.update(details)
-    updated["events"].append(event)
+    _append_event(updated, event)
     return updated
 
 
@@ -860,7 +912,7 @@ def record_artifact_baseline_adoption(
     if any(candidate == snapshot for candidate in known_snapshots):
         return runtime, False
     updated = _revised(runtime)
-    updated["events"].append(deepcopy(event))
+    _append_event(updated, deepcopy(event))
     return updated, True
 
 
@@ -907,5 +959,5 @@ def record_process_refinement(
             "already applied result, authority, or process contract"
         )
     updated = _revised(runtime)
-    updated["events"].append(deepcopy(event))
+    _append_event(updated, deepcopy(event))
     return updated, True

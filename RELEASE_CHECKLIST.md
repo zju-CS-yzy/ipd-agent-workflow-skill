@@ -1,6 +1,246 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.1b1` and public label `v0.5.1-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.3b1` and public label `v0.5.3-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+
+## v0.5.3-beta final candidate scope — 2026-10-22
+
+- [x] GitHub HTTPS login is available. Candidate source and qualification records are pushed in [PR #12](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12).
+- [x] The project owner confirmed that no authorized private Golden fixture is currently available. Private Golden and real-project acceptance remain **unexecuted**, rather than passed. This beta is qualified through public synthetic fixtures; planned private Golden coverage and the remaining P1/v0.5.2 backlog are retained as outstanding work. TR1–TR4 overview documents remain drafts and stage obligations need explicit project configuration.
+- [x] Local source, failure/recovery, two-increment, historical-upgrade, package and browser evidence is retained in `docs/qualification/`. The 200 frozen production inputs and all 140 template assets are unchanged.
+- [x] Reproduce the Windows CI worked-example failure: `core.autocrlf=true` changes executable fixture bytes and breaks the saved SHA-256. Pin only those Python fixtures to LF, retaining byte-exact evidence validation. A real Git-worktree regression covers both checkout modes; the fast example gate now precedes long behavior tests. The failed candidate is not qualified for publication; its successor must pass the full matrix.
+- [ ] Require the final candidate's complete Windows/Linux × Python 3.10/3.14 × English/Chinese CI, packaging, historical upgrades, browser job and `governance-gate` to pass. [PR checks](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12/checks) provide the current commit's results. Superseded or cancelled runs are not passes.
+- [ ] Integrate the qualified candidate, create the release Tag on the accepted commit, and require that Tag's own test run to succeed before publication. The release workflow enforces this separate Tag gate.
+- [ ] Verify the four published assets, GitHub digests and `SHA256SUMS.txt`, then install the public downloads in isolated projects. Record publication separately without moving the release Tag.
+
+This is the prepublication scope record. Earlier dated sections are historical observations; their unavailable-credential and missing-fixture statements describe those earlier attempts.
+
+## v0.5.3-beta candidate commit and real SVN — 2026-10-21
+
+- [x] Commit the candidate as `f2c532a5c593a3a33d6c6b7d082c884e707d0be7`; exclude the local roadmap and qualification workspaces. The remote `main` still matches the candidate's base, `7def7636efdf5473a0a29abc56df70d5d39cf421`.
+- [x] Real SVN 1.15.0, both locales, two working copies per local repository: reproduce accepted facts, reject unaccepted governance bytes, map Unicode/space/`@` paths, classify unbound changes, and retain repository/working-copy bytes during every adapter operation. Each locale recorded 77 read commands, including 32 revision-pinned `cat` calls. This covers local `file://`, not remote authentication, mixed-revision detection or team writes.
+- [x] Add the isolated SVN check to the configured OS/Python/locale CI matrix and the release workflow; require it in release-tree validation. Eight supplementary release-check/governance-document tests pass. All 200 previously frozen production files remain unchanged.
+- [x] From committed source `577893d0ebdd099ad7e1310b180dd84dfdc4a52d`, rerun all six historical-tag gates (v0.3.1 through v0.5.1), the bilingual worked-project checker, and clean-source hygiene. Rebuild candidate ZIP/wheel/sdist through `git archive`; all three contain the same 200 normalized production inputs and 140 template assets, with local planning/test data excluded. Install the new wheel in a standard venv and pass both locale probes. These are local candidate artifacts, not published downloads. See [committed-source evidence](docs/qualification/v0.5.3-beta-committed-artifacts.json).
+- [ ] Push the candidate and observe successful accepted-commit Windows/Linux, Python 3.10/3.14 CI. SSH host trust and HTTPS credentials are unavailable on this host; user login/configuration is pending.
+- [ ] Run the authorized private Golden in independent copies once its local path is available; record actual applicability before publication.
+- [ ] Close remaining applicable qualification gates before tagging or publishing. No release tag or public release has been created.
+
+See [post-commit evidence](docs/qualification/v0.5.3-beta-post-commit.json). Earlier candidate and audit sections below are historical snapshots.
+
+## v0.5.3-beta R2/R3 candidate qualification — 2026-10-21
+
+R2/R3 implementations, final-source workflows, package installation and browser checks passed locally. See [qualification evidence](docs/qualification/v0.5.3-beta-release-candidate.json) and the [scope report](docs/release-readiness-v0.5.3-beta.zh-CN.md). This qualifies a candidate for commit and CI; it does not close unexecuted publication gates. This is an uncommitted local candidate; no tag, push or publication has occurred. Earlier sections below describe earlier source and are retained as history.
+
+- [x] Runtime 1.1 increment audit context; immutable historical events and old-client write rejection.
+- [x] Immutable template draft, independent human review and explicit publication; exact digest binding and bilingual diagnostics.
+- [x] Controlled single-Owner conversion preserves old files; target QA can finish during work without releasing the Claim.
+- [x] Failed writes and abrupt process exit recover without duplicate records; exact retry is idempotent.
+- [x] Frozen-source general regressions: 349 passed; five long regression cases passed in this session (354 unique tests total), zero failures/errors/skips. Both final-source locales completed two full lifecycles and B1/B2, preserving prior bytes and exact increment context.
+- [x] Candidate ZIP/wheel/sdist contents and private-data exclusion; six standard-venv locale/format probes. Chrome/Edge × both locales × file/HTTP: eight cases, 256 graph-toggle combinations, no page errors.
+- [ ] Accepted commit, supported CI matrix and final release approval.
+
+## v0.5.3-beta R1/R4 fixes — 2026-10-21
+
+**R1 and R4 are closed locally. Publication remains blocked by R2/R3 and the
+outstanding final-source qualification.** [Fix evidence](docs/qualification/v0.5.3-beta-gate-fixes.json)
+records source hashes, test scope and compatibility limits. The earlier audit
+below remains evidence for its historical source.
+
+- [x] Bind new results to direct requirement/document inputs and accepted
+  re-verification epochs. Reject old/preassessment proof, mismatched reuse and
+  caller-stamped context. Explicit unaffected decisions and future out-of-scope
+  candidates preserve their intended boundaries; reassessment and later versions
+  cannot bypass an applicable outstanding epoch.
+- [x] Gate preflight and current Dashboard coverage reject stale/unbound results;
+  exact replay creates no new proof. Matching historical reuse remains possible
+  after explicitly establishing the same current links and inputs.
+- [x] Validate bilingual SR/AR parent cells against canonical requirements after
+  expanding shared cells. Cover missing parents, wrong levels/versions/relations,
+  missing context, explicit derived rows and missing controlled parent columns.
+  Registered-document/Gate rejection leaves project facts unchanged.
+- [x] Final broad regression: 339 tests in 212.391 seconds, zero failures/errors/
+  skips, with the six changed runtime modules unchanged during the run. The
+  governed baseline/reuse scenario passed separately in 280.032 seconds; an
+  additional exact-replay case passed separately. These are 341 unique passing
+  tests out of 344 currently discovered. The three legacy long simulations were
+  not rerun after this fix; their earlier results are not final-source evidence.
+- [x] Published v0.5.1 model adoption still passed with zero preview writes and
+  prior facts/Runtime retained. The worked-project checker passed 16 documents,
+  306 local links and 21 freshly executed software cases in both languages.
+- [x] A temporary wheel contains the new validation module and updated registry
+  Schema; its independent installed smoke rejects bad bilingual parent references.
+  All 140 template assets/manifests retain their earlier digests. This wheel is a
+  local fix candidate, not a publication artifact.
+- [x] Skill validation, Python 3.10 grammar parsing (92 files) and diff checks
+  passed. Grammar parsing does not establish Python 3.10 runtime coverage.
+- [ ] Implement R2 increment audit context and R3 explicit template review/
+  publication records. Their [design/test discussion](docs/release-readiness-v0.5.3-beta.zh-CN.md)
+  also requires a controlled active-project path for early/private formats without
+  managed parent columns. Old immutable history remains readable; protection
+  must not be disabled to avoid a migration problem.
+- [ ] Complete final accepted-source CI, B2, platform/backend, browser/install,
+  private Golden and publication gates before declaring release readiness.
+
+## v0.5.3-beta readiness audit — 2026-10-21 (before R1/R4 fixes)
+
+**Publication is blocked.** See the [scope comparison and reproducible findings](docs/release-readiness-v0.5.3-beta.zh-CN.md).
+This is a local candidate audit, not an accepted-commit or publication record.
+
+- [x] Reproduced a requirement preflight defect through synthetic public fixtures:
+  after an AR revision, marking every affected object `reverify` still lets old
+  IR/SR results satisfy TR4 and the Gate requirement preflight. This is a defect
+  finding, not a successful release gate; explicit approval remains separate.
+- [x] Reproduced a separate reference-integrity gap without changing the example:
+  replacing an SR register's parent `ir-01@1` with nonexistent `missing-ir@999`
+  in memory still returns an empty lint diagnostic list. The normal project
+  readiness path does not compare these parent cells with canonical facts.
+- [x] Re-executed the bilingual worked-project checker: sixteen documents,
+  3 IR / 6 SR / 12 AR, 306 local links and 21 fresh software cases passed.
+- [x] Real historical-tag qualifications passed for v0.3.1, v0.3.2, v0.4.0,
+  v0.4.1 and v0.5.0. Explicit v0.5.1 model adoption passed after making its
+  synthetic project an independent Git repository, verifying before Claim,
+  and creating work evidence after Claim. The migration retained prior facts
+  and Runtime history, preview wrote zero files, and revision increased by one.
+- [x] The unchanged Capability lifecycle passed on Windows/Python 3.12.14.
+  A first general-suite attempt was interrupted after non-Git fixtures inherited
+  the surrounding checkout. Those errors are not counted as product failures;
+  repeat qualification uses an explicit Git search ceiling for the temporary root.
+- [x] The corrected general-suite run passed 326/326 tests in 932.906 seconds,
+  with zero failures, errors or skips. Together with the separately passed
+  Capability lifecycle, all 327 existing tests passed locally. Full lifecycle
+  used zh-CN; Capability used en; progressive refinement used the en default.
+  This does not establish a complete bilingual simulation matrix. The additional
+  R1/R4 negative probes reproduce gaps not covered by those existing tests.
+- [x] A temporary candidate source copy passed release hygiene and built wheel
+  and sdist with 36 active and 100 archived templates each, excluding local
+  planning files. Installed-wheel bilingual template smoke passed. These are
+  scoped candidate artifacts, built before the audit documentation and fixture
+  correction; they are not final publication artifacts.
+- [x] Skill validation passed. The local roadmap remains ignored.
+- [x] Recorded local environment, input digests, scoped artifact hashes, upgrade
+  results, test counts and negative-probe observations in the
+  [machine-readable local audit](docs/qualification/v0.5.3-beta-local-audit.json).
+  Ninety Python sources also parsed with the Python 3.10 grammar; this is not
+  Python 3.10 runtime qualification.
+- [ ] Close R1 re-verification enforcement, R2 increment event context, R3
+  explicit template review/publication records and R4 register-parent reference
+  validation; then run their independent cases.
+- [ ] Complete a second governed increment through B2, template-upgrade/history
+  cases, process-interruption recovery and the outstanding final-source matrix.
+- [ ] Observe final-source endpoint/OS CI, real SVN, authorized private Golden,
+  complete browser/install qualification, accepted commit and Tag gates.
+  The worked-project checker must also become an explicit CI/release step.
+
+## v0.5.3-beta worked-project checks — 2026-10-20
+
+The room-booking case is a public synthetic teaching project, not a private
+Golden or a record of human approval. These are scoped document and software
+checks; the full release qualification remains outstanding.
+
+- [x] Completed sixteen bilingual template instances with 3 IRs, 6 SRs and 12 ARs,
+  plus bilingual source briefs, indexes and first-use reports. Every instance
+  passes pinned template lint. The independent checker validates parent versions,
+  all per-requirement rationale records, 306 local links, stage-snapshot boundaries,
+  code symbols, source digests and fresh-versus-saved observations.
+- [x] Executed 21 independent-expectation software cases: 12 AR, 6 SR and 3 IR
+  automated scenarios. Saved evidence includes expected/actual values, execution
+  environment/time and both source digests. Actual human acceptance remains
+  not performed and governance approval remains not granted.
+- [x] Twelve targeted template/requirement tests passed on Windows/Python 3.12.14,
+  including historical pack 1.2.0. Stage 0.2.1 and register 1.1.1 guidance address
+  unique rationale IDs, progressive metadata and immutable stage snapshots.
+- [x] Actual Chrome preview traversed all 22 Markdown documents in both languages,
+  checked 3/6/12-row registers and followed Chinese SR / English AR rationale links.
+  Index and derivation screenshots were visually inspected.
+- [x] Temporary wheel/sdist builds include 36 active and 100 archived templates;
+  the sdist also contains the 22 worked-project Markdown files, software, evidence
+  and checker. Installed-wheel active/historical pin smoke and copied-source
+  walkthrough execution passed. Windows needed a short writable build/temp path
+  after initial long-path/default-temp failures.
+  Wheel SHA-256: `96e68207bcd7dc2b908d664d0ecfc7c79d9b53752036780c15246f25ac8d9732`.
+  Sdist SHA-256: `ebce4467f441c7800616293f090f27bd08a8a6ab5e26cb1e9720cd163b506f01`.
+- [x] Skill validation and release-tree hygiene passed; the local roadmap remains
+  ignored and excluded from artifacts.
+- [ ] Final accepted-source qualification and publication gates. No release was
+  published and no CI, private Golden or production-readiness coverage is claimed.
+
+## v0.5.3-beta stage drafting checks — 2026-10-20 (earlier source)
+
+Stage documents are now 0.2.0 in pack 1.2.0. These are targeted document/resource
+checks, not a completed release qualification. The earlier results below apply
+to their historical sources.
+
+- [x] Windows/Python 3.12.14: 12 targeted tests passed, covering template
+  instantiation and lint, bilingual pack/schema parity, no-write preview,
+  multi-requirement registers, tampering and both historical pack pins.
+  The first fixture attempt could not create project directories in the sandbox's
+  default temporary directory; the full targeted run passed using a designated
+  writable validation directory instead.
+- [x] Actual local Chrome rendered all eight updated stage drafts and checked
+  version, chapter count and per-chapter guidance in both locales. Chinese TR2
+  and TR3 derivation/consolidation screenshots were visually inspected.
+- [x] The complete 1.1.0 pack is archived with its original bytes and digests;
+  original 1.0.0 pins remain usable. Active register templates remain 1.1.0.
+- [x] Skill validation, template digest/section consistency, local guide links and
+  release-tree hygiene passed. The private roadmap remains ignored.
+- [ ] Rebuild final publication artifacts and rerun remaining release gates from
+  final accepted source. No new release or publication qualification is claimed.
+
+## v0.5.3-beta template revision checks — 2026-10-18 (historical source)
+
+This narrower revision changes the requirement registers and adds stage document
+drafts. The results below do not complete the outstanding release matrix. The
+2026-10-17 results qualify that earlier source only.
+
+- [x] Windows/Python 3.12.14 and PyYAML 6.0.3: 52 targeted tests passed, covering
+  requirement operations (excluding the long two-increment lifecycle), seven new
+  table/pack tests, localization, release hygiene and governance documents.
+  The register integration test creates one document covering two requirements.
+  Table cases cover 1/2/12 rows in IR/SR/AR and both locales, shared spans, missing
+  or duplicate exact references, malformed spans, merged identities, empty cells,
+  changed headers and immutable old-pack resolution.
+- [x] Actual local Chrome rendered all 14 revised bilingual drafts/registers;
+  all six registers retained 11 columns, two independent identity rows and two
+  correctly merged shared cells. Both locale screenshots were visually checked.
+- [x] Temporary source copy built wheel and sdist with setuptools 84.0.0;
+  both artifacts contain 36 active templates, 28 archived templates and the
+  table checker, while excluding the private roadmap. Installed-wheel smoke
+  checks passed for both locales and old/new pack resolution.
+  Wheel SHA-256: `492b746a814e40d8dc5ea2eb4457e263a76e4bec3f18febb0b3f2c71eaf234c1`.
+  Sdist SHA-256: `6bd4001ec24a8cab34105ad9161132ec2c97b1872fe1eac64cee4b02d76c6abe`.
+- [x] Python 3.10 syntax parsing, manifest section/digest consistency, local guide
+  links, Skill validation and source-tree hygiene passed. No release was published.
+- [ ] Rebuild publication artifacts and complete the final-source release matrix
+  after the discussion drafts and remaining implementation scope are accepted.
+
+## v0.5.3-beta development qualification — 2026-10-17 (historical source)
+
+This is an implementation candidate, not a publication record. Prior v0.5.1 results
+below remain historical and do not qualify the new source.
+
+- [x] Local Windows/Python 3.12.14: 292 legacy behavior tests and 22 requirement/template
+  cases, including the six-phase MVP→baseline→next-increment scenario, passed.
+  Targeted localization, multi-instance and Markdown/JSON-content checks were
+  repeated after their final changes. PyYAML 6.0.3 was used.
+- [x] Actual published v0.4.1 and v0.5.0 upgrades, plus explicit model adoption from
+  a v0.5.1 project, passed without replaying init or dropping prior history.
+- [x] Temporary isolated build environment with setuptools 84.0.0, wheel/sdist
+  inspection, and two independent install environments passed. Both locales and
+  all 28 template resources were checked; local planning files were excluded.
+- [x] Actual local Chromium: English/Chinese requirement tree collapse/expand,
+  combined filtering, reset and escaped requirement text passed without page errors.
+- [x] Python syntax, schema parity, Skill validation and release-tree hygiene passed.
+- [ ] Complete final-source long lifecycle, Capability and progressive-refinement matrix.
+  Earlier development runs are not counted as final-source qualification.
+- [ ] Supported Python 3.10/3.14 endpoints, Linux/Windows CI matrix and complete
+  existing Dashboard browser regression. CI configuration is present; it has not
+  been dispatched or observed green from this local task.
+- [ ] Real isolated SVN source acceptance fixture; only the read-command contract
+  was mocked locally because no SVN client was available. Git used real repositories.
+- [ ] Authorized private Golden fixtures, remaining historical-tag gates and final
+  publication artifact inspection. No private fixture path was supplied for this run.
+
+Unexecuted, skipped or unavailable gates remain pending. No GitHub release, tag or
+push is authorized by completing local implementation.
 
 ## v0.5.1-beta release readiness
 

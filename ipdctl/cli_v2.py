@@ -458,10 +458,13 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
         "--json", action="store_true", help=translator.text("cli.argument.json.help")
     )
     status.set_defaults(handler=_cmd_context)
+    from .requirements_cli import register_commands
+    register_commands(commands, translator)
     return parser
 
 
 _COMMAND_NAMES = {
+    "requirements", "templates",
     "init",
     "tailor",
     "refine",
@@ -501,6 +504,7 @@ _TRANSACTIONAL_COMMANDS = {
     "status",
 }
 _OPTIONS_WITH_VALUES = {
+    "--request", "--apply", "--type",
     "--name",
     "--task-type",
     "--locale",
@@ -565,9 +569,12 @@ def _locale_root(target: str | Path) -> Path:
 
 def _infer_cli_locale(arguments: Sequence[str]) -> str:
     command, tail = _command_and_tail(arguments)
-    if command == "init":
+    if command in {"init", "requirements", "templates"}:
         configured = _option_value(tail, "--locale")
-        return normalize_locale(configured) if configured is not None else DEFAULT_LOCALE
+        if configured is not None:
+            return normalize_locale(configured)
+        if command == "init":
+            return DEFAULT_LOCALE
     if command is None:
         return DEFAULT_LOCALE
     return load_project_locale(_locale_root(_target_hint(command, tail)))
@@ -575,6 +582,8 @@ def _infer_cli_locale(arguments: Sequence[str]) -> str:
 
 def _translator_for_args(args: argparse.Namespace) -> Translator:
     if args.command == "init":
+        return get_translator(args.locale)
+    if args.command in {"requirements", "templates"} and args.locale:
         return get_translator(args.locale)
     target = args.project_root if args.command in _PROJECT_ROOT_COMMANDS else args.target
     return get_translator(load_project_locale(_locale_root(target)))
@@ -1778,6 +1787,9 @@ def _cmd_close(args: argparse.Namespace) -> int:
     _require_workflow_step(
         state, {"work"}, action="close", translator=translator
     )
+    if args.status != "blocked":
+        from .requirements import enforce
+        enforce(root, state, args.deliverable, "deliverable")
     if args.status == "blocked":
         state = set_deliverable_status(
             state,
@@ -1909,6 +1921,9 @@ def _cmd_review(args: argparse.Namespace) -> int:
     subject_type, subject_id = _resolve_subject(
         state, process, args.subject, translator
     )
+    from .requirements import enforce
+    if not args.recover_subject:
+        enforce(root, state, subject_id, subject_type)
     if args.recover_subject:
         if args.actor_type != "human" or not args.authorized:
             raise TransitionError(
@@ -2030,6 +2045,10 @@ def _cmd_review(args: argparse.Namespace) -> int:
     details["decision"] = args.decision
     details["evidence"] = args.evidence
     details["state_revision"] = state["revision"]
+    from .requirements import decision_manifest
+    requirement_manifest = decision_manifest(root, state, subject_id, subject_type)
+    if requirement_manifest:
+        details["requirements_sha256"] = requirement_manifest
     runtime = record_event(
         runtime,
         "review",
@@ -2061,6 +2080,16 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     subject_type, subject_id = _resolve_subject(
         state, process, args.subject, translator
     )
+    from .requirements import enforce
+    enforce(root, state, subject_id, subject_type)
+    from .requirements import decision_manifest
+    requirement_manifest = decision_manifest(root, state, subject_id, subject_type)
+    if requirement_manifest:
+        prior_review = next((event for event in reversed(runtime["events"])
+                             if event.get("action") == "review" and event.get("subject") == subject_id), {})
+        if prior_review.get("requirements_sha256") != requirement_manifest:
+            from .documents import RequirementError
+            raise RequirementError("REVIEW_INPUTS_CHANGED: requirement or document versions changed during Review")
     _require_workflow_step(
         state, {"review"}, action="approve", translator=translator
     )
@@ -2095,6 +2124,8 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     details["decision"] = "approve"
     details["evidence"] = evidence
     details["state_revision"] = state["revision"]
+    if requirement_manifest:
+        details["requirements_sha256"] = requirement_manifest
     runtime = record_event(
         runtime,
         "approve",
@@ -2386,6 +2417,11 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
     if project_target and state is not None:
         paths = project_paths(target)
+        from .requirements import validation_issues as requirement_validation_issues
+        requirement_issues = requirement_validation_issues(Path(target).resolve(), state)
+        if (Path(target) / ".ipd/requirements.yaml").is_file():
+            checks["requirements"] = "failed" if requirement_issues else "passed"
+            report_issues.extend(requirement_issues)
         if not paths["process"].is_file():
             checks["governance_document"] = "not_applicable"
         else:
@@ -2506,6 +2542,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_dashboard=include_dashboard,
                 ):
                     args._translator = _translator_for_args(args)
+                    if args.command in {"claim", "tailor", "refine", "advance-phase"}:
+                        from .requirements import assert_writable
+                        assert_writable(candidate)
                     return args.handler(args)
             with project_access_guard(candidate):
                 args._translator = _translator_for_args(args)

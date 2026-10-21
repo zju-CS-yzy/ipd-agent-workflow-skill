@@ -1,0 +1,230 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "reviewed",
+        "published"
+      ]
+    },
+    "pack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "path": {
+          "type": "string"
+        },
+        "layer": {
+          "type": "string",
+          "enum": [
+            "core",
+            "organization",
+            "project"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "sha256",
+        "path",
+        "layer"
+      ]
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "publisher": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "human"
+      ]
+    },
+    "authorized": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    },
+    "identity_source": {
+      "type": "string",
+      "enum": [
+        "explicit-local-declaration"
+      ]
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "result_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            },
+            "stage": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "reviewed",
+                "published"
+              ]
+            },
+            "pack": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "layer": {
+                  "type": "string",
+                  "enum": [
+                    "core",
+                    "organization",
+                    "project"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "version",
+                "sha256",
+                "path",
+                "layer"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "stage",
+            "pack",
+            "path",
+            "sha256"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "stage",
+    "pack",
+    "author",
+    "reviewer",
+    "publisher",
+    "actor",
+    "actor_type",
+    "authorized",
+    "identity_source",
+    "decision",
+    "reason",
+    "result_revision",
+    "source",
+    "request_id"
+  ]
+}

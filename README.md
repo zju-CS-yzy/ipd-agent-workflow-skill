@@ -4,7 +4,13 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-Current prerelease target: `v0.5.1-beta` (Python package `0.5.1b1`).
+This version: `v0.5.3-beta` (Python package `0.5.3b1`). Download availability is listed in [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases), subject to the [qualification gates](RELEASE_CHECKLIST.md). This cycle has no private Golden fixture; evidence is limited to public synthetic projects and does not establish real-project acceptance.
+
+For progressive IR/SR/AR requirements, serial increments and the 18 bilingual
+Markdown template types, see [requirements and templates](docs/requirements-and-templates.md).
+Preview an actual starter with `ipdctl templates --type interface_spec --locale en`.
+See [stage deliverable drafts](docs/stage-deliverable-drafts.md) for multi-row registers and TR1–TR4 overall documents.
+See the completed [bilingual room-booking worked project](docs/worked-projects/room-booking/index.md) for stage documents, registers and actual execution evidence.
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
 

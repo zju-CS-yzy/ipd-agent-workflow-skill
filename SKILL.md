@@ -1,6 +1,6 @@
 ---
 name: ipd-agent-workflow-skill
-description: Tailor, progressively refine, and execute evidence-backed bilingual IPD workflows with TR/DCP gates, deliverable state, dashboards, Agent runtime, and read-only Git/SVN reconciliation. Use for engineering work governed by auditable IPD controls; do not use for generic task lists.
+description: Tailor, progressively refine, and execute evidence-backed bilingual IPD workflows with optional IR/SR/AR requirements, serial increments, versioned Markdown templates, TR/DCP gates, dashboards, Agent runtime, and read-only Git/SVN reconciliation. Use for engineering work governed by auditable IPD controls; do not use for generic task lists.
 ---
 
 # IPD Agent Workflow
@@ -23,6 +23,29 @@ and `launch` are separate from this per-deliverable loop.
 - A locale change affects presentation only. Regenerate derived views with `refresh`; never re-tailor or alter workflow facts merely to change language.
 
 ## Operating contract
+
+For MVPs, subsequent releases, or requirement-driven iteration, read
+[requirements and templates](docs/requirements-and-templates.md)
+([中文](docs/requirements-and-templates.zh-CN.md)). Enable IR/SR/AR explicitly;
+preview fingerprinted requests before authorized application. Use the pinned
+Markdown template for each document instance and the project's locale. Before
+creating managed documents, record a template draft, independent human review
+and authorized publication for the exact pack digest; pin only that published
+pack. Built-in packs also require this explicit project adoption. These are
+local declarations, not authenticated platform identities. Keep
+requirement decomposition separate from `refines` and `depends_on`. A completed
+increment does not satisfy deferred IR criteria. Never infer approval from a
+filled template, a lower-level test, or a generated requirement matrix.
+
+For multi-requirement registers and the proposed TR1–TR4 overall document
+bundles, read [stage drafts](docs/stage-deliverable-drafts.md)
+([中文](docs/stage-deliverable-drafts.zh-CN.md)). Keep one row per exact requirement
+version; shared context may span rows. Stage bundles are discussion drafts until
+the project adopts explicit obligations and its Gate mapping.
+When writing stage documents, develop each IR→SR or SR→AR derivation before
+consolidating its register. Explain the premises, calculations/diagrams or
+reasoning, and combined parent coverage; do not presume downstream requirements
+already exist. The stage drafts identify where each activity belongs.
 
 1. **Context:** Inspect the request, repository instructions, `.ipd/project_state.yaml`, `.ipd/tailored_process.yaml`, `.ipd/process_extensions.yaml`, the applicable policies, active claims, progressive-refinement status, and read-only Git/SVN status. Initialize state only when the task includes starting IPD tracking. If `refinement_due` is non-empty, prepare and preview an explicit plan before claiming child work; applying it requires an authorized human.
 2. **Claim:** State the outcome to prove, its acceptance evidence, affected deliverables, and dependencies. Do not present an assumption as verified evidence.
