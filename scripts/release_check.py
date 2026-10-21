@@ -17,6 +17,7 @@ RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
 REQUIRED_FILES = (
+    ".gitattributes",
     "README.md",
     "README.zh-CN.md",
     "SKILL.md",
@@ -211,6 +212,11 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
             "MANIFEST.in",
             r"^recursive-include scripts \*\.py\s*$",
             "sdist must include the release simulation scripts",
+        ),
+        (
+            "MANIFEST.in",
+            r"^include \.gitattributes\s*$",
+            "sdist must preserve the worked-project byte-evidence checkout rules",
         ),
         (
             "ipdctl/version.py",

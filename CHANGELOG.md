@@ -32,6 +32,9 @@ This project follows Keep a Changelog conventions and uses PEP 440 package versi
   IR/SR/AR registers and freshly executed software tests in both languages.
 - Qualify read-only adapters with real isolated SVN repositories and two working
   copies in both languages; include the check in the OS/Python/locale CI matrix.
+- Pin worked-project Python files to LF on Git checkout, preserving their
+  byte-exact saved evidence across Windows and Linux. Test both automatic
+  line-ending modes and run the fast document/evidence gate before long tests.
 - Limit this beta's qualification evidence to public synthetic fixtures. No
   authorized private Golden project was available this cycle; real-project
   acceptance and the remaining P1/v0.5.2 backlog are not claimed complete.

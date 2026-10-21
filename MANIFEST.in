@@ -1,4 +1,5 @@
 recursive-include scripts *.py
+include .gitattributes
 recursive-include ipdctl/document_templates *.json *.md
 recursive-include docs/worked-projects/room-booking *.md *.json *.py
 recursive-include docs/qualification *.json

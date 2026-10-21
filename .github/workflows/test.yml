@@ -46,16 +46,16 @@ jobs:
           Join-Path $tools 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Qualify real read-only SVN adapters
         run: python -B scripts/verify_svn_repository.py --locale "${{ matrix.locale }}" --output "${{ runner.temp }}/svn-qualification.json"
+      - name: Check filled bilingual stage templates
+        run: python -B scripts/verify_room_booking_walkthrough.py --execute
+      - name: Qualify explicit v0.5.1 model adoption
+        run: python -B scripts/verify_v051_upgrade.py
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
         env:
           IPD_TEST_LOCALE: ${{ matrix.locale }}
         run: python -B -m unittest discover -s tests -v
-      - name: Qualify explicit v0.5.1 model adoption
-        run: python -B scripts/verify_v051_upgrade.py
-      - name: Check filled bilingual stage templates
-        run: python -B scripts/verify_room_booking_walkthrough.py --execute
       - name: Qualify two complete governed increments
         run: python -B scripts/simulate_incremental_development.py --locale "${{ matrix.locale }}"
       - name: Smoke-test lifecycle

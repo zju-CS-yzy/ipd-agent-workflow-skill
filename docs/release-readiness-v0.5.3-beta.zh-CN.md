@@ -2,7 +2,9 @@
 
 ## 最终候选范围与公开 CI（2026-10-22）
 
-GitHub HTTPS 登录已完成，候选分支已推送并建立 [PR #12](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12)。本轮发布准备只调整文档，200 份冻结生产输入及全部 140 份模板资产不变。最终提交仍须完整通过 [PR 检查](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12/checks)；过期或取消的运行不计为通过。
+GitHub HTTPS 登录已完成，候选分支已推送并建立 [PR #12](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12)。200 份冻结生产输入及全部 140 份模板资产不变。最终提交仍须完整通过 [PR 检查](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/pull/12/checks)；过期或取消的运行不计为通过。
+
+候选 `6080e12` 的 Windows / Python 3.10 CI 通过 354 项行为测试后，在示例检查发现真实问题：Git 的 CRLF 自动检出改变了 `booking.py` 的字节，与已保存证据摘要不符。已用真实 Git 工作树复现；修复将示例可执行 Python 文件明确固定为 LF，继续使用原始字节 SHA-256 检查，并增加两种检出设置的回归。快速文档/证据检查前移至长测试之前。原失败提交不计通过，修复后的完整矩阵仍须重新验证。
 
 项目所有者已明确本轮**没有可用的私有 Golden 项目**。因此私有 Golden 和真实项目验收标为未执行，本次 beta 资格范围为公开合成夹具；不将合成数据改称真实 Golden，也不将 v0.5.2 资格待办或 P1 功能自动标为完成。发布后的新项目测试用于进一步验证实际需求、迭代体验和模板可用性。
 
