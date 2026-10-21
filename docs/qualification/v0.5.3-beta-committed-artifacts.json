@@ -1,0 +1,230 @@
+{
+  "date": "2026-10-21",
+  "version": "v0.5.3-beta",
+  "candidate_source_commit": "577893d0ebdd099ad7e1310b180dd84dfdc4a52d",
+  "record_is_followup_documentation": true,
+  "publication_ready": false,
+  "environment": {
+    "os": "Windows 11",
+    "python": "3.12.14",
+    "yaml": "6.0.3"
+  },
+  "accepted_commit_build": {
+    "candidate_source_commit": "577893d0ebdd099ad7e1310b180dd84dfdc4a52d",
+    "published": false,
+    "build_source": "git archive",
+    "private_planning_excluded": true,
+    "release_hygiene": "Release hygiene check passed (346 text files scanned).",
+    "artifacts": [
+      {
+        "name": "ipd-agent-workflow-skill-v0.5.3-beta-candidate.zip",
+        "sha256": "9afb3542212e7c0a8422eeaf2a0a76b626c33331d49fbcd93e3e62f2c0f42a37",
+        "bytes": 1059274,
+        "files": 346,
+        "normalized_production_files_matched": 200,
+        "template_assets": 140
+      },
+      {
+        "name": "ipd_agent_workflow_skill-0.5.3b1-py3-none-any.whl",
+        "sha256": "af7ecf9175744fc2e59c945da567f4d39528cc9c425afe9c5a063a44a566489c",
+        "bytes": 554780,
+        "files": 232,
+        "normalized_production_files_matched": 200,
+        "template_assets": 140
+      },
+      {
+        "name": "ipd_agent_workflow_skill-0.5.3b1.tar.gz",
+        "sha256": "e24622efcd49d0df7cc5866413c60db3cd8edc7b209404bf71074ac3465d91c1",
+        "bytes": 648861,
+        "files": 319,
+        "normalized_production_files_matched": 200,
+        "template_assets": 140
+      }
+    ]
+  },
+  "historical_tag_qualifications": {
+    "v0.3.1-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "74dd1e3e5d37ab29f18b7e55274903429bf16885",
+      "log_sha256": "63fd76959ff96b34b361e5def63f9eb6320b986856c4d1ba07466701ffcaaeb1",
+      "results": {
+        "adoption_events": 2,
+        "claim_events": 3,
+        "claim_expirations": 1,
+        "claim_windows": 2,
+        "context_eligible": true,
+        "dashboard_eligible": true,
+        "dashboard_files": 16,
+        "last_verification": "passed",
+        "legacy_claims": 1,
+        "passed_verifications": 2,
+        "process_unchanged": true,
+        "profile_unchanged": true,
+        "reconcile_status": "passed"
+      }
+    },
+    "v0.3.2-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "1d02261314ac005d8d138b9ea9de86046838c2f1",
+      "log_sha256": "6b348ed592010cbcbf614ea06ec5849c1b616945434cbf1a513dab368633bf9b",
+      "results": {
+        "accepted_evidence_preserved": true,
+        "accepted_reviews_preserved": true,
+        "accepted_status_preserved": true,
+        "capability_binding_adopted": true,
+        "capability_binding_fail_closed": true,
+        "capability_deliverables": 3,
+        "capability_nodes_start_planned": true,
+        "dashboard_capability_provenance": true,
+        "final_verification": "passed",
+        "legacy_process_readable": true,
+        "preview_zero_write": true,
+        "process_upgraded_to_2_0": true,
+        "project_extension_materialized": true
+      }
+    },
+    "v0.4.0-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "c247786f81aa4972982a7aa0d507fe31479031e3",
+      "log_sha256": "6828f79aa43a1a20d953365014da46a7620e181d51b2049b63eabf846f2c8a59",
+      "results": {
+        "claim_links_preserved": 5,
+        "dashboard_files": 16,
+        "deliverables_preserved": 10,
+        "dependency_history_preserved": true,
+        "dependency_reapproval_required": true,
+        "final_validation": "passed",
+        "final_verification": "passed",
+        "generic_gates_migrated": 3,
+        "illegal_claim_deletion_blocked": true,
+        "migration_replay_idempotent": true,
+        "preview_zero_write": true,
+        "source_release": "v0.4.0-beta",
+        "traceability_additions_previewed": 1,
+        "traceability_redirects_previewed": 3,
+        "traceability_removals_previewed": 1
+      }
+    },
+    "v0.4.1-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "3637b6af183140413385b4fc77034792f80c96e3",
+      "log_sha256": "883f8466fcd5926ad52d3c289fbcf1e11380ee5830c034e50fcd8bfe400b7643",
+      "results": {
+        "accepted_status_preserved": true,
+        "capability_deliverables_previewed": 3,
+        "capability_preview": "interface_contract_and_integration",
+        "capability_preview_zero_write": true,
+        "context_readable": true,
+        "dashboard_files": 16,
+        "evidence_preserved": true,
+        "final_validation": "passed",
+        "final_verification": "passed",
+        "init_replayed": false,
+        "legacy_capabilities_enabled": 0,
+        "legacy_process_readable": true,
+        "no_op_preview_changes": 0,
+        "no_op_preview_zero_write": true,
+        "refinement_records_preserved": 1,
+        "reviews_preserved": true,
+        "runtime_events_preserved": 8,
+        "source_release": "v0.4.1-beta"
+      }
+    },
+    "v0.5.0-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "7ec12624138f9cf0cc3db6aede29f43015f2abed",
+      "log_sha256": "9c5227db681167ac320099ccb2c38ab50acf233a4fb1b87aa26be2024c1a19b4",
+      "results": {
+        "current_manifest_schema": "2.2",
+        "dashboard_files": 16,
+        "final_validation": "passed",
+        "final_verification": "passed",
+        "governance_diagnostics": [
+          "governance_document_version_stale",
+          "governance_document_gate_ids_stale",
+          "governance_document_gate_status_stale"
+        ],
+        "init_replayed": false,
+        "legacy_manifest_schema": "2.1",
+        "legacy_mid_review_failed_closed": true,
+        "process_preserved": true,
+        "profile_preserved": true,
+        "refresh_revision_delta": 1,
+        "render_dashboard_fact_preserving": true,
+        "review_refresh_zero_write": true,
+        "review_subject_mismatch_zero_write": true,
+        "review_subject_recovered": "concept.problem_definition",
+        "source_release": "v0.5.0-beta"
+      }
+    },
+    "v0.5.1-beta": {
+      "status": "passed",
+      "exit_code": 0,
+      "source_commit": "9c21717e079edc4393d9dd207c70de1d7d3041a4",
+      "log_sha256": "f25cd1b4261e21fd347be1684dc6aadf316bc1b5a7fe277d6e06816ab89c14d5",
+      "results": {
+        "status": "passed",
+        "source_tag": "v0.5.1-beta",
+        "preview_writes": 0,
+        "history_preserved": true,
+        "revision_delta": 1,
+        "locale": "zh-CN",
+        "old_skill_rejected_without_writes": true,
+        "runtime_schema": "1.1"
+      }
+    }
+  },
+  "installed_standard_venv_wheel": {
+    "status": "passed",
+    "installed_from": "site-packages",
+    "results": [
+      {
+        "locale": "en",
+        "status": "passed",
+        "qa_publication": true,
+        "governed_owner_accepted": true,
+        "placeholder_rejected_without_writes": true,
+        "canonical_parent_validation": true,
+        "runtime": "1.1"
+      },
+      {
+        "locale": "zh-CN",
+        "status": "passed",
+        "qa_publication": true,
+        "governed_owner_accepted": true,
+        "placeholder_rejected_without_writes": true,
+        "canonical_parent_validation": true,
+        "runtime": "1.1"
+      }
+    ]
+  },
+  "worked_project_fresh_execution": {
+    "result": "passed",
+    "documents": 16,
+    "requirements": {
+      "IR": 3,
+      "SR": 6,
+      "AR": 12
+    },
+    "derivations_per_locale": 21,
+    "local_links": 306,
+    "software_cases": 21,
+    "fresh_execution": true,
+    "human_approval": "not_granted"
+  },
+  "prior_full_workflows": "v0.5.3-beta-release-candidate.json; all 200 production inputs match this commit after newline normalization",
+  "not_executed": [
+    "GitHub accepted-commit Windows/Linux and Python 3.10/3.14 CI",
+    "Authorized private Golden; local fixture path not supplied"
+  ],
+  "publication": {
+    "tag_created": false,
+    "published": false,
+    "candidate_branch_pushed": false
+  }
+}
