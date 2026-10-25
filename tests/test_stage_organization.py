@@ -259,7 +259,9 @@ class StageOrganizationTests(unittest.TestCase):
                 preview(self.root,self.f.request(op,**fields))
             self.assertEqual(before,self.f.bytes())
 
-        runtime=load_runtime(self.root);runtime['active_claims'][owner]['expires_at']='2000-01-01T00:00:00Z'
+        runtime=load_runtime(self.root)
+        runtime['active_claims'][owner]['started_at']='1999-01-01T00:00:00Z'
+        runtime['active_claims'][owner]['expires_at']='2000-01-01T00:00:00Z'
         save_runtime(self.root,runtime);expired=self.f.bytes()
         with self.assertRaisesRegex(RequirementError,'STAGE_CLAIM_SCOPE'):
             preview(self.root,self.f.request('numbered_requirement',requirement=child))

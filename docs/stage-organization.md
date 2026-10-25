@@ -77,6 +77,18 @@ Parent input alone is enough to start: child outputs can initially be empty. Whe
 
 Hold the relevant Owner Claim before passing a selected proposal as `instance` to the existing `instantiate` operation. A TR2/TR3 conclusion draft may initially reference just its parent. Actually derive each candidate child there, including unique argument anchors, assumptions, calculations/diagrams, sources, alternatives and verification criteria. Then register selected children and consolidate the register.
 
+First use does not require pre-registering all children. A valid Claim holder
+whose Owner maps uniquely to one TR1–TR3 plan may submit the existing authorized
+requests to register version-1 requirements of that stage, add only their scope,
+and complete the unit's parent decomposition. TR3 implementation links may bind
+these requirements and their ancestors to that same Owner. Applying actors must
+hold the Claim. Existing identity revisions, reductions or changes to committed
+criteria, other stages, template pins and stage planning retain their safe-boundary
+rules. TR4 does not use this path to create AR requirements. Preserve the initial
+analysis draft through `revise_instance` when managed coverage expands.
+
+The public synthetic qualification driver supports the complete organized workflow:
+
 When managed coverage changes, use `revise_instance` with `old` and a new `instance`. Preserve Owner/type/key/locale, choose a new ID and path, and retain the prior file. Do not overwrite or edit the registry to fake metadata. A child register references only its output rows; its parent input is not another child row.
 
 ## Associate supporting work and conclusions
@@ -114,18 +126,6 @@ Requirement links locate exact records; usage links jump to the next consuming u
 Definition, decomposition, material completeness, Owner acceptance, implementation and verification are separate dimensions. Wrong parentage, missing outputs/indexes, required stale support, unfinished units or unknown impact cannot manufacture a pass. Changed materials and relations participate in review and verification contexts.
 
 ## Qualification and scope
-
-First use does not require pre-registering all children. A valid Claim holder
-whose Owner maps uniquely to one TR1–TR3 plan may submit the existing authorized
-requests to register version-1 requirements of that stage, add only their scope,
-and complete the unit's parent decomposition. TR3 implementation links may bind
-these requirements and their ancestors to that same Owner. Applying actors must
-hold the Claim. Existing identity revisions, reductions or changes to committed
-criteria, other stages, template pins and stage planning retain their safe-boundary
-rules. TR4 does not use this path to create AR requirements. Preserve the initial
-analysis draft through `revise_instance` when managed coverage expands.
-
-The public synthetic qualification driver supports the complete organized workflow:
 
 ```console
 python -B scripts/simulate_incremental_development.py --organized --locale en
