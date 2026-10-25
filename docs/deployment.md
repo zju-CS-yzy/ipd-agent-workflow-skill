@@ -2,8 +2,10 @@
 
 [English](deployment.md) | [简体中文](deployment.zh-CN.md)
 
-The current development target is `v0.5.3-beta` (`0.5.3b1`). Published-project
-probes include `v0.5.0-beta` and explicit opt-in adoption from `v0.5.1-beta`.
+The current development target is `v0.5.4-beta` (`0.5.4b1`). Published-project
+probes include `v0.5.0-beta`, opt-in adoption from `v0.5.1-beta`, and actual
+`v0.5.3-beta` source upgrading explicitly to the stage organization contract.
+Read [stage organization](stage-organization.md) before adopting the new layout.
 See [requirements and templates](requirements-and-templates.md) before enabling
 the new model; release qualification is tracked separately from implementation.
 

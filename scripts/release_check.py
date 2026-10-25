@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.3b1"
-PUBLIC_VERSION = "0.5.3-beta"
+PACKAGE_VERSION = "0.5.4b1"
+PUBLIC_VERSION = "0.5.4-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -34,9 +34,17 @@ REQUIRED_FILES = (
     "scripts/verify_v041_upgrade.py",
     "scripts/verify_v050_upgrade.py",
     "scripts/verify_v051_upgrade.py",
+    "scripts/verify_v053_upgrade.py",
+    "scripts/stage_development_support.py",
     "scripts/simulate_incremental_development.py",
     "scripts/verify_room_booking_walkthrough.py",
     "ipdctl/template_publications.py",
+    "ipdctl/stage_organization.py",
+    "ipdctl/stage_flow.py",
+    "schemas/stage_unit.schema.json",
+    "schemas/stage_organization.schema.json",
+    "docs/stage-organization.md",
+    "docs/stage-organization.zh-CN.md",
     "ipdctl/requirements.py",
     "ipdctl/documents.py",
     "ipdctl/document_templates/manifest.json",
@@ -49,6 +57,7 @@ REQUIRED_FILES = (
     "scripts/verify_local_golden.py",
     "scripts/verify_svn_repository.py",
     "scripts/verify_dashboard_browser.py",
+    "scripts/verify_stage_browser.py",
     "ipdctl/dashboard_files.py",
     "scripts/simulate_capability_lifecycle.py",
     "scripts/simulate_progressive_refinement.py",

@@ -3,7 +3,7 @@ name: release
 on:
   push:
     tags:
-      - "v0.5.3-beta"
+      - "v0.5.4-beta"
 
 permissions:
   contents: write
@@ -33,9 +33,12 @@ jobs:
           python -B scripts/verify_v041_upgrade.py
           python -B scripts/verify_v050_upgrade.py
           python -B scripts/verify_v051_upgrade.py
+          python -B scripts/verify_v053_upgrade.py
           python -B scripts/verify_room_booking_walkthrough.py --execute
           python -B scripts/simulate_incremental_development.py --locale en
           python -B scripts/simulate_incremental_development.py --locale zh-CN
+          python -B scripts/simulate_incremental_development.py --organized --locale en
+          python -B scripts/simulate_incremental_development.py --organized --locale zh-CN
           python -B -m unittest discover -s tests -v
           IPD_TEST_LOCALE=en python -B -m unittest \
             tests.test_full_lifecycle_simulation -v
@@ -46,20 +49,20 @@ jobs:
           git archive \
             --format=zip \
             --prefix=ipd-agent-workflow-skill/ \
-            --output=dist/ipd-agent-workflow-skill-v0.5.3-beta.zip \
+            --output=dist/ipd-agent-workflow-skill-v0.5.4-beta.zip \
             HEAD
           cd dist
           sha256sum \
-            ipd-agent-workflow-skill-v0.5.3-beta.zip \
-            ipd_agent_workflow_skill-0.5.3b1-py3-none-any.whl \
-            ipd_agent_workflow_skill-0.5.3b1.tar.gz \
+            ipd-agent-workflow-skill-v0.5.4-beta.zip \
+            ipd_agent_workflow_skill-0.5.4b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.5.4b1.tar.gz \
             > SHA256SUMS.txt
       - name: Inspect and smoke-test release artifacts
         shell: bash
         run: |
           wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.5.3-beta.zip"
+          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.5.4-beta.zip"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
           python -m zipfile -l "$wheel" | grep 'schemas/artifact_bindings.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
@@ -179,12 +182,12 @@ jobs:
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@5113cdc90fd4d541c801c55356214017bf5ae34b # v3
         with:
-          name: "IPD Agent Workflow Framework v0.5.3-beta"
-          body_path: .github/release-notes/v0.5.3-beta.md
+          name: "IPD Agent Workflow Framework v0.5.4-beta"
+          body_path: .github/release-notes/v0.5.4-beta.md
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            dist/ipd-agent-workflow-skill-v0.5.3-beta.zip
-            dist/ipd_agent_workflow_skill-0.5.3b1-py3-none-any.whl
-            dist/ipd_agent_workflow_skill-0.5.3b1.tar.gz
+            dist/ipd-agent-workflow-skill-v0.5.4-beta.zip
+            dist/ipd_agent_workflow_skill-0.5.4b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.5.4b1.tar.gz
             dist/SHA256SUMS.txt

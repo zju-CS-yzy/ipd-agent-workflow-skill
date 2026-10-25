@@ -1,8 +1,18 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.3-beta` maps to package version `0.5.3b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.4-beta` maps to package version `0.5.4b1`.
 
 ## [Unreleased]
+
+## [0.5.4b1] - 2026-10-25
+
+- Add explicit registry 1.1 adoption, stable-identity hierarchical numbering and serial number allocation.
+- Plan per-parent TR2/TR3 decomposition documents, grouped registers, stage indexes and TR4 delivery conclusions.
+- Bind supporting artifacts, exact inputs/outputs and shared consumers to readiness, review and verification.
+- Add read-only stage work-product navigation, reverse references and historical-context projections.
+- Publish starter pack 1.3.0 with 23 bilingual types; retain pack 1.2.1 unchanged.
+- Add explicit draft-instance revision into a new file, preserving prior files and identity.
+- Preserve single Claim/review governance; native DOCX/XLSX and bulk path migration remain separate work.
 
 ## [0.5.3b1] - 2026-10-22
 

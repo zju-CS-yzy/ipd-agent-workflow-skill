@@ -1,5 +1,7 @@
 # TR1–TR4 overall documents and requirements register drafts
 
+For 0.5.4 per-parent files and stage work-product organization, use the [organization guide](stage-organization.md). The older overall drafts below remain available for existing pins.
+
 Updated 2026-10-20. These **0.2.1 discussion drafts** follow the stage convention proposed for this project. They are not original Huawei QA templates and do not redefine the existing six-phase TR/DCP gates. The new types can be inspected and instantiated through `ipdctl templates`; the proposed two-document minimum is not an automatic gate rule.
 
 See the completed [offline room-booking project](worked-projects/room-booking/index.md): 3IR→6SR→12AR, sixteen bilingual documents, individual derivations and 21 executed software cases. Its [first-use walkthrough](worked-projects/room-booking/walkthrough.md) explains added guidance for unique derivation IDs, progressive metadata and stage snapshots.

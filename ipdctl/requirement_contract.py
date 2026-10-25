@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
 from .documents import RequirementError
@@ -40,7 +41,7 @@ SCOPE = arr(obj({"requirement": REF, "criteria": {**arr(ID), "minItems": 1}}))
 PIN = obj({"id": ID, "version": S, "sha256": HASH, "path": {"type": "string"},
            "layer": enum("core", "organization", "project")})
 TEMPLATE_PACK = {"$schema": "https://json-schema.org/draft/2020-12/schema", **obj({
-    "schema_version": enum("1.0"), "id": ID, "version": S, "contract": enum("0.5.3"),
+    "schema_version": enum("1.0"), "id": ID, "version": S, "contract": enum("0.5.3", "0.5.4"),
     "layer": enum("core", "organization", "project"),
     "templates": {**arr(obj({"document_type": ID, "id": ID, "version": S,
         "locale": enum("en", "zh-CN"), "path": S, "sections": {**arr(ID), "minItems": 1},
@@ -98,6 +99,32 @@ SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema",
     "verifications": arr(VERIFICATION), "baselines": arr(BASELINE), "changes": arr(CHANGE),
     "events": arr(EVENT), "migration": obj({"path": S, "sha256": HASH, "unmapped": arr(ID)})})}
 SCHEMA["properties"]["template_records"] = arr(TEMPLATE_RECORD)
+
+# Keep 1.0 readable verbatim. New organizational facts require a new contract,
+# so published 0.5.3 clients reject them rather than dropping unknown fields.
+LEGACY_SCHEMA = SCHEMA
+SUPPORT = obj({"kind": enum("instance", "artifact"), "target": S, "owner": ID,
+               "required": {"type": "boolean"}, "rationale": S,
+               "anchor": {"type": "string"}, "sha256": {"oneOf": [HASH, NULL]}})
+STAGE_UNIT = obj({"id": ID, "increment": ID, "stage": enum("TR1", "TR2", "TR3", "TR4"),
+                  "owner": ID, "locale": enum("en", "zh-CN"), "inputs": arr(REF),
+                  "outputs": arr(REF), "supports": arr(SUPPORT), "conclusion": ID,
+                  "arguments": arr(obj({"requirement": REF, "anchor": ID})),
+                  "register": {"oneOf": [ID, NULL]}, "finalized": {"type": "boolean"}, "rationale": S})
+STAGE_PLAN = obj({"increment": ID, "stage": enum("TR1", "TR2", "TR3", "TR4"),
+                  "owner": ID, "locale": enum("en", "zh-CN"), "index": ID})
+ORGANIZATION = obj({"policy": enum("hierarchical-v1"),
+    "required_stages": {**arr(enum("TR1", "TR2", "TR3", "TR4")), "minItems": 1},
+    "codes": arr(obj({"requirement": REF, "code": ID})),
+    "plans": arr(STAGE_PLAN), "units": arr(STAGE_UNIT),
+    "adoption": obj({"path": S, "sha256": HASH})})
+ORGANIZED_SCHEMA = deepcopy(LEGACY_SCHEMA)
+ORGANIZED_SCHEMA["title"] = "Incremental requirement registry 1.1"
+ORGANIZED_SCHEMA["properties"].update(schema_version=enum("1.1"), contract=enum("0.5.4"), organization=ORGANIZATION)
+ORGANIZED_SCHEMA["required"] = [*ORGANIZED_SCHEMA["required"], "organization"]
+ORGANIZED_SCHEMA["properties"]["instances"]["items"]["properties"]["requirements"] = arr(REF)
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "Incremental requirement registries", "oneOf": [LEGACY_SCHEMA, ORGANIZED_SCHEMA]}
 
 
 def validate(value: Any, schema: dict = SCHEMA, path: str = "$") -> None:

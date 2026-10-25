@@ -1,0 +1,171 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "increment": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "TR1",
+        "TR2",
+        "TR3",
+        "TR4"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "en",
+        "zh-CN"
+      ]
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+      }
+    },
+    "supports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "instance",
+              "artifact"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor": {
+            "type": "string"
+          },
+          "sha256": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "target",
+          "owner",
+          "required",
+          "rationale",
+          "anchor",
+          "sha256"
+        ]
+      }
+    },
+    "conclusion": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "arguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirement": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+          },
+          "anchor": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "requirement",
+          "anchor"
+        ]
+      }
+    },
+    "register": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "finalized": {
+      "type": "boolean"
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "increment",
+    "stage",
+    "owner",
+    "locale",
+    "inputs",
+    "outputs",
+    "supports",
+    "conclusion",
+    "arguments",
+    "register",
+    "finalized",
+    "rationale"
+  ]
+}

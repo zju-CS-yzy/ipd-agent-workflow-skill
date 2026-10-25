@@ -173,6 +173,8 @@ def render_dashboard(
 
         _atomic_write(staging / "data" / "state.json", _json_text(state_data))
         _atomic_write(staging / "data" / "graph.json", _json_text(graph_data))
+        if requirement_data is not None and "flow" in requirement_data:
+            _atomic_write(staging / "data" / "requirement_flow.json", _json_text(requirement_data["flow"]))
         _atomic_write(
             staging / "assets" / "ipd_flow.svg",
             render_process_svg(process_graph, translator=translator),
@@ -306,6 +308,8 @@ def render_dashboard(
         }
         if requirement_data is not None:
             manifest["requirements_sha256"] = requirement_data["input_sha256"]
+            if "flow" in requirement_data:
+                manifest["views"]["requirement_flow"] = "data/requirement_flow.json"
         _atomic_write(staging / "manifest.json", _json_text(manifest))
         _publish_dashboard_tree(staging, output)
         return manifest

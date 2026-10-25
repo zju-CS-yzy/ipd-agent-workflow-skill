@@ -1,6 +1,21 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.3b1` and public label `v0.5.3-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.4b1` and public label `v0.5.4-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+
+## v0.5.4-beta candidate scope — 2026-10-25
+
+This section describes the candidate, not a completed release qualification.
+Earlier sections below are historical source snapshots and must not be used to
+claim that new source passed their tests.
+
+- [x] Implement opt-in registry 1.1 / contract 0.5.4 with a prior-input snapshot; actual published v0.5.3 source rejects writing the adopted fixture without changing bytes.
+- [x] Add hierarchical number allocation, stable identity/display mappings, per-parent stage plans, explicit support and child-argument references, and new-file draft revision.
+- [x] Add starter pack 1.3.0 (23 bilingual types) and preserve pack 1.2.1. Add stage work-product JSON/UI and canonical input/freshness checks.
+- [ ] Re-run final-source behavior tests, independent multi-parent/negative fixtures, both complete organized increments and both legacy increments. All applicable results must pass; missing or interrupted runs do not qualify.
+- [ ] Pass historical upgrade gates, real isolated SVN fixtures, old/new Dashboard browser suites in file/HTTP modes, Windows/Linux and supported Python endpoint CI.
+- [ ] Build and inspect Skill ZIP/wheel/sdist, validate byte identity against Git objects, and run isolated bilingual installation probes outside the checkout.
+- [ ] Push only after local required checks pass, integrate only the qualified source, and require this release Tag's own successful CI before publication. Record actual public-download checks separately without moving the Tag.
+- [x] Private Golden and real-project acceptance are not available as automated fixtures this cycle. Public synthetic test decisions do not stand in for human acceptance or authenticated repository approval mapping. Bulk historical path migration and native DOCX/XLSX remain outside this beta.
 
 ## v0.5.3-beta final candidate scope — 2026-10-22
 

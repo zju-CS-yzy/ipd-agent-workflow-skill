@@ -50,6 +50,8 @@ jobs:
         run: python -B scripts/verify_room_booking_walkthrough.py --execute
       - name: Qualify explicit v0.5.1 model adoption
         run: python -B scripts/verify_v051_upgrade.py
+      - name: Qualify actual v0.5.3 organization adoption
+        run: python -B scripts/verify_v053_upgrade.py
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
@@ -58,6 +60,8 @@ jobs:
         run: python -B -m unittest discover -s tests -v
       - name: Qualify two complete governed increments
         run: python -B scripts/simulate_incremental_development.py --locale "${{ matrix.locale }}"
+      - name: Qualify two per-parent organized increments
+        run: python -B scripts/simulate_incremental_development.py --organized --locale "${{ matrix.locale }}"
       - name: Smoke-test lifecycle
         shell: bash
         run: |
@@ -316,3 +320,5 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Verify bilingual offline and HTTP Dashboard interactions
         run: python -B scripts/verify_dashboard_browser.py --output "$RUNNER_TEMP/dashboard-browser"
+      - name: Verify per-parent work-product navigation
+        run: python -B scripts/verify_stage_browser.py --output "$RUNNER_TEMP/stage-browser"

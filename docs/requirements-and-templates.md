@@ -1,5 +1,7 @@
 # Progressive requirements, increments and Markdown templates
 
+For 0.5.4 per-parent files and stage work-product organization, use the [organization guide](stage-organization.md). The older overall drafts below remain available for existing pins.
+
 The v0.5.3-beta version adds an explicit opt-in IR/SR/AR registry. Existing projects keep their current behavior. Release qualification is recorded separately in RELEASE_CHECKLIST.md; this cycle uses public synthetic fixtures because no private Golden project was available.
 
 ## Inspect the starter templates

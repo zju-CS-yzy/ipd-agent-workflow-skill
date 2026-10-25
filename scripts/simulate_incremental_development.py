@@ -34,7 +34,7 @@ DEMO = ROOT / "docs/worked-projects/room-booking"
 PHASES = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
 
 
-def run(locale: str, project: Path) -> dict:
+def run(locale: str, project: Path, *, organized: bool = False) -> dict:
     started = time.monotonic()
     project.mkdir(parents=True)
     count = 0
@@ -81,6 +81,15 @@ def run(locale: str, project: Path) -> dict:
     for phase in PHASES:
         bindings["bindings"].append({"id": "docs-" + phase, "glob": f"docs/*/{phase}/**",
             "deliverable": phase_owner[phase], "role": "owner", "critical": True})
+        if organized and phase in {"concept", "plan", "develop", "qualify"}:
+            stage_code={"concept":"tr1","plan":"tr2","develop":"tr3","qualify":"tr4"}[phase]
+            bindings["bindings"].append({"id":"stage-"+phase,"glob":f"docs/increments/*/{stage_code}/**",
+                "deliverable":phase_owner[phase],"role":"owner","critical":True})
+    if organized:
+        for identifier,pattern,owner in (("shared-source","docs/shared/**",phase_owner['concept']),
+            ("case-results","evidence/*/cases.json",phase_owner['qualify']),
+            ("extended-results","evidence/*/extended.txt",phase_owner['qualify'])):
+            bindings['bindings'].append({'id':identifier,'glob':pattern,'deliverable':owner,'role':'owner','critical':True})
     bindings["bindings"].append({"id": "implementation", "glob": "implementation/**",
         "deliverable": phase_owner["develop"], "role": "owner", "critical": True})
     write_state(bindings_path, bindings)
@@ -91,7 +100,13 @@ def run(locale: str, project: Path) -> dict:
     request("review_templates", actor="fixture-qa-reviewer", id="review", source="draft", decision="approved")
     request("publish_templates", actor="fixture-publisher", id="published", source="review")
     request("pin_templates", path="")
+    if organized:
+        request("adopt_organization",required_stages=["TR1","TR2","TR3","TR4"])
     catalog = json.loads((DEMO / "catalog.json").read_text(encoding="utf-8"))["requirements"]
+    if organized:
+        from stage_development_support import numbered_catalog
+        catalog=numbered_catalog(catalog)
+    extension_ref=next(r['ref'] for r in catalog if r.get('legacy_id',r['id'])=='ir-03')
     docs = [d for d in json.loads((DEMO / "document-instances.json").read_text(encoding="utf-8"))["documents"] if d["instance"]["locale"] == locale]
     def destination(document, increment):
         name = Path(document["path"]).stem
@@ -122,7 +137,7 @@ def run(locale: str, project: Path) -> dict:
     for cycle, increment in enumerate(("mvp", "extension")):
         print(f"{locale}: starting {increment}", flush=True)
         if cycle:
-            scope = [{**s, "criteria": [*s["criteria"], "extended-cases"] if s["requirement"] == "ir-03@1" else s["criteria"]} for s in scope]
+            scope = [{**s, "criteria": [*s["criteria"], "extended-cases"] if s["requirement"] == extension_ref else s["criteria"]} for s in scope]
             request("begin", increment=increment, product_version="0.2", base_baseline="b1", scope=scope)
         shutil.copytree(DEMO, project / "reference" / increment)
         for phase in PHASES:
@@ -130,7 +145,7 @@ def run(locale: str, project: Path) -> dict:
             if kind and not cycle:
                 for r in [r for r in catalog if r["kind"] == kind]:
                     criteria = [{"id": r["criterion"].lower(), "criterion": r["statement"][locale], "method": "test"}]
-                    if r["id"] == "ir-03":
+                    if r.get('legacy_id',r['id']) == "ir-03":
                         criteria.append({"id": "extended-cases", "criterion": "1000 serial book/cancel cycles preserve zero occupied minutes", "method": "test"})
                     request("requirement", requirement={"id": r["id"], "version": 1, "kind": kind,
                         "title": r["id"], "statement": r["statement"][locale], "source": "worked-brief@1",
@@ -148,6 +163,10 @@ def run(locale: str, project: Path) -> dict:
                         "target": phase_owner[phase], "rationale": "Worked implementation symbol " + r["code"]})
             stage = {"concept": "TR1", "plan": "TR2", "develop": "TR3", "qualify": "TR4"}.get(phase)
             stage_docs = [d for d in docs if stage and Path(d["path"]).stem.endswith(stage)]
+            if organized:
+                stage_docs=[]
+                if stage:
+                    request('stage_plan',stage=stage,owner=phase_owner[phase],locale=locale)
             for document in stage_docs:
                 instance = document["instance"]
                 request("obligation", obligation={"id": f"ob-{increment}-{Path(document['path']).stem.lower()}",
@@ -182,6 +201,9 @@ def run(locale: str, project: Path) -> dict:
                         counts["documents"] += 1
                     if phase == "develop":
                         shutil.copytree(DEMO / "implementation", project / f"implementation/{increment}")
+                    if organized and stage and phase!='qualify':
+                        from stage_development_support import write_stage
+                        write_stage(project,stage,locale,request,counts,phase_owner)
                     if phase == "qualify":
                         code = project / f"implementation/{increment}"
                         result = subprocess.run([sys.executable, "-B", "verify_demo.py"], cwd=code,
@@ -200,6 +222,9 @@ def run(locale: str, project: Path) -> dict:
                                 cwd=code, capture_output=True, text=True, encoding="utf-8", check=True)
                             (project / f"evidence/{increment}/extended.txt").write_text(extra.stdout, encoding="utf-8")
                             counts["cases"] += 1
+                        if organized:
+                            from stage_development_support import write_stage
+                            write_stage(project,stage,locale,request,counts,phase_owner)
                         for s in scope:
                             for criterion in s["criteria"]:
                                 request("verification", actor="fixture-agent", verification={
@@ -247,7 +272,7 @@ def run(locale: str, project: Path) -> dict:
                 raise RuntimeError("Earlier baseline changed")
             frozen[b["id"]] = content
         if not cycle:
-            ir = next(r for r in projection(project)["coverage"] if r["requirement"] == "ir-03@1")
+            ir = next(r for r in projection(project)["coverage"] if r["requirement"] == extension_ref)
             if ir["fulfillment"] != "partial":
                 raise RuntimeError("MVP falsely claims future criterion accepted")
     registry = projection(project)
@@ -257,6 +282,7 @@ def run(locale: str, project: Path) -> dict:
     if read_registry(project)["product_state"] != "retired":
         raise RuntimeError("Explicit retirement failed")
     return {"status": "passed", "locale": locale, "increments": 2, "baselines": 2,
+        "stage_organization":organized,
         "requirements": len(catalog), "counts": counts, "history_preserved": True,
         "runtime_schema": "1.1", "synthetic_human_decisions": True,
         "seconds": round(time.monotonic()-started, 3)}
@@ -266,13 +292,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--locale", choices=("en", "zh-CN"), default="en")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--organized",action="store_true",help="Qualify 0.5.4 per-parent organization and work-product graphs")
     parser.add_argument("--project", type=Path, help="Keep an isolated project; target must not exist")
     args = parser.parse_args()
     if args.project:
-        result = run(args.locale, args.project)
+        result = run(args.locale, args.project, organized=args.organized)
     else:
         with tempfile.TemporaryDirectory(prefix="ipd-increment-") as temp:
-            result = run(args.locale, Path(temp) / "project")
+            result = run(args.locale, Path(temp) / "project", organized=args.organized)
     text = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(text, encoding="utf-8")

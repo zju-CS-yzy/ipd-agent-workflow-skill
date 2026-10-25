@@ -24,6 +24,23 @@ and `launch` are separate from this per-deliverable loop.
 
 ## Operating contract
 
+For per-parent IR→SR/SR→AR files, hierarchical numbering and the stage
+work-product Dashboard, read [stage organization](docs/stage-organization.md)
+([中文](docs/stage-organization.zh-CN.md)). Existing registries retain their
+0.5.3 contract until an authorized `adopt_organization` plan is accepted, before
+any work is accepted in the increment. Plan each stage from its scoped parent
+versions; identify required supporting materials, their one Owner and shared
+consumers, then the conclusion and child register. Use `numbered_requirement`
+to allocate new IDs. Preserve existing canonical IDs and histories; readable
+codes are separate versioned mappings. Never infer parents or permissions from
+names or folders. A conclusion may be drafted before children exist; after
+derivation, register children and update the explicit output set. Use
+`revise_instance` with a new path when its managed coverage changes. Finalize
+only after checking the complete scoped child set and required support versions.
+Use the proposed file list and binding diagnostics before taking the Owner
+Claim; the plan creates neither files nor permissions. Supporting work remains
+subject to core Deliverable acceptance and explicit execution dependencies.
+
 For MVPs, subsequent releases, or requirement-driven iteration, read
 [requirements and templates](docs/requirements-and-templates.md)
 ([中文](docs/requirements-and-templates.zh-CN.md)). Enable IR/SR/AR explicitly;
