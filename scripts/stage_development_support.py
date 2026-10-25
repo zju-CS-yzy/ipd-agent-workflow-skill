@@ -38,15 +38,20 @@ def check_stage_outcomes(project):
                 base=f'docs/increments/{inc}/tr3/ir-{ir:03}/sr-{ir:03}-{sr:03}/'
                 assert {base+'sr_decomposition.md',base+'ar_spec.md'} <= {i['path'] for i in data['instances']}
     assert all(n['status']=='accepted' for n in flow['nodes'] if n['type']=='Deliverable')
-    from ipdctl.runtime import load_runtime
-    holder=None;formed=0
-    for event in load_runtime(project)['events']:
-        if event['action']=='claim':holder=event['deliverable']
-        elif event['action']=='close':holder=None
-        elif event['action']=='requirements_numbered_requirement':
-            assert holder is not None, 'Requirements were pre-registered outside their analysis Claim'
-            formed+=1
-    assert formed==21
+    # Begin creates the next Runtime. Earlier Claim windows remain in their
+    # accepted baseline snapshots rather than the current increment's events.
+    formed={}
+    for baseline in data['baselines']:
+        holder=None;count=0
+        snapshot=json.loads((project/baseline['path']).read_text(encoding='utf-8'))
+        for event in snapshot['runtime']['events']:
+            if event['action']=='claim':holder=event['deliverable']
+            elif event['action']=='close':holder=None
+            elif event['action']=='requirements_numbered_requirement':
+                assert holder is not None, 'Requirements were pre-registered outside their analysis Claim'
+                count+=1
+        formed[baseline['id']]=count
+    assert formed=={'b1':21,'b2':0}
     return {'units':32,'stage_indexes':8,'managed_documents':72,'retained_drafts':20,'dashboard_files':17,
             'requirements_formed_under_claim':21,
             'tr4_verification_layers':['AR','SR','IR'],'shared_consumers_per_increment':16,
