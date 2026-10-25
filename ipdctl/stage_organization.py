@@ -22,6 +22,50 @@ TYPES = {"TR1": ("tr1_requirements_feasibility", "ir_spec"),
          "TR3": ("sr_decomposition", "ar_spec"),
          "TR4": ("delivery_conclusion", "ar_spec")}
 NEW_TYPES = {"stage_index", "ir_decomposition", "sr_decomposition", "delivery_conclusion", "hardware_selection"}
+CLAIM_EDITS = {"requirement", "numbered_requirement", "scope", "decomposition", "link"}
+
+
+def authorize_claim_edit(registry, state, runtime, operation, request):
+    """Accept only the current stage's additive derivation under its one Claim."""
+    from .runtime import _parse_time, utc_now
+    claims=runtime['active_claims']
+    if len(claims)!=1:
+        raise RequirementError('STAGE_CLAIM_SCOPE: hold exactly one stage Owner Claim')
+    owner,lease=next(iter(claims.items()))
+    subject=next((d for d in state['deliverables'] if d['id']==owner),None)
+    plans=[p for p in organization(registry)['plans'] if p['increment']==registry['active_increment'] and p['owner']==owner]
+    if (not subject or len(plans)!=1 or plans[0]['stage'] not in {'TR1','TR2','TR3'} or
+            subject['phase']!=state['project']['phase'] or subject['status']!='in_progress' or
+            _parse_time(lease['expires_at'])<=utc_now()):
+        raise RequirementError('STAGE_CLAIM_SCOPE: only active TR1/TR2/TR3 stage work may add derived requirements')
+    stage=plans[0]['stage'];kind={'TR1':'IR','TR2':'SR','TR3':'AR'}[stage]
+    parents={r for u in organization(registry)['units'] if u['increment']==registry['active_increment'] and u['stage']==stage for r in u['inputs']}
+    records={reference(r):r for r in registry['requirements']}
+    def belongs(value):
+        return value['kind']==kind and not value['derived'] and (value['parent'] is None if stage=='TR1' else value['parent'] in parents)
+    if operation in {'requirement','numbered_requirement'}:
+        value=request['requirement']
+        if value['version']!=1 or value.get('id') in {r['id'] for r in records.values()} or not belongs(value):
+            raise RequirementError('STAGE_CLAIM_SCOPE: add a new child of this stage; revise existing identities at a safe boundary')
+    elif operation=='scope':
+        current=next(i for i in registry['increments'] if i['id']==registry['active_increment'])
+        old={s['requirement']:set(s['criteria']) for s in current['scope']}
+        new={s['requirement']:set(s['criteria']) for s in request['scope']}
+        if any(new.get(r)!=criteria for r,criteria in old.items()) or any(r not in records or not belongs(records[r]) for r in new.keys()-old.keys()):
+            raise RequirementError('STAGE_CLAIM_SCOPE: preserve committed scope and add only current-stage children')
+    elif operation=='decomposition':
+        if request['requirement'] not in parents or request['status']!='complete':
+            raise RequirementError('STAGE_CLAIM_SCOPE: only complete the current unit parent decomposition')
+    elif operation=='link':
+        item=request['link'];scoped={s['requirement'] for i in registry['increments'] if i['id']==registry['active_increment'] for s in i['scope']}
+        allowed={r for r in scoped if r in records and belongs(records[r])}
+        for exact in list(allowed):
+            parent=records[exact]['parent']
+            while parent:
+                allowed.add(parent);parent=records[parent]['parent']
+        if stage!='TR3' or item['requirement'] not in allowed or item['target']!=owner or item['relation'] not in {'allocated_to','satisfied_by'}:
+            raise RequirementError('STAGE_CLAIM_SCOPE: TR3 implementation links must stay within this derivation and Owner')
+    return owner
 
 
 class _Anchors(HTMLParser):

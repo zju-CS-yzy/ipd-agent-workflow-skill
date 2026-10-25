@@ -115,6 +115,16 @@ Definition, decomposition, material completeness, Owner acceptance, implementati
 
 ## Qualification and scope
 
+First use does not require pre-registering all children. A valid Claim holder
+whose Owner maps uniquely to one TR1–TR3 plan may submit the existing authorized
+requests to register version-1 requirements of that stage, add only their scope,
+and complete the unit's parent decomposition. TR3 implementation links may bind
+these requirements and their ancestors to that same Owner. Applying actors must
+hold the Claim. Existing identity revisions, reductions or changes to committed
+criteria, other stages, template pins and stage planning retain their safe-boundary
+rules. TR4 does not use this path to create AR requirements. Preserve the initial
+analysis draft through `revise_instance` when managed coverage expands.
+
 The public synthetic qualification driver supports the complete organized workflow:
 
 ```console

@@ -21,7 +21,8 @@ def check_stage_outcomes(project):
     from ipdctl.requirements import projection
     data=read_registry(project);flow=projection(project)['flow']
     assert Counter(u['stage'] for u in flow['units'])=={'TR1':2,'TR2':6,'TR3':12,'TR4':12}
-    assert len(flow['indexes'])==8 and len(data['instances'])==72
+    from ipdctl.template_publications import live_instances
+    assert len(flow['indexes'])==8 and len(live_instances(data))==72 and len(data['instances'])==92
     assert all(u['status']=='historical' for u in flow['units'])
     assert len([p for p in (project/'.ipd/dashboard').rglob('*') if p.is_file()])==17
     nodes={n['id']:n for n in flow['nodes']}
@@ -37,7 +38,17 @@ def check_stage_outcomes(project):
                 base=f'docs/increments/{inc}/tr3/ir-{ir:03}/sr-{ir:03}-{sr:03}/'
                 assert {base+'sr_decomposition.md',base+'ar_spec.md'} <= {i['path'] for i in data['instances']}
     assert all(n['status']=='accepted' for n in flow['nodes'] if n['type']=='Deliverable')
-    return {'units':32,'stage_indexes':8,'managed_documents':72,'dashboard_files':17,
+    from ipdctl.runtime import load_runtime
+    holder=None;formed=0
+    for event in load_runtime(project)['events']:
+        if event['action']=='claim':holder=event['deliverable']
+        elif event['action']=='close':holder=None
+        elif event['action']=='requirements_numbered_requirement':
+            assert holder is not None, 'Requirements were pre-registered outside their analysis Claim'
+            formed+=1
+    assert formed==21
+    return {'units':32,'stage_indexes':8,'managed_documents':72,'retained_drafts':20,'dashboard_files':17,
+            'requirements_formed_under_claim':21,
             'tr4_verification_layers':['AR','SR','IR'],'shared_consumers_per_increment':16,
             'frozen_owner_status':'accepted','historical_snapshots':True}
 
@@ -55,10 +66,33 @@ def numbered_catalog(catalog):
     return result
 
 
-def write_stage(project, stage, locale, request, counts, phase_owner):
+def start_derivations(project,stage,locale,request,counts,catalog):
+    """Write actual candidate arguments before any child is registered."""
+    data=read_registry(project);inc=data['active_increment'];drafts={}
+    for unit in [u for u in data['organization']['units'] if u['increment']==inc and u['stage']==stage]:
+        item=next(p for p in blueprints(data) if p['id']==unit['conclusion'])
+        draft={**item,'id':item['id']+'-draft','path':item['path'].replace('.md','-draft.md'),'requirements':unit['inputs']}
+        request('instantiate',actor='fixture-agent',instance=draft)
+        candidates=[r for r in catalog if (r['kind']=='IR' if stage=='TR1' else r['parent'] in unit['inputs'])]
+        argument='Candidate analysis; IDs below are proposals until registration.\n\n'+'\n\n'.join(
+            r['statement'][locale]+'\n'+r['argument'][locale] for r in candidates)
+        path=project/draft['path'];text=path.read_text(encoding='utf-8')
+        path.write_text(re.sub(r'\[\[TODO:[^\]]+\]\]',lambda _:argument,text),encoding='utf-8')
+        drafts[item['id']]=draft['id'];counts['documents']+=1
+    return drafts
+
+
+def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=None):
     data=read_registry(project);inc=data['active_increment']
     plan=next(p for p in data['organization']['plans'] if p['increment']==inc and p['stage']==stage)
     units=[u for u in data['organization']['units'] if u['increment']==inc and u['stage']==stage]
+    if drafts:
+        scoped={s['requirement'] for i in data['increments'] if i['id']==inc for s in i['scope']}
+        for unit in units:
+            unit['outputs']=[r['id']+'@'+str(r['version']) for r in data['requirements'] if r['id']+'@'+str(r['version']) in scoped
+                             and (r['kind']=='IR' if stage=='TR1' else r['parent'] in unit['inputs'])]
+            request('stage_unit',actor='fixture-agent',unit=unit)
+        data=read_registry(project)
     shared=f'docs/shared/{inc}.md'
     if stage=='TR1':
         path=project/shared;path.parent.mkdir(parents=True,exist_ok=True)
@@ -69,7 +103,10 @@ def write_stage(project, stage, locale, request, counts, phase_owner):
     created={}
     ids={plan['index']}|{i for u in units for i in (u['conclusion'],u['register']) if i}
     for item in [p for p in blueprints(data) if p['id'] in ids]:
-        request('instantiate',actor='fixture-agent',instance=item)
+        if drafts and item['id'] in drafts:
+            request('revise_instance',actor='fixture-agent',old=drafts[item['id']],instance=item)
+        else:
+            request('instantiate',actor='fixture-agent',instance=item)
         current=read_registry(project)
         instance=next(i for i in current['instances'] if i['id']==item['id'])
         record,source=template(project,instance['pack'],instance['document_type'],locale)

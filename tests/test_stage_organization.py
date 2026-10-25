@@ -111,9 +111,9 @@ class StageOrganizationTests(unittest.TestCase):
                 body.append(row)
             text=text[:match.start()]+ET.tostring(table,encoding='unicode')+text[match.end():]
         facts='Public synthetic analysis; verification is planned and has not been executed.'
-        if instance['document_type'] in {'ir_decomposition','sr_decomposition'}:
+        if instance['document_type'] in {'ir_decomposition','sr_decomposition','tr1_requirements_feasibility'}:
             facts+='\n'+'\n'.join('<a id="derive-'+r.split('@')[0]+'"></a>' for r in instance['requirements'])
-        text=re.sub(r'\[\[TODO:[^\]]+\]\]',lambda m:facts if 'each_' in m[0] else 'Synthetic observed facts; source@1',text)
+        text=re.sub(r'\[\[TODO:[^\]]+\]\]',lambda m:facts if 'each_' in m[0] or 'elicitation' in m[0] else 'Synthetic observed facts; source@1',text)
         path.write_text(text,encoding='utf-8')
         canonical={r['id']+'@'+str(r['version']):r for r in self.registry()['requirements']}
         self.assertEqual(lint(text,instance,source,record['sections'],canonical=canonical),[])
@@ -196,6 +196,74 @@ class StageOrganizationTests(unittest.TestCase):
         self.assertEqual([p['requirements'] for p in proposed if p['document_type']=='ir_decomposition'],[['ir-001@1']])
         self.assertEqual([p['requirements'] for p in proposed if p['document_type']=='sr_spec'],[[]])
         self.assertFalse(any(i.startswith('STAGE_') for i in readiness(self.root,self.registry(),self.f.state(),stage='TR1',owner=self.owner('plan'))))
+
+    def derive_under_claim(self,stage):
+        self.adopt([stage])
+        parent=None
+        if stage in {'TR2','TR3'}:
+            self.number();parent='ir-001@1'
+        if stage=='TR3':
+            self.number('SR',parent);parent='sr-001-001@1'
+        self.scope();self.plan(stage)
+        owner=self.owner({'TR1':'concept','TR2':'plan','TR3':'develop'}[stage])
+        self.bindings(owner);self.work(owner)
+        draft=next(i for i in blueprints(self.registry()) if i['document_type'] not in {'stage_index','ir_spec','sr_spec','ar_spec'})
+        self.f.execute('instantiate',actor='agent',instance=draft);self.fill(draft)
+        preserved=(self.root/draft['path']).read_bytes()
+        for n in (1,2):
+            record=requirement('pending',{'TR1':'IR','TR2':'SR','TR3':'AR'}[stage],parent);record.pop('id')
+            self.f.execute('numbered_requirement',actor='agent',requirement=record)
+        self.f.execute('scope',actor='agent',scope=[{'requirement':r['id']+'@1','criteria':['response']} for r in self.registry()['requirements']])
+        if parent:self.f.execute('decomposition',actor='agent',requirement=parent,status='complete')
+        unit=deepcopy(self.registry()['organization']['units'][0])
+        unit['outputs']=[r['id']+'@1' for r in self.registry()['requirements'][-2:]]
+        self.f.execute('stage_unit',actor='agent',unit=unit)
+        final=next(i for i in blueprints(self.registry()) if i['id']==draft['id'])
+        final.update(id=draft['id']+'-final',path=draft['path'].replace('.md','-final.md'))
+        self.f.execute('revise_instance',actor='agent',old=draft['id'],instance=final);self.fill(final)
+        unit['conclusion']=final['id'];self.f.execute('stage_unit',actor='agent',unit=unit)
+        for item in blueprints(self.registry()):
+            if item['id']==final['id']:continue
+            self.f.execute('instantiate',actor='agent',instance=item);self.fill(item)
+        if stage=='TR3':
+            for exact in unit['outputs']:
+                self.f.execute('link',actor='agent',link={'requirement':exact,'relation':'satisfied_by','target':owner,'rationale':'Current allocation'})
+        unit.update(finalized=True,arguments=[{'requirement':r,'anchor':'derive-'+r.split('@')[0]} for r in unit['outputs']])
+        self.f.execute('stage_unit',actor='agent',unit=unit)
+        self.assertEqual(unit_issues(self.root,self.registry(),self.f.state(),unit),[])
+        self.assertEqual((self.root/draft['path']).read_bytes(),preserved)
+        self.assertEqual(len(self.registry()['instances']),4)
+
+    def test_first_ir_is_formed_after_claim_from_empty_scope(self):
+        self.derive_under_claim('TR1')
+
+    def test_first_sr_is_derived_then_registered_and_tabulated_within_claim(self):
+        self.derive_under_claim('TR2')
+
+    def test_first_ar_is_derived_registered_and_allocated_within_claim(self):
+        self.derive_under_claim('TR3')
+
+    def test_claim_derivation_rejects_wrong_actor_stage_revision_and_scope_reduction(self):
+        self.adopt();self.number();self.number('SR','ir-001@1');self.scope();self.plan('TR3')
+        owner=self.owner('develop');self.work(owner)
+        child=requirement('pending','AR','sr-001-001@1');child.pop('id')
+        before=self.f.bytes();plan=preview(self.root,self.f.request('numbered_requirement',requirement=child))
+        with self.assertRaisesRegex(RequirementError,'INSTANCE_CLAIM'):
+            apply_plan(self.root,plan,actor='other-agent',authorized=True)
+        self.assertEqual(before,self.f.bytes())
+        for op,fields in [('numbered_requirement',{'requirement':requirement('ir-001','IR',version=2)}),
+                          ('requirement',{'requirement':requirement('sr-001-002','SR','ir-001@1')}),
+                          ('scope',{'scope':[]}),('decomposition',{'requirement':'ir-001@1','status':'complete'}),
+                          ('link',{'link':{'requirement':'sr-001-001@1','relation':'satisfied_by','target':self.owner('plan'),'rationale':'Wrong Owner'}})]:
+            with self.subTest(op=op),self.assertRaisesRegex(RequirementError,'STAGE_CLAIM_SCOPE'):
+                preview(self.root,self.f.request(op,**fields))
+            self.assertEqual(before,self.f.bytes())
+
+        runtime=load_runtime(self.root);runtime['active_claims'][owner]['expires_at']='2000-01-01T00:00:00Z'
+        save_runtime(self.root,runtime);expired=self.f.bytes()
+        with self.assertRaisesRegex(RequirementError,'STAGE_CLAIM_SCOPE'):
+            preview(self.root,self.f.request('numbered_requirement',requirement=child))
+        self.assertEqual(expired,self.f.bytes())
 
     def test_per_parent_paths_tables_and_ir_ancestry(self):
         self.tree();self.plan('TR2');self.plan('TR3')

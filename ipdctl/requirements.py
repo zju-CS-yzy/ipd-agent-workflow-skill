@@ -390,10 +390,13 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     runtime = load_runtime(root)
     files: dict[str, str] = {}
     op = request.get("operation")
+    from .stage_organization import CLAIM_EDITS, authorize_claim_edit
+    stage_edit = (registry is not None and 'organization' in registry and op in CLAIM_EDITS
+                  and bool(runtime['active_claims']) and state['project']['workflow_step']=='work')
     claim_operation = op in {"instantiate", "replace_templates", "revise_instance"} or (
         op == "stage_unit" and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or (
         op in {"verification", "draft_templates", "review_templates", "publish_templates"}
-        and runtime["active_claims"] and state["project"]["workflow_step"] == "work")
+        and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or stage_edit
     if not claim_operation and (runtime["active_claims"] or state["project"]["workflow_step"] in {"work", "close", "review"}):
         raise RequirementError("GOVERNANCE_ACTIVE: finish the active Claim or Review first")
     if op == "enable":
@@ -454,6 +457,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         if not isinstance(value, dict):
             raise RequirementError("REQUEST_CONTRACT: requirement must be an object")
         validate({**value, "id": value.get("id", "pending")} if op == "numbered_requirement" else value, REQUIREMENT)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         if "organization" in registry:
             from .stage_organization import assign_code
             value = assign_code(registry, value, allocate_id=op == "numbered_requirement", enforce_new=True)
@@ -473,6 +478,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     elif op == "scope":
         _fields(request, {"scope"})
         validate(request["scope"], SCOPE)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         increment = active(registry)
         if any(g["status"] == "approved" for g in state["gates"]):
             old = {(s["requirement"], c) for s in increment["scope"] for c in s["criteria"]}
@@ -485,6 +492,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         value = next((r for r in registry["requirements"] if ref(r) == request["requirement"]), None)
         if not value or value["kind"] == "AR" or request["status"] not in {"open", "complete"}:
             raise RequirementError("DECOMPOSITION_INVALID: use an existing IR/SR and an explicit status")
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         value["decomposition"] = request["status"]
     elif op == "stage_map":
         _fields(request, {"stage_map"})
@@ -506,6 +515,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         _fields(request, {"link"})
         item = {**request["link"], "increment": active(registry)["id"]}
         validate(item, LINK)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         targets = {i["id"] for i in state["deliverables"]}
         if item["relation"] == "shared_constraint":
             targets = {ref(r) for r in registry["requirements"]}
@@ -720,6 +731,9 @@ def apply_plan(root: Path, plan: dict, *, actor: str, authorized: bool) -> dict:
             raise RequirementError("PLAN_STALE: preview no longer matches project inputs")
         registry, state, runtime, files = _simulate(root, request)
         operation = request["operation"]
+        from .stage_organization import CLAIM_EDITS
+        if operation in CLAIM_EDITS and runtime['active_claims'] and next(iter(runtime['active_claims'].values()))['actor'] != actor:
+            raise RequirementError('INSTANCE_CLAIM: actor does not hold the stage Owner Claim')
         if operation in {"draft_templates", "review_templates", "publish_templates"} and request["actor"] != actor:
             raise RequirementError("TEMPLATE_ACTOR: applying actor must match the human declaration")
         if request["operation"] in {"instantiate", "revise_instance"} and runtime["active_claims"][request["instance"]["owner"]]["actor"] != actor:

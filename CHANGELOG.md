@@ -12,6 +12,7 @@ This project follows Keep a Changelog conventions and uses PEP 440 package versi
 - Add read-only stage work-product navigation, reverse references and historical-context projections.
 - Publish starter pack 1.3.0 with 23 bilingual types; retain pack 1.2.1 unchanged.
 - Add explicit draft-instance revision into a new file, preserving prior files and identity.
+- Support first-use derivation inside the current stage Owner's Claim with additive scope and actor checks; reject cross-stage edits and existing-identity revisions during work.
 - Preserve single Claim/review governance; native DOCX/XLSX and bulk path migration remain separate work.
 
 ## [0.5.3b1] - 2026-10-22

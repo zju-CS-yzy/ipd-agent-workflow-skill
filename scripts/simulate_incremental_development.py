@@ -134,6 +134,21 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
     scope = []
     frozen = {}
     counts = {"documents": 0, "deliverable_approvals": 0, "gate_approvals": 0, "cases": 0}
+    def form_requirements(kind,actor="fixture-maintainer"):
+        for r in [r for r in catalog if r["kind"] == kind]:
+            criteria = [{"id": r["criterion"].lower(), "criterion": r["statement"][locale], "method": "test"}]
+            if r.get('legacy_id',r['id']) == "ir-03":
+                criteria.append({"id": "extended-cases", "criterion": "1000 serial book/cancel cycles preserve zero occupied minutes", "method": "test"})
+            request("numbered_requirement" if organized else "requirement", actor=actor, requirement={"id": r["id"], "version": 1, "kind": kind,
+                "title": r["id"], "statement": r["statement"][locale], "source": "worked-brief@1",
+                "rationale": r["argument"][locale], "priority": "high", "owner": "fixture-team",
+                "module": r["module"], "parent": r["parent"], "derived": False,
+                "acceptance": criteria, "maturity": "defined", "decomposition": "open"})
+            scope.append({"requirement": r["ref"], "criteria": [r["criterion"].lower()]})
+        request("scope", actor=actor, scope=scope)
+        parent_kind = {"SR": "IR", "AR": "SR"}.get(kind)
+        for r in [r for r in catalog if r["kind"] == parent_kind]:
+            request("decomposition", actor=actor, requirement=r["ref"], status="complete")
     for cycle, increment in enumerate(("mvp", "extension")):
         print(f"{locale}: starting {increment}", flush=True)
         if cycle:
@@ -142,22 +157,9 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
         shutil.copytree(DEMO, project / "reference" / increment)
         for phase in PHASES:
             kind = {"concept": "IR", "plan": "SR", "develop": "AR"}.get(phase)
-            if kind and not cycle:
-                for r in [r for r in catalog if r["kind"] == kind]:
-                    criteria = [{"id": r["criterion"].lower(), "criterion": r["statement"][locale], "method": "test"}]
-                    if r.get('legacy_id',r['id']) == "ir-03":
-                        criteria.append({"id": "extended-cases", "criterion": "1000 serial book/cancel cycles preserve zero occupied minutes", "method": "test"})
-                    request("requirement", requirement={"id": r["id"], "version": 1, "kind": kind,
-                        "title": r["id"], "statement": r["statement"][locale], "source": "worked-brief@1",
-                        "rationale": r["argument"][locale], "priority": "high", "owner": "fixture-team",
-                        "module": r["module"], "parent": r["parent"], "derived": False,
-                        "acceptance": criteria, "maturity": "defined", "decomposition": "open"})
-                    scope.append({"requirement": r["ref"], "criteria": [r["criterion"].lower()]})
-                request("scope", scope=scope)
-                parent_kind = {"SR": "IR", "AR": "SR"}.get(kind)
-                for r in [r for r in catalog if r["kind"] == parent_kind]:
-                    request("decomposition", requirement=r["ref"], status="complete")
-            if phase == "develop":
+            if kind and not cycle and not organized:
+                form_requirements(kind)
+            if phase == "develop" and not organized:
                 for r in catalog:
                     request("link", link={"requirement": r["ref"], "relation": "satisfied_by",
                         "target": phase_owner[phase], "rationale": "Worked implementation symbol " + r["code"]})
@@ -182,6 +184,16 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
                 (project / evidence).parent.mkdir(parents=True, exist_ok=True)
                 (project / evidence).write_text(f"Synthetic {increment} {phase} work and review evidence\n", encoding="utf-8")
                 if owner == phase_owner[phase]:
+                    drafts={}
+                    if organized and stage and phase!='qualify':
+                        from stage_development_support import start_derivations
+                        drafts=start_derivations(project,stage,locale,request,counts,catalog)
+                        if not cycle:
+                            form_requirements(kind,actor='fixture-agent')
+                    if organized and phase=='develop':
+                        for r in catalog:
+                            request('link',actor='fixture-agent',link={'requirement':r['ref'],'relation':'satisfied_by',
+                                'target':owner,'rationale':'Worked implementation symbol '+r['code']})
                     for document in stage_docs:
                         raw = document["instance"]
                         item = {"id": increment + "-" + Path(document["path"]).stem.lower(), "key": stage.lower(),
@@ -203,7 +215,7 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
                         shutil.copytree(DEMO / "implementation", project / f"implementation/{increment}")
                     if organized and stage and phase!='qualify':
                         from stage_development_support import write_stage
-                        write_stage(project,stage,locale,request,counts,phase_owner)
+                        write_stage(project,stage,locale,request,counts,phase_owner,drafts=drafts)
                     if phase == "qualify":
                         code = project / f"implementation/{increment}"
                         result = subprocess.run([sys.executable, "-B", "verify_demo.py"], cwd=code,

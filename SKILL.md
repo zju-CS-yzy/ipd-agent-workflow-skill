@@ -40,6 +40,11 @@ only after checking the complete scoped child set and required support versions.
 Use the proposed file list and binding diagnostics before taking the Owner
 Claim; the plan creates neither files nor permissions. Supporting work remains
 subject to core Deliverable acceptance and explicit execution dependencies.
+Under that Owner's valid Claim, TR1/TR2/TR3 may register new requirements of
+the current stage, add their scoped criteria, complete their planned parent
+decomposition, and (TR3) link implementation to the same Owner. Apply each
+authorized plan as the Claim holder. Preserve earlier scope; existing identity
+revisions, other stages, template pins and stage plans still need a safe boundary.
 
 For MVPs, subsequent releases, or requirement-driven iteration, read
 [requirements and templates](docs/requirements-and-templates.md)
