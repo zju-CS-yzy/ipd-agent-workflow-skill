@@ -341,7 +341,10 @@ class StageOrganizationTests(unittest.TestCase):
         with patch.object(Path,'rglob',side_effect=AssertionError('Unrelated tree traversal')),patch.object(Path,'read_bytes',read_bytes):
             result=referenced_paths(self.root,data)
         self.assertEqual(result,{'docs/shared.txt':hashlib.sha256(b'shared fact').hexdigest()})
-        self.assertEqual(reads,[path])
+        self.assertEqual(len(reads),1)
+        # Windows may expose an 8.3 TEMP alias while safe_path resolves the
+        # canonical long spelling. Verify file identity, not spelling.
+        self.assertTrue(reads[0].samefile(path))
 
     def test_optional_missing_support_is_not_required_or_approved(self):
         self.tree();self.plan();owner=self.owner('plan');self.bindings(owner)

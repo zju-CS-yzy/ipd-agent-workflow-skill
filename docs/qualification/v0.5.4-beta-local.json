@@ -951,5 +951,24 @@
       "v0.7 content correctness",
       "remaining v0.5.2/P1 backlog"
     ]
-  }
+  },
+  "ci_platform_observations": [
+    {
+      "failed_candidate_commit": "4cddaf3ddeb95dceddfcf93b919b681805c24a5f",
+      "run_id": 40179576709,
+      "job_id": 121127531618,
+      "case": "test_shared_reference_hashing_does_not_traverse_unrelated_tree",
+      "cause": "Windows TEMP used an 8.3 directory alias while safe_path returned its canonical long spelling. The path-string assertion compared two spellings of the same physical file.",
+      "correction": "Keep the no-traversal trap and exact single-read assertion; compare physical file identity with samefile instead of path spelling. Runtime code and all 273 Runtime payloads are unchanged.",
+      "local_short_alias_regression": {
+        "status": "passed",
+        "tests": 1,
+        "short_path_alias_exercised": true,
+        "same_file_identity": true,
+        "unrelated_scan_prohibited": true
+      },
+      "corrected_test_sha256": "458928266f4c9cc3b04cbc830bd92c9dd5a46b625a95451e1f7d39f56c18f022",
+      "qualification": "Old CI is not a pass. The corrected candidate requires fresh complete push and PR matrices."
+    }
+  ]
 }
