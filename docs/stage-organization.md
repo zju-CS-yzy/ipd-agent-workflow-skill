@@ -4,7 +4,7 @@ Adoption is explicit. Organized registries use schema 1.1 / contract 0.5.4; core
 
 ## Start with the current context
 
-Run `ipdctl context . --json` and identify the increment, Phase, active Claim, Gate and canonical Owner IDs. New projects still use init/tailor, explicitly enable requirements and complete the template draft, independent human review, authorized publication and pinning steps in [requirements and templates](requirements-and-templates.md). Pack `ipd-starter@1.3.0` contains 23 types / 46 bilingual files. Pack 1.2.1 and earlier remain resolvable.
+Run `ipdctl context . --json` and identify the increment, Phase, active Claim, Gate and canonical Owner IDs. New projects still use init/tailor, explicitly enable requirements and complete the template draft, independent human review, authorized publication and pinning steps in [requirements and templates](requirements-and-templates.md). Prefer this organization for new requirements-enabled projects and explicitly adopt it during authorized setup; init alone does not accept the contract. Pack `ipd-starter@1.3.0` contains 23 types / 46 bilingual files. Pack 1.2.1 and earlier remain resolvable.
 
 For an existing increment with accepted work or approved Gates, finish it under the existing process, then begin a new increment from its accepted delivery baseline. Before creating active instances, explicitly publish and pin the new pack. Adoption does not split old accepted documents or manufacture historical decisions.
 

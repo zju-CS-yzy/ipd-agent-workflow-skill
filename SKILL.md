@@ -26,7 +26,11 @@ and `launch` are separate from this per-deliverable loop.
 
 For per-parent IR→SR/SR→AR files, hierarchical numbering and the stage
 work-product Dashboard, read [stage organization](docs/stage-organization.md)
-([中文](docs/stage-organization.zh-CN.md)). Existing registries retain their
+([中文](docs/stage-organization.zh-CN.md)).
+For new projects that explicitly enable IR/SR/AR, select this per-parent
+organization in the initial authorized setup, unless the project selects the
+legacy organization. Use the explicit adoption operation; initialization alone
+does not accept a new contract. Existing registries retain their
 0.5.3 contract until an authorized `adopt_organization` plan is accepted, before
 any work is accepted in the increment. Plan each stage from its scoped parent
 versions; identify required supporting materials, their one Owner and shared
