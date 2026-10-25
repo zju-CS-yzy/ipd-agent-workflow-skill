@@ -15,6 +15,33 @@ from ipdctl.requirements import read_registry
 from ipdctl.stage_organization import blueprints
 
 
+def check_stage_outcomes(project):
+    """Independent expectations for the fixed three-IR public scenario."""
+    from collections import Counter
+    from ipdctl.requirements import projection
+    data=read_registry(project);flow=projection(project)['flow']
+    assert Counter(u['stage'] for u in flow['units'])=={'TR1':2,'TR2':6,'TR3':12,'TR4':12}
+    assert len(flow['indexes'])==8 and len(data['instances'])==72
+    assert all(u['status']=='historical' for u in flow['units'])
+    assert len([p for p in (project/'.ipd/dashboard').rglob('*') if p.is_file()])==17
+    nodes={n['id']:n for n in flow['nodes']}
+    records={r['id']+'@'+str(r['version']):r for r in data['requirements']}
+    for unit in flow['units']:
+        if unit['stage']=='TR4':
+            assert {records[nodes[n]['reference']]['kind'] for n in unit['results']}=={'AR','SR','IR'}
+            assert all(nodes[n]['status']=='passed' for n in unit['results'])
+    for inc in ('mvp','extension'):
+        assert len(flow['reverse']['artifact:docs/shared/'+inc+'.md']['units'])==16
+        for ir in range(1,4):
+            for sr in range(1,3):
+                base=f'docs/increments/{inc}/tr3/ir-{ir:03}/sr-{ir:03}-{sr:03}/'
+                assert {base+'sr_decomposition.md',base+'ar_spec.md'} <= {i['path'] for i in data['instances']}
+    assert all(n['status']=='accepted' for n in flow['nodes'] if n['type']=='Deliverable')
+    return {'units':32,'stage_indexes':8,'managed_documents':72,'dashboard_files':17,
+            'tr4_verification_layers':['AR','SR','IR'],'shared_consumers_per_increment':16,
+            'frozen_owner_status':'accepted','historical_snapshots':True}
+
+
 def numbered_catalog(catalog):
     result, mapping, counters = [], {}, {}
     for kind in ('IR','SR','AR'):

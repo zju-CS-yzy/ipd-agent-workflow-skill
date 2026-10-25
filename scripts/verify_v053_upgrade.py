@@ -49,9 +49,14 @@ def run():
         stable={p.relative_to(project).as_posix():p.read_bytes() for p in project.rglob('*') if p.is_file()}
         invoke('requirements',project,'--request',path,'--json',passed=False)
         assert stable=={p.relative_to(project).as_posix():p.read_bytes() for p in project.rglob('*') if p.is_file()}
+        # Core refresh also writes state/runtime, so checking only the registry
+        # command would leave an important old-client path unqualified.
+        invoke('refresh',project,passed=False)
+        assert stable=={p.relative_to(project).as_posix():p.read_bytes() for p in project.rglob('*') if p.is_file()}
         return {'status':'passed','source_tag':'v0.5.3-beta','target_contract':'0.5.4',
                 'preview_zero_write':True,'prior_registry_sha256':digest(legacy),
-                'historical_bytes_preserved':True,'old_client_rejected_without_writes':True}
+                'historical_bytes_preserved':True,'old_client_rejected_without_writes':True,
+                'old_core_refresh_rejected_without_writes':True}
 
 
 if __name__=='__main__':

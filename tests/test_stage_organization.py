@@ -149,12 +149,17 @@ class StageOrganizationTests(unittest.TestCase):
     def test_version_and_reparent_keep_identity_and_historical_codes(self):
         self.adopt();self.number();self.number();self.number('SR','ir-001@1')
         old=deepcopy(self.registry()['requirements'])
-        self.number('SR','ir-002@1',identifier='sr-001-001',version=2)
+        plan=self.f.execute('numbered_requirement',requirement=requirement('sr-001-001','SR','ir-002@1',2))
+        self.assertEqual(plan['impact'],self.registry()['changes'][-1])
+        self.assertTrue(plan['impact']['affected'])
         data=self.registry()
         self.assertEqual(data['requirements'][:3],old)
         self.assertEqual(codes(data)['sr-001-001@1'],'sr-001-001')
         self.assertEqual(codes(data)['sr-001-001@2'],'sr-002-001')
-        self.number('SR','ir-002@1')
+        child=requirement('pending','SR','ir-002@1');child.pop('id')
+        proposal=preview(self.root,self.f.request('numbered_requirement',requirement=child))
+        self.assertIsNone(proposal['impact'])  # Never return an unrelated earlier change.
+        apply_plan(self.root,proposal,actor='human',authorized=True)
         self.assertEqual(self.registry()['requirements'][-1]['id'],'sr-002-002')
 
     def test_wrong_numbers_unknown_fields_and_stale_plan_are_zero_write(self):

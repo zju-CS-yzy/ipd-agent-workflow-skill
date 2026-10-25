@@ -281,8 +281,14 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
     request("retire")
     if read_registry(project)["product_state"] != "retired":
         raise RuntimeError("Explicit retirement failed")
+    verify()
+    stage_outcomes=None
+    if organized:
+        from stage_development_support import check_stage_outcomes
+        stage_outcomes=check_stage_outcomes(project)
     return {"status": "passed", "locale": locale, "increments": 2, "baselines": 2,
         "stage_organization":organized,
+        "stage_outcomes":stage_outcomes,
         "requirements": len(catalog), "counts": counts, "history_preserved": True,
         "runtime_schema": "1.1", "synthetic_human_decisions": True,
         "seconds": round(time.monotonic()-started, 3)}

@@ -679,7 +679,8 @@ def preview(root: Path, request: dict) -> dict:
             "base_revision": load_state(resolve_state_path(root))["revision"], "base_sha256": digest(base),
             "result_sha256": digest(registry), "result_revision": state["revision"],
             "outputs": {p: hashlib.sha256(t.encode()).hexdigest() for p, t in files.items()},
-            "impact": registry["changes"][-1] if request["operation"] == "requirement" and registry["changes"] else None,
+            "impact": next((c for c in reversed(registry["changes"]) if c["request_id"] == request["request_id"]), None)
+                      if request["operation"] in {"requirement", "numbered_requirement"} else None,
             "unmapped": registry["migration"]["unmapped"],
             "documents": files if request["operation"] in {"instantiate", "revise_instance"} else {}}
     if "organization" in registry:
