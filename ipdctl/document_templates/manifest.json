@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "id": "ipd-starter",
-  "version": "1.2.1",
-  "contract": "0.5.3",
+  "version": "1.3.0",
+  "contract": "0.5.4",
   "layer": "core",
   "templates": [
     {
@@ -1078,6 +1078,260 @@
         "lifecycle"
       ],
       "filename_pattern": "^.+\\.md$"
+    },
+    {
+      "document_type": "stage_index",
+      "id": "ipd-starter.stage_index",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/stage_index.md",
+      "sections": [
+        "scope",
+        "products",
+        "cross_checks",
+        "decisions"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "7f594d962d21140755a96c239e14b92d89aaeda860118942a2dbe4c61425e007",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ]
+    },
+    {
+      "document_type": "stage_index",
+      "id": "ipd-starter.stage_index",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/stage_index.md",
+      "sections": [
+        "scope",
+        "products",
+        "cross_checks",
+        "decisions"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "35501ce033556b76b223e32a7d9c6f59b7e7a26e57396f2ea6f4210ccaf592c1",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop",
+        "qualify",
+        "launch",
+        "lifecycle"
+      ]
+    },
+    {
+      "document_type": "ir_decomposition",
+      "id": "ipd-starter.ir_decomposition",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/ir_decomposition.md",
+      "sections": [
+        "parent",
+        "support",
+        "derivation",
+        "register",
+        "coverage"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "38d354078cc5d4832059017cc0ac4c9672b96a674552818d6ffbe195bd85ce37",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "plan"
+      ]
+    },
+    {
+      "document_type": "ir_decomposition",
+      "id": "ipd-starter.ir_decomposition",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/ir_decomposition.md",
+      "sections": [
+        "parent",
+        "support",
+        "derivation",
+        "register",
+        "coverage"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "1186cda6b1d643b18b8b8daf0adf09b38aa111696daa3c74ac616c6dc7af1d41",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "plan"
+      ]
+    },
+    {
+      "document_type": "sr_decomposition",
+      "id": "ipd-starter.sr_decomposition",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/sr_decomposition.md",
+      "sections": [
+        "parent",
+        "design",
+        "derivation",
+        "register",
+        "coverage"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "5b0174ea7760646e7b0d42c34cb0687e9e65af6730f366cbffa78365ec25231f",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "develop"
+      ]
+    },
+    {
+      "document_type": "sr_decomposition",
+      "id": "ipd-starter.sr_decomposition",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/sr_decomposition.md",
+      "sections": [
+        "parent",
+        "design",
+        "derivation",
+        "register",
+        "coverage"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "3f4ab9a5d97e656713f435c8411ba06bee014a35658cc17ada2132cc17fb83a5",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "develop"
+      ]
+    },
+    {
+      "document_type": "delivery_conclusion",
+      "id": "ipd-starter.delivery_conclusion",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/delivery_conclusion.md",
+      "sections": [
+        "inputs",
+        "implementation",
+        "verification",
+        "system",
+        "conclusion"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "57aad03b988b31ab7eefad74dd2ce22cc3c697e4447283cef48113519b92f41b",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "qualify",
+        "launch",
+        "lifecycle"
+      ]
+    },
+    {
+      "document_type": "delivery_conclusion",
+      "id": "ipd-starter.delivery_conclusion",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/delivery_conclusion.md",
+      "sections": [
+        "inputs",
+        "implementation",
+        "verification",
+        "system",
+        "conclusion"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "b35f71eb0bdf273f83acb2f7642e7679f4fecc9ed1c51df0cffe67bc1cee4bd6",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "qualify",
+        "launch",
+        "lifecycle"
+      ]
+    },
+    {
+      "document_type": "hardware_selection",
+      "id": "ipd-starter.hardware_selection",
+      "version": "1.0.0",
+      "locale": "en",
+      "path": "en/hardware_selection.md",
+      "sections": [
+        "constraints",
+        "comparison",
+        "decision",
+        "validation"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "54175875ac3fd95401f5b62cfa0d1305b1bffe82f0811f74069c8ed4f29152e8",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop"
+      ]
+    },
+    {
+      "document_type": "hardware_selection",
+      "id": "ipd-starter.hardware_selection",
+      "version": "1.0.0",
+      "locale": "zh-CN",
+      "path": "zh-CN/hardware_selection.md",
+      "sections": [
+        "constraints",
+        "comparison",
+        "decision",
+        "validation"
+      ],
+      "filename_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.md$",
+      "sha256": "1c9a9174d53e59ce3e2c15b68b2c01050650da3c8bc9513c6a9f4fcced3177f0",
+      "requirement_kinds": [
+        "IR",
+        "SR",
+        "AR"
+      ],
+      "phases": [
+        "concept",
+        "plan",
+        "develop"
+      ]
     }
   ]
 }

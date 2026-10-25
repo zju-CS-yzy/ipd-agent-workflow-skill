@@ -112,7 +112,7 @@ class DocumentTableTests(unittest.TestCase):
 
     def test_stage_drafts_are_bilingual_and_do_not_fake_completed_results(self):
         pack, directory = load_pack(ROOT)
-        self.assertEqual(pack["version"], "1.2.1")
+        self.assertEqual(pack["version"], "1.3.0")
         for stage_type in ("tr1_requirements_feasibility", "tr2_scenarios_allocation",
                            "tr3_high_level_design", "tr4_detail_implementation_test"):
             for locale in ("en", "zh-CN"):

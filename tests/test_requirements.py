@@ -308,7 +308,7 @@ class RequirementTests(unittest.TestCase):
         with self.assertRaisesRegex(RequirementError, "REQUIREMENT_CONTRACT"):
             validate(registry)
         manifest, _ = load_pack(self.root)
-        self.assertEqual(len(manifest["templates"]), 36)
+        self.assertEqual(len(manifest["templates"]), 46)
         en = {t["document_type"]: t for t in manifest["templates"] if t["locale"] == "en"}
         zh = {t["document_type"]: t for t in manifest["templates"] if t["locale"] == "zh-CN"}
         self.assertEqual(set(en), set(zh))

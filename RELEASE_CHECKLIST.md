@@ -1,6 +1,31 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.3b1` and public label `v0.5.3-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.4b1` and public label `v0.5.4-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+
+## v0.5.4-beta candidate scope — 2026-10-25
+
+This section describes the candidate, not a completed release qualification.
+Earlier sections below are historical source snapshots and must not be used to
+claim that new source passed their tests.
+
+The [local push-gate record](docs/qualification/v0.5.4-beta-local.json) binds
+the qualified source, all 377 behavior cases, both first-use organized and
+legacy bilingual two-increment flows, frozen B1/B2 history, final graph checks,
+seven actual-tag upgrades, isolated SVN, 16 browser cases and six installed
+format/locale probes. The final Runtime payload is unchanged after the full
+suite; later changes clarify setup and make the qualification helper read
+archived Runtime events from their accepted baselines. Both real completed
+fixtures pass that stronger independent check. Endpoint CI, integration, Tag
+qualification and public-download validation are still pending at this commit.
+
+- [x] Implement opt-in registry 1.1 / contract 0.5.4 with a prior-input snapshot; actual published v0.5.3 source rejects writing the adopted fixture without changing bytes.
+- [x] Add hierarchical number allocation, stable identity/display mappings, per-parent stage plans, explicit support and child-argument references, and new-file draft revision.
+- [x] Add starter pack 1.3.0 (23 bilingual types) and preserve pack 1.2.1. Add stage work-product JSON/UI and canonical input/freshness checks.
+- [x] Re-run final-source behavior tests, independent multi-parent/negative fixtures, both complete organized increments and both legacy increments. All applicable results passed; missing or interrupted runs are excluded. First-use flows preserve 20 drafts and 72 live documents across two increments; all 21 new requirements are formed within their stage Claims.
+- [ ] Pass historical upgrade gates, real isolated SVN fixtures, old/new Dashboard browser suites in file/HTTP modes, Windows/Linux and supported Python endpoint CI.
+- [x] Build and inspect candidate Skill ZIP/wheel/sdist, validate byte identity against Git objects, and run isolated bilingual installation probes. All 273 Runtime payloads and 187 template assets match; the six installed format/locale probes use normal venvs with isolated projects. Published downloads require a separate postpublication check.
+- [ ] Push only after local required checks pass, integrate only the qualified source, and require this release Tag's own successful CI before publication. Record actual public-download checks separately without moving the Tag.
+- [x] Private Golden and real-project acceptance are not available as automated fixtures this cycle. Public synthetic test decisions do not stand in for human acceptance or authenticated repository approval mapping. Bulk historical path migration and native DOCX/XLSX remain outside this beta.
 
 ## v0.5.3-beta final candidate scope — 2026-10-22
 

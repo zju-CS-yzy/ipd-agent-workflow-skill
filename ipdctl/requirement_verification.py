@@ -67,11 +67,15 @@ def verification_context(root: Path, registry: dict, reference: str) -> str:
     for instance in instances:
         path = safe_path(root, instance["path"])
         files[instance["path"]] = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
-    return digest({"requirement": records[reference], "criteria": sorted(scoped["criteria"]),
+    value = {"requirement": records[reference], "criteria": sorted(scoped["criteria"]),
         "pack": increment["pack"], "links": sorted(links, key=digest),
         "shared_constraints": {l["target"]: records[l["target"]] for l in links if l["relation"] == "shared_constraint"},
         "instances": sorted(instances, key=lambda i: i["id"]), "files": files,
-        "reverification": sorted(epochs, key=lambda e: e["change"])})
+        "reverification": sorted(epochs, key=lambda e: e["change"])}
+    if "organization" in registry:
+        from .stage_organization import context
+        value["stage_context"] = context(root, registry, reference)
+    return digest(value)
 
 
 def verification_issue(root: Path, registry: dict, result: dict) -> str | None:

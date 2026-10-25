@@ -64,7 +64,7 @@ def load_pack(root: Path, pin: dict | None = None) -> tuple[dict, Path]:
         raise RequirementError("TEMPLATE_CONTRACT: invalid template pack schema") from exc
     if set(manifest) != {"schema_version", "id", "version", "contract", "layer", "templates"}:
         raise RequirementError("TEMPLATE_CONTRACT: invalid template pack fields")
-    if manifest["schema_version"] != "1.0" or manifest["contract"] != "0.5.3":
+    if manifest["schema_version"] != "1.0" or manifest["contract"] not in {"0.5.3", "0.5.4"}:
         raise RequirementError("TEMPLATE_CONTRACT: incompatible template contract")
     if manifest["layer"] not in {"core", "organization", "project"}:
         raise RequirementError("TEMPLATE_CONTRACT: invalid template layer")
@@ -98,6 +98,33 @@ def template(root: Path, pin: dict, document_type: str, locale: str) -> tuple[di
     if record is None:
         raise RequirementError("TEMPLATE_MISSING: no pinned template for type and locale")
     return record, safe_path(directory, record["path"]).read_text(encoding="utf-8")
+
+
+def lint_instances(root: Path, instances: list[dict], canonical: dict) -> dict[str, list[str]]:
+    """Validate each immutable pack once per call, never cache across mutations."""
+    packs, result = {}, {}
+    for item in instances:
+        issues = []
+        try:
+            key = digest(item["pack"])
+            if key not in packs:
+                manifest, directory = load_pack(root, item["pack"])
+                packs[key] = (manifest, directory)
+            manifest, directory = packs[key]
+            record = next((r for r in manifest["templates"] if (r["document_type"], r["locale"]) == (item["document_type"], item["locale"])), None)
+            if record is None:
+                raise RequirementError("TEMPLATE_MISSING: type or locale absent")
+            if record["sha256"] != item["template_sha256"]:
+                issues.append("TEMPLATE_PIN")
+            source = safe_path(directory, record["path"]).read_text(encoding="utf-8")
+            if hashlib.sha256(source.replace("\r\n", "\n").encode()).hexdigest() != record["sha256"]:
+                raise RequirementError("TEMPLATE_TAMPERED: template changed during validation")
+            text = safe_path(root, item["path"]).read_text(encoding="utf-8")
+            issues.extend(lint(text, item, source, record["sections"], canonical=canonical))
+        except (ValueError, OSError) as exc:
+            issues.append("DOCUMENT_INVALID:" + str(exc))
+        result[item["id"]] = sorted(set(issues))
+    return result
 
 
 def metadata(instance: dict) -> dict:

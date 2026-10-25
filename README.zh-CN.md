@@ -4,9 +4,9 @@
 
 本仓库提供统一的双语 Codex Skill 与 Python 执行层，用于以可追溯证据管理集成产品开发（IPD）。它能够分层编译裁剪流程、控制交付件与评审状态、生成交互式 Dashboard，并将工程变更与 IPD 事实进行核对。
 
-本版：`v0.5.3-beta`（Python 包 `0.5.3b1`）。可下载版本以 [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases) 为准，发布须通过 [资格门](RELEASE_CHECKLIST.md)。本轮无可用私有 Golden，资格证据限定为公开合成夹具，真实项目验收仍待开展。
+本版：`v0.5.4-beta`（Python 包 `0.5.4b1`）。可下载版本以 [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases) 为准，发布须通过 [资格门](RELEASE_CHECKLIST.md)。本轮无可用私有 Golden，资格证据限定为公开合成夹具，真实项目验收仍待开展。
 
-渐进式 IR/SR/AR、串行增量与 18 类中英文 Markdown 模板的用法见
+渐进式 IR/SR/AR、串行增量与 23 类中英文 Markdown 模板的用法见
 [需求与模板说明](docs/requirements-and-templates.zh-CN.md)。
 可运行 `ipdctl templates --type interface_spec --locale zh-CN` 查看真实模板。
 多条需求表及 TR1—TR4 总体文档讨论稿见[阶段交付件草稿](docs/stage-deliverable-drafts.zh-CN.md)。
@@ -15,6 +15,8 @@
 英文与简体中文使用同一套代码、Schema、Policy、ID 和状态数据。项目在初始化时选择展示语言；机器契约始终保持英文。
 
 运行时有一条不可突破的边界：AI Agent 可以准备并验证 Gate，但 TR/DCP 的最终批准必须包含获得授权的人类批准记录。
+
+v0.5.4 的逐父需求分解、层级编号、支撑材料关系及 Dashboard 用法见[阶段组织说明](docs/stage-organization.zh-CN.md)。旧项目显式采纳后启用，不自动改写历史文件。
 
 ## 能力
 

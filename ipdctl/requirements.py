@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .documents import RequirementError, digest, instantiate, lint, load_pack, safe_path, template
-from .requirement_contract import (CHANGE, ID, LINK, OBLIGATION, REQUIREMENT, SCOPE,
+from .requirement_contract import (CHANGE, ID, LINK, OBLIGATION, REQUIREMENT, SCOPE, STAGE_UNIT,
                                    VERIFICATION, validate)
 from .runtime import bind_increment, create_runtime_state, load_runtime, record_event, save_runtime, utc_now, _parse_time
 from .state import create_initial_state, load_state, resolve_state_path, write_state
@@ -128,6 +128,8 @@ def check_relations(registry: dict) -> None:
         criteria = {a["id"]: a for a in requirements[item["requirement"]]["acceptance"]}
         if item["criterion"] not in criteria or item["method"] != criteria[item["criterion"]]["method"]:
             raise RequirementError("VERIFICATION_METHOD: unknown criterion or different method")
+    from .stage_organization import validate_organization
+    validate_organization(registry)
 
 
 def file_hash(path: Path) -> str | None:
@@ -142,6 +144,13 @@ def input_snapshot(root: Path, registry: dict | None = None) -> dict:
                      ".ipd/process_extensions.yaml", ".ipd/artifact_bindings.yaml"):
         result[relative] = file_hash(safe_path(root, relative))
     if registry:
+        from .stage_organization import referenced_paths
+        result.update(referenced_paths(root, registry))
+        if "organization" in registry:
+            adopted = registry["organization"]["adoption"]
+            result[adopted["path"]] = file_hash(safe_path(root, adopted["path"]))
+            if result[adopted["path"]] != adopted["sha256"]:
+                raise RequirementError("HISTORY_TAMPERED: organization adoption snapshot changed")
         for record in registry.get("template_records", []):
             read_record(root, record)
             result[record["path"]] = record["sha256"]
@@ -189,6 +198,10 @@ def impact(registry: dict, changed: str) -> list[str]:
     for link in registry["links"]:
         if link["requirement"] in affected:
             affected.add(link["target"])
+    for unit in registry.get("organization", {}).get("units", []):
+        if set(unit["inputs"] + unit["outputs"]) & affected:
+            affected.add("unit:" + unit["id"])
+            affected.update("instance:" + i for i in (unit["conclusion"], unit["register"]) if i)
     return sorted(affected)
 
 
@@ -197,6 +210,10 @@ def _snapshot(root: Path, state: dict, runtime: dict, registry: dict | None) -> 
     paths = {".ipd/tailored_process.yaml", ".ipd/task_profile.yaml",
              ".ipd/process_extensions.yaml", ".ipd/artifact_bindings.yaml"}
     if registry:
+        from .stage_organization import referenced_paths
+        paths.update(p for p, sha in referenced_paths(root, registry).items() if sha is not None)
+        if "organization" in registry:
+            paths.add(registry["organization"]["adoption"]["path"])
         paths.update(i["path"] for i in registry["instances"] if i["increment"] == registry["active_increment"])
         paths.update(i["evidence"] for i in registry["verifications"] if i["increment"] == registry["active_increment"])
     for item in state["deliverables"] + state["gates"]:
@@ -331,6 +348,11 @@ def _create_instance(root: Path, registry: dict, state: dict, runtime: dict, ite
     path = safe_path(root, item["path"])
     if not item["path"].startswith("docs/") or path.exists():
         raise RequirementError("INSTANCE_PATH: require a new path under docs/")
+    from .stage_organization import NEW_TYPES
+    if item["document_type"] in NEW_TYPES and "organization" not in registry:
+        raise RequirementError("ORGANIZATION_REQUIRED: adopt stage organization before creating this type")
+    if not item["requirements"] and not ("organization" in registry and item["document_type"] in {"stage_index", "tr1_requirements_feasibility"}):
+        raise RequirementError("INSTANCE_SCOPE: only stage indexes or initial TR1 analysis can omit requirement references")
     _owner(root, state, item["path"], item["owner"])
     lease = runtime["active_claims"].get(item["owner"])
     if not lease or _parse_time(lease["expires_at"]) <= utc_now() or state["project"]["workflow_step"] != "work":
@@ -368,9 +390,13 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     runtime = load_runtime(root)
     files: dict[str, str] = {}
     op = request.get("operation")
-    claim_operation = op in {"instantiate", "replace_templates"} or (
+    from .stage_organization import CLAIM_EDITS, authorize_claim_edit
+    stage_edit = (registry is not None and 'organization' in registry and op in CLAIM_EDITS
+                  and bool(runtime['active_claims']) and state['project']['workflow_step']=='work')
+    claim_operation = op in {"instantiate", "replace_templates", "revise_instance"} or (
+        op == "stage_unit" and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or (
         op in {"verification", "draft_templates", "review_templates", "publish_templates"}
-        and runtime["active_claims"] and state["project"]["workflow_step"] == "work")
+        and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or stage_edit
     if not claim_operation and (runtime["active_claims"] or state["project"]["workflow_step"] in {"work", "close", "review"}):
         raise RequirementError("GOVERNANCE_ACTIVE: finish the active Claim or Review first")
     if op == "enable":
@@ -400,10 +426,44 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         raise RequirementError("REQUIREMENTS_DISABLED: explicitly enable the model first")
     elif registry["product_state"] == "retired":
         raise RequirementError("PRODUCT_RETIRED: product is read-only")
-    elif op == "requirement":
+    elif op == "adopt_organization":
+        _fields(request, {"required_stages"})
+        active(registry)
+        if any(g["status"] == "approved" for g in state["gates"]) or any(d["status"] == "accepted" for d in state["deliverables"]):
+            raise RequirementError("STAGE_GOVERNED: adopt in a new increment before Gate approvals")
+        from .stage_organization import adopt
+        snapshot = _snapshot(root, state, runtime, registry)
+        relative = ".ipd/requirement_history/organization-" + request["request_id"] + ".json"
+        files[relative] = snapshot
+        adopt(registry, request["required_stages"], {"path": relative, "sha256": hashlib.sha256(snapshot.encode()).hexdigest()})
+    elif op == "stage_plan":
+        _fields(request, {"stage", "owner", "locale"})
+        from .stage_organization import plan_stage
+        plan_stage(registry, state, request["stage"], request["owner"], request["locale"])
+    elif op == "stage_unit":
+        _fields(request, {"unit"})
+        from .stage_organization import update_unit
+        unit = deepcopy(request["unit"])
+        validate(unit, STAGE_UNIT)
+        if claim_operation:
+            lease = runtime["active_claims"].get(unit.get("owner"))
+            if not lease or _parse_time(lease["expires_at"]) <= utc_now():
+                raise RequirementError("INSTANCE_CLAIM: hold the unit Owner Claim")
+        update_unit(root, registry, state, unit, _owner)
+    elif op in {"requirement", "numbered_requirement"}:
         _fields(request, {"requirement"})
         active(registry)
-        value = request["requirement"]
+        value = deepcopy(request["requirement"])
+        if not isinstance(value, dict):
+            raise RequirementError("REQUEST_CONTRACT: requirement must be an object")
+        validate({**value, "id": value.get("id", "pending")} if op == "numbered_requirement" else value, REQUIREMENT)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
+        if "organization" in registry:
+            from .stage_organization import assign_code
+            value = assign_code(registry, value, allocate_id=op == "numbered_requirement", enforce_new=True)
+        elif op == "numbered_requirement":
+            raise RequirementError("ORGANIZATION_REQUIRED: adopt before allocating numbers")
         validate(value, REQUIREMENT)
         prior = [r for r in registry["requirements"] if r["id"] == value["id"]]
         if value["version"] != max([r["version"] for r in prior], default=0) + 1:
@@ -418,6 +478,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     elif op == "scope":
         _fields(request, {"scope"})
         validate(request["scope"], SCOPE)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         increment = active(registry)
         if any(g["status"] == "approved" for g in state["gates"]):
             old = {(s["requirement"], c) for s in increment["scope"] for c in s["criteria"]}
@@ -430,6 +492,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         value = next((r for r in registry["requirements"] if ref(r) == request["requirement"]), None)
         if not value or value["kind"] == "AR" or request["status"] not in {"open", "complete"}:
             raise RequirementError("DECOMPOSITION_INVALID: use an existing IR/SR and an explicit status")
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         value["decomposition"] = request["status"]
     elif op == "stage_map":
         _fields(request, {"stage_map"})
@@ -451,6 +515,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         _fields(request, {"link"})
         item = {**request["link"], "increment": active(registry)["id"]}
         validate(item, LINK)
+        if stage_edit:
+            authorize_claim_edit(registry,state,runtime,op,request)
         targets = {i["id"] for i in state["deliverables"]}
         if item["relation"] == "shared_constraint":
             targets = {ref(r) for r in registry["requirements"]}
@@ -551,6 +617,15 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     elif op == "instantiate":
         _fields(request, {"instance"})
         _create_instance(root, registry, state, runtime, deepcopy(request["instance"]), files)
+    elif op == "revise_instance":
+        _fields(request, {"old", "instance"})
+        from .stage_organization import organization
+        organization(registry)
+        old = next((i for i in live_instances(registry) if i["id"] == request["old"] and i["increment"] == registry["active_increment"]), None)
+        item = deepcopy(request["instance"])
+        if not old or any(item.get(k) != old[k] for k in ("owner", "key", "document_type", "locale")):
+            raise RequirementError("INSTANCE_REPLACEMENT: preserve current Owner, key, type and locale")
+        _create_instance(root, registry, state, runtime, item, files, supersedes=old["id"])
     elif op == "baseline":
         _fields(request, {"id", "source"})
         validate(request["id"], ID)
@@ -611,13 +686,26 @@ def preview(root: Path, request: dict) -> dict:
     root = root.resolve()
     base = input_snapshot(root)
     registry, state, _, files = _simulate(root, request)
-    return {"schema_version": "1.0", "command": "requirements", "request": request,
+    result = {"schema_version": "1.0", "command": "requirements", "request": request,
             "base_revision": load_state(resolve_state_path(root))["revision"], "base_sha256": digest(base),
             "result_sha256": digest(registry), "result_revision": state["revision"],
             "outputs": {p: hashlib.sha256(t.encode()).hexdigest() for p, t in files.items()},
-            "impact": registry["changes"][-1] if request["operation"] == "requirement" and registry["changes"] else None,
+            "impact": next((c for c in reversed(registry["changes"]) if c["request_id"] == request["request_id"]), None)
+                      if request["operation"] in {"requirement", "numbered_requirement"} else None,
             "unmapped": registry["migration"]["unmapped"],
-            "documents": files if request["operation"] == "instantiate" else {}}
+            "documents": files if request["operation"] in {"instantiate", "revise_instance"} else {}}
+    if "organization" in registry:
+        from .stage_organization import blueprints
+        result["numbering"] = registry["organization"]["codes"]
+        result["stage_plan"] = {"instances": blueprints(registry), "binding_issues": []}
+        for item in result["stage_plan"]["instances"]:
+            try:
+                _owner(root, state, item["path"], item["owner"])
+                if safe_path(root, item["path"]).exists():
+                    result["stage_plan"]["binding_issues"].append("OUTPUT_EXISTS:" + item["path"])
+            except (ValueError, OSError) as exc:
+                result["stage_plan"]["binding_issues"].append(str(exc) + ":" + item["path"])
+    return result
 
 
 def apply_plan(root: Path, plan: dict, *, actor: str, authorized: bool) -> dict:
@@ -643,10 +731,15 @@ def apply_plan(root: Path, plan: dict, *, actor: str, authorized: bool) -> dict:
             raise RequirementError("PLAN_STALE: preview no longer matches project inputs")
         registry, state, runtime, files = _simulate(root, request)
         operation = request["operation"]
+        from .stage_organization import CLAIM_EDITS
+        if operation in CLAIM_EDITS and runtime['active_claims'] and next(iter(runtime['active_claims'].values()))['actor'] != actor:
+            raise RequirementError('INSTANCE_CLAIM: actor does not hold the stage Owner Claim')
         if operation in {"draft_templates", "review_templates", "publish_templates"} and request["actor"] != actor:
             raise RequirementError("TEMPLATE_ACTOR: applying actor must match the human declaration")
-        if request["operation"] == "instantiate" and runtime["active_claims"][request["instance"]["owner"]]["actor"] != actor:
+        if request["operation"] in {"instantiate", "revise_instance"} and runtime["active_claims"][request["instance"]["owner"]]["actor"] != actor:
             raise RequirementError("INSTANCE_CLAIM: actor does not hold the Owner Claim")
+        if operation == "stage_unit" and runtime["active_claims"] and runtime["active_claims"].get(request["unit"]["owner"], {}).get("actor") != actor:
+            raise RequirementError("INSTANCE_CLAIM: actor does not hold the unit Owner Claim")
         if operation == "replace_templates" and any(runtime["active_claims"][r["instance"]["owner"]]["actor"] != actor for r in request["replacements"]):
             raise RequirementError("INSTANCE_CLAIM: actor does not hold the Owner Claim")
         if operation == "verification" and runtime["active_claims"] and actor not in {c["actor"] for c in runtime["active_claims"].values()}:
@@ -698,13 +791,12 @@ def readiness(root: Path, registry: dict, state: dict, *, stage: str,
         instances = [i for i in instances if i["owner"] in due_owners]
     if owner is not None:
         instances = [i for i in instances if i["owner"] == owner]
+    from .documents import lint_instances
+    document_issues = lint_instances(root, instances, requirements)
     for item in instances:
         try:
-            record, text = template(root, item["pack"], item["document_type"], item["locale"])
-            if record["sha256"] != item["template_sha256"]:
-                issues.append("TEMPLATE_PIN:" + item["id"])
             _owner(root, state, item["path"], item["owner"])
-            issues.extend(i + ":" + item["id"] for i in lint(safe_path(root, item["path"]).read_text(encoding="utf-8"), item, text, record["sections"], canonical=requirements))
+            issues.extend(i + ":" + item["id"] for i in document_issues[item["id"]])
         except (ValueError, OSError) as exc:
             issues.append("DOCUMENT_INVALID:" + item["id"] + ":" + str(exc))
     for obligation in registry["obligations"]:
@@ -716,6 +808,8 @@ def readiness(root: Path, registry: dict, state: dict, *, stage: str,
         if sorted(actual) != sorted(obligation["keys"]):
             issues.append("DOCUMENT_CARDINALITY:" + obligation["id"])
     if owner is not None and not all_documents:
+        from .stage_organization import readiness as stage_readiness
+        issues.extend(stage_readiness(root, registry, state, stage=stage, owner=owner, phase=phase, documents=document_issues))
         return sorted(set(issues))
     for reference, criteria in scope.items():
         r = requirements[reference]
@@ -743,6 +837,8 @@ def readiness(root: Path, registry: dict, state: dict, *, stage: str,
     for change in active_changes(registry):
         if ({a["target"] for a in change["assessments"]} != set(change["affected"]) or any(a["action"] == "defer" for a in change["assessments"])):
             issues.append("IMPACT_UNKNOWN:" + change["request_id"])
+    from .stage_organization import readiness as stage_readiness
+    issues.extend(stage_readiness(root, registry, state, stage=stage, owner=owner, phase=phase, documents=document_issues))
     return sorted(set(issues))
 
 
@@ -807,6 +903,9 @@ def projection(root: Path) -> dict | None:
             "implementation": "accepted" if implementation and set(implementation) <= accepted_outputs else "unknown",
             "verification": {status: sum(v == status for v in effective.values()) for status in ("passed", "failed", "skipped", "unknown")},
             "unverified_criteria": sorted(criteria - set(latest))})
+    if "organization" in registry:
+        from .stage_flow import projection as flow_projection
+        result["flow"] = flow_projection(root, registry, state)
     return result
 
 
@@ -869,11 +968,19 @@ def decision_manifest(root: Path, state: dict, subject: str, kind: str) -> str |
                 value.pop("decomposition")
             records.append(value)
     results = [v for v in registry["verifications"] if v["increment"] == increment["id"] and v["requirement"] in selected] if level == 4 else []
-    return digest({"increment": increment["id"], "requirements": records,
+    manifest = {"increment": increment["id"], "requirements": records,
         "scope": [s for r, s in scoped.items() if r in selected], "instances": instances,
         "obligations": [o for o in registry["obligations"] if o["increment"] == increment["id"] and o["owner"] in owners],
         "links": [l for l in registry["links"] if l["increment"] == increment["id"] and l["requirement"] in selected
                   and (level >= 3 or l["relation"] == "shared_constraint")],
         "files": {i["path"]: file_hash(safe_path(root, i["path"])) for i in instances},
         "verifications": results, "evidence": {v["evidence"]: file_hash(safe_path(root, v["evidence"])) for v in results},
-        "pack": increment["pack"]})
+        "pack": increment["pack"]}
+    if "organization" in registry:
+        org = registry["organization"]
+        units = [u for u in org["units"] if u["increment"] == increment["id"] and u["owner"] in owners and int(u["stage"][-1]) <= level]
+        from .stage_organization import referenced_paths
+        manifest["organization"] = {"policy": org["policy"], "codes": [c for c in org["codes"] if c["requirement"] in selected],
+            "plans": [p for p in org["plans"] if p["increment"] == increment["id"] and p["owner"] in owners and int(p["stage"][-1]) <= level],
+            "units": units, "support_files": referenced_paths(root, {**registry, "organization": {**org, "units": units}})}
+    return digest(manifest)

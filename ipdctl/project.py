@@ -2296,6 +2296,20 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
         "graph": "data/graph.json",
         "phases": phase_views,
     }
+    if (paths["root"] / ".ipd/requirements.yaml").is_file():
+        try:
+            from .requirements import read_registry
+            registry = read_registry(paths["root"])
+            if registry and "organization" in registry:
+                required_outputs.add(".ipd/dashboard/data/requirement_flow.json")
+                expected_views["requirement_flow"] = "data/requirement_flow.json"
+                from .stage_flow import projection as flow_projection
+                flow_file = paths["dashboard"] / "data/requirement_flow.json"
+                if flow_file.is_file() and json.loads(flow_file.read_text(encoding="utf-8")) != flow_projection(paths["root"], registry, state):
+                    issue_rows.append({"path": "$.dashboard.requirement_flow", "code": "REQUIREMENTS_FLOW_STALE",
+                                       "message": "stage work-product graph does not match canonical facts"})
+        except (ValueError, OSError) as exc:
+            issue_rows.append({"path": "$.dashboard.requirement_flow", "code": "REQUIREMENTS_FLOW_INVALID", "message": str(exc)})
     expected_files = sorted(
         Path(relative).relative_to(".ipd/dashboard").as_posix()
         for relative in required_outputs
