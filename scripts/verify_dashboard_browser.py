@@ -74,6 +74,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         errors = []
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         if locale=='zh-CN' and protocol=='file':page.add_init_script("Object.defineProperty(navigator,'clipboard',{value:undefined})")
+                        if locale=='en' and protocol=='http':page.add_init_script("Object.defineProperty(navigator,'clipboard',{value:{writeText:()=>Promise.reject(new Error('Synthetic clipboard denial'))}})")
                         base = (project / '.ipd/dashboard/index.html').as_uri() if protocol == 'file' else f'http://127.0.0.1:{server.server_port}/.ipd/dashboard/index.html'
                         page.goto(base)
                         inputs = page.locator('[data-relation-toggle]')
@@ -132,7 +133,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                             assert ('Not generated' if locale == 'en' else '尚未生成') in page.locator('#detail-body').inner_text()
                         copy = page.locator('#detail-body [data-copy-path]').first
                         copy.click()
-                        page.wait_for_timeout(100)
+                        page.wait_for_function("e=>['Copied','已复制','Select and copy the path','请选择并复制路径'].includes(e.textContent)",arg=copy.element_handle())
                         assert copy.inner_text() in ('Copied', '已复制', 'Select and copy the path', '请选择并复制路径')
                         if copy.inner_text() in ('Select and copy the path','请选择并复制路径'):assert page.evaluate('getSelection().toString()')==copy.get_attribute('data-copy-path')
                         # Zoom remains functional for inline SVG.
