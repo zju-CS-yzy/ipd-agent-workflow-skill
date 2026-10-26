@@ -123,8 +123,22 @@ ORGANIZED_SCHEMA["title"] = "Incremental requirement registry 1.1"
 ORGANIZED_SCHEMA["properties"].update(schema_version=enum("1.1"), contract=enum("0.5.4"), organization=ORGANIZATION)
 ORGANIZED_SCHEMA["required"] = [*ORGANIZED_SCHEMA["required"], "organization"]
 ORGANIZED_SCHEMA["properties"]["instances"]["items"]["properties"]["requirements"] = arr(REF)
+SUPPORT_V2 = deepcopy(SUPPORT)
+SUPPORT_V2['properties']['usage'] = enum('deliverable', 'attachment', 'reference')
+STAGE_UNIT_V2 = deepcopy(STAGE_UNIT)
+STAGE_UNIT_V2['properties']['supports'] = arr(SUPPORT_V2)
+WORK_SCHEMA = deepcopy(ORGANIZED_SCHEMA)
+WORK_SCHEMA['title'] = 'Incremental requirement registry 1.2'
+WORK_SCHEMA['properties'].update(schema_version=enum('1.2'), contract=enum('0.5.5'))
+WORK_SCHEMA['properties']['organization']['properties']['units'] = arr(STAGE_UNIT_V2)
+WORK_SCHEMA['properties']['organization']['properties']['work_adoption'] = obj({'path': S, 'sha256': HASH})
+WORK_SCHEMA['properties']['organization']['required'].append('work_adoption')
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "Incremental requirement registries", "oneOf": [LEGACY_SCHEMA, ORGANIZED_SCHEMA]}
+          "title": "Incremental requirement registries", "oneOf": [LEGACY_SCHEMA, ORGANIZED_SCHEMA, WORK_SCHEMA]}
+
+
+def unit_contract(registry):
+    return STAGE_UNIT_V2 if registry['schema_version'] == '1.2' else STAGE_UNIT
 
 
 def validate(value: Any, schema: dict = SCHEMA, path: str = "$") -> None:

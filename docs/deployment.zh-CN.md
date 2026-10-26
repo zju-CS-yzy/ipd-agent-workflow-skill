@@ -2,8 +2,8 @@
 
 [English](deployment.md) | [简体中文](deployment.zh-CN.md)
 
-当前开发目标是 `v0.5.4-beta`（`0.5.4b1`）。升级门覆盖 `v0.5.0-beta`、从
-`v0.5.1-beta` 显式启用需求模型，以及真实 `v0.5.3-beta` 发布源码显式升级到阶段组织契约。
+当前开发目标是 `v0.5.5-beta`（`0.5.5b1`）。升级门覆盖 `v0.5.0-beta`、从
+`v0.5.1-beta` 显式启用需求模型，以及真实 `v0.5.3-beta` 发布源码显式升级到阶段组织契约，以及真实 `v0.5.4-beta` 到支撑角色契约 0.5.5 的升级。
 采用新组织方式前请阅读[阶段组织说明](stage-organization.zh-CN.md)。启用前请阅读
 [需求与模板说明](requirements-and-templates.zh-CN.md)，实现与发布资格分别记录。
 

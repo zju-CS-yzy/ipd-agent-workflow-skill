@@ -24,6 +24,18 @@ and `launch` are separate from this per-deliverable loop.
 
 ## Operating contract
 
+For independent supporting Deliverables, material roles and the unified matrix,
+read [work products](docs/work-products.md) ([中文](docs/work-products.zh-CN.md)).
+For a new organized project, explicitly adopt work roles 1.2 after organization
+1.1 and before accepting work. Existing projects can redraw without adoption.
+Before each stage Claim, classify planned supporting work: independent review
+means a real process Deliverable, while attachments/references retain one Owner
+and file availability. Use zero-write `work-plan`, inspect all issues and stale
+input checks, then use existing extension/binding tailoring and baseline rules.
+Apply explicit `stage_unit` support roles after the governed process exists.
+Never copy Owner acceptance onto a file, infer execution dependencies from
+support edges, split historical Owners automatically, or edit generated views.
+
 For per-parent IR→SR/SR→AR files, hierarchical numbering and the stage
 work-product Dashboard, read [stage organization](docs/stage-organization.md)
 ([中文](docs/stage-organization.zh-CN.md)).
@@ -118,7 +130,7 @@ python -m ipdctl validate . --json
 
 The full command surface is `init`, `tailor`, `refine`, `context`, `adopt-baseline`, `claim`, `close`,
 `review`, `approve`, `reject`, `advance-phase`, `render-dashboard`, `refresh`, `verify`,
-`repository`, `reconcile`, `validate`, and the `status` alias for `context`.
+`repository`, `reconcile`, `validate`, `requirements`, `templates`, `work-plan`, and the `status` alias for `context`.
 Use `init` only when no state exists. Do not use `--force` unless replacement
 is explicitly intended. Use `claim --recover` only to recover an orphaned
 `in_progress` deliverable identified by `context`; an unexpired claim owned by

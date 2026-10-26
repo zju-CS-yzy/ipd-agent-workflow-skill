@@ -4,7 +4,7 @@
 
 This repository combines one bilingual Codex Skill with a Python execution layer for evidence-backed Integrated Product Development (IPD). It generates a layered tailored process, controls deliverable and review state, renders project dashboards, and reconciles engineering changes with IPD facts. English and Simplified Chinese use the same code, schemas, policies, IDs, and state; machine contracts always remain English.
 
-This version: `v0.5.4-beta` (Python package `0.5.4b1`). Download availability is listed in [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases), subject to the [qualification gates](RELEASE_CHECKLIST.md). This cycle has no private Golden fixture; evidence is limited to public synthetic projects and does not establish real-project acceptance.
+This version: `v0.5.5-beta` (Python package `0.5.5b1`). Download availability is listed in [GitHub Releases](https://github.com/zju-CS-yzy/ipd-agent-workflow-skill/releases), subject to the [qualification gates](RELEASE_CHECKLIST.md). This cycle has no private Golden fixture; evidence is limited to public synthetic projects and does not establish real-project acceptance.
 
 For progressive IR/SR/AR requirements, serial increments and the 23 bilingual
 Markdown template types, see [requirements and templates](docs/requirements-and-templates.md).
@@ -15,6 +15,9 @@ See the completed [bilingual room-booking worked project](docs/worked-projects/r
 For 0.5.4 per-parent decomposition files, hierarchical numbering and stage work-product navigation, read [stage organization](docs/stage-organization.md). Adoption is explicit; legacy projects are not rewritten.
 
 The runtime enforces a hard boundary: an AI agent can prepare and validate a gate, but final TR/DCP approval is valid only when an authorized human approval is recorded.
+
+For 0.5.5 independent supporting work, shared graph navigation and the single requirements/work matrix, read [work products](docs/work-products.md). Existing facts redraw without adoption; new material roles use explicit contract 0.5.5 adoption.
+
 
 ## Capabilities
 

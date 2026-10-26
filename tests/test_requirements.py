@@ -398,7 +398,11 @@ class RequirementTests(unittest.TestCase):
         render_project_dashboard(self.root)
         self.assertEqual(before, {k: v for k, v in self.bytes().items() if not k.startswith(".ipd/dashboard/")})
         index = (self.root / ".ipd/dashboard/index.html").read_text(encoding="utf-8")
-        self.assertIn("ipd-requirement-filter", index)
+        self.assertIn('id="deliverable-search"', index)
+        self.assertNotIn('id="ipd-requirement-filter"', index)
+        self.assertEqual(index.count('id="deliverable-matrix"'), 1)
+        for axis in ('Definition', 'Decomposition', 'Implementation', 'Independent verification', 'Full-scope fulfillment'):
+            self.assertIn(axis, index)
         self.assertIn("ir-1@1", index)
         self.assertIn("VERIFICATION_NOT_PASSED", index)
 

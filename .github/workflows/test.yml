@@ -11,6 +11,7 @@ permissions:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +53,8 @@ jobs:
         run: python -B scripts/verify_v051_upgrade.py
       - name: Qualify actual v0.5.3 organization adoption
         run: python -B scripts/verify_v053_upgrade.py
+      - name: Qualify actual v0.5.4 work-role adoption
+        run: python -B scripts/verify_v054_upgrade.py
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
@@ -60,8 +63,8 @@ jobs:
         run: python -B -m unittest discover -s tests -v
       - name: Qualify two complete governed increments
         run: python -B scripts/simulate_incremental_development.py --locale "${{ matrix.locale }}"
-      - name: Qualify two per-parent organized increments
-        run: python -B scripts/simulate_incremental_development.py --organized --locale "${{ matrix.locale }}"
+      - name: Qualify two increments with independent supporting work
+        run: python -B scripts/simulate_incremental_development.py --work-products --locale "${{ matrix.locale }}"
       - name: Smoke-test lifecycle
         shell: bash
         run: |

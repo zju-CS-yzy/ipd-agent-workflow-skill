@@ -70,6 +70,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def renderer_fingerprint() -> str:
+    root = Path(__file__).parent
+    names = ('dashboard.py', 'dashboard_model.py', 'dashboard_files.py', 'dashboard_html.py',
+             'dashboard_svg.py', 'dashboard_work.py', 'stage_flow.py', 'i18n.py', 'messages.yaml',
+             'requirements.py', 'requirement_verification.py', 'stage_organization.py', 'version.py')
+    return _value_sha256({name: (root/name).read_text(encoding='utf-8') for name in names})
+
+
 def render_dashboard(
     project_root: str | Path,
     process: Mapping[str, Any],
@@ -142,10 +150,13 @@ def render_dashboard(
     )
     from .dashboard_files import project_file_navigation
     project_file_navigation(Path(project_root), state_data["deliverables"], bindings)
-    from .requirements_view import panel as requirement_panel
-    requirement_data, requirement_html = requirement_panel(Path(project_root), locale)
+    from .requirements import projection as requirement_projection
+    from .dashboard_work import projection as work_projection, enrich_graph, graph_slice as work_graph_slice
+    requirement_data = requirement_projection(Path(project_root))
     if requirement_data is not None:
         state_data["requirements"] = requirement_data
+    state_data["work_products"] = work_projection(state_data, requirement_data)
+    graph_data = enrich_graph(graph_data, state_data["work_products"])
     current_phase = _string(state_data["project"]["current"].get("phase"))
     available_ids = [item["id"] for item in state_data["available_tasks"]]
     blocked_ids = [
@@ -164,12 +175,7 @@ def render_dashboard(
         current_graph = graph_slice(
             graph_data, phase=current_phase or None, include_upstream=True
         )
-        dependency_graph = graph_slice(
-            graph_data,
-            phase=current_phase or None,
-            node_types=("Deliverable",),
-            include_upstream=True,
-        )
+        dependency_graph = work_graph_slice(graph_data, current_phase)
 
         _atomic_write(staging / "data" / "state.json", _json_text(state_data))
         _atomic_write(staging / "data" / "graph.json", _json_text(graph_data))
@@ -197,6 +203,8 @@ def render_dashboard(
                 phase=current_phase or None,
                 filter_to_phase=False,
                 translator=translator,
+                node_types=("Deliverable", "Document", "Material", "Reference"),
+                relations=("depends_on", "refines", "supports", "owned_by"),
             ),
         )
 
@@ -207,11 +215,7 @@ def render_dashboard(
                 phase_ids.append(phase_id)
         phase_files: dict[str, str] = {}
         for phase_id in phase_ids:
-            phase_graph = graph_slice(
-                graph_data,
-                phase=phase_id,
-                include_upstream=True,
-            )
+            phase_graph = work_graph_slice(graph_data, phase_id)
             filename = f"{phase_id}.svg"
             phase_files[phase_id] = f"phases/{filename}"
             phase_label = next(
@@ -230,6 +234,8 @@ def render_dashboard(
                     title=translator.text("svg.phase_title", phase=phase_label),
                     filter_to_phase=False,
                     translator=translator,
+                    node_types=("Deliverable", "Document", "Material", "Reference"),
+                    relations=("depends_on", "refines", "supports", "owned_by"),
                 ),
             )
 
@@ -242,7 +248,7 @@ def render_dashboard(
                 diagrams={path.relative_to(staging).as_posix(): path.read_text(encoding="utf-8")
                           for path in sorted(staging.rglob("*.svg"))},
                 translator=translator,
-            ).replace("</body>", requirement_html + "</body>"),
+            ),
         )
         _atomic_write(
             staging / "matrices" / "deliverable_matrix.html",
@@ -276,6 +282,7 @@ def render_dashboard(
         ]
         manifest = {
             "schema_version": "2.2",
+            "renderer_sha256": renderer_fingerprint(),
             "locale": translator.locale,
             "output_directory": DASHBOARD_RELATIVE_PATH.as_posix(),
             "project": state_data["project"]["name"],

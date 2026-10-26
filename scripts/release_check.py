@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.4b1"
-PUBLIC_VERSION = "0.5.4-beta"
+PACKAGE_VERSION = "0.5.5b1"
+PUBLIC_VERSION = "0.5.5-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -41,6 +41,12 @@ REQUIRED_FILES = (
     "ipdctl/template_publications.py",
     "ipdctl/stage_organization.py",
     "ipdctl/stage_flow.py",
+    "ipdctl/dashboard_work.py",
+    "ipdctl/work_planning.py",
+    "schemas/stage_unit_v2.schema.json",
+    "scripts/verify_v054_upgrade.py",
+    "docs/work-products.md",
+    "docs/work-products.zh-CN.md",
     "schemas/stage_unit.schema.json",
     "schemas/stage_organization.schema.json",
     "docs/stage-organization.md",

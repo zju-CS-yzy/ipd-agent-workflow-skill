@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from ipdctl.dashboard import render_dashboard
 from ipdctl.dashboard_files import project_file_navigation
 from ipdctl.dashboard_svg import render_svg
+from ipdctl.i18n import get_translator
 from ipdctl.state import create_initial_state
 from ipdctl.tailoring import tailor_profile
 from tests.test_dashboard import canonical_fixture, node_boxes
@@ -84,9 +85,12 @@ class DashboardNavigationTests(unittest.TestCase):
                     self.assertEqual(len(manifest['files']), 16)
                     self.assertEqual(manifest['locale'], locale)
                     html = (root / '.ipd/dashboard/index.html').read_text(encoding='utf-8')
-                    self.assertEqual(html.count('data-relation-toggle value='), 5)
+                    self.assertEqual(html.count('data-relation-toggle value='), 6)
+                    self.assertIn('value="owned_by" checked', html)
                     self.assertNotIn('__SVG_TEMPLATES__', html)
                     self.assertNotIn('<object ', html)
+                    complete = (root / '.ipd/dashboard/matrices/deliverable_matrix.html').read_text(encoding='utf-8')
+                    self.assertIn(get_translator(locale).text('matrix.back_to_dashboard'), complete)
 
     def test_inline_graphs_have_scoped_ids_and_portable_navigation_in_both_locales(self):
         process, state = canonical_fixture()
@@ -102,7 +106,9 @@ class DashboardNavigationTests(unittest.TestCase):
                 html = (dashboard / 'index.html').read_text(encoding='utf-8')
                 self.assertNotIn('<object ', html)
                 self.assertIn('data-relations-action="default"', html)
-                self.assertEqual(html.count('data-relation-toggle value='), 5)
+                self.assertEqual(html.count('data-relation-toggle value='), 6)
+                self.assertIn('value="supports" checked', html)
+                self.assertIn('value="owned_by" checked', html)
                 self.assertIn('value="depends_on" checked', html)
                 self.assertIn('data-copy-path', html)
                 self.assertNotIn(str(root), html)

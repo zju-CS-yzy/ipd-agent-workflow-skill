@@ -71,7 +71,9 @@ def projection(root, registry, state):
         token = ("artifact:" if artifact else "instance:") + target
         key = unit["increment"] + ":" + token + (":" + str(expected) if support else "")
         add(key, "Artifact" if artifact else "DocumentInstance", target, path=path_text,
+            title=item['title'] if item else path_text or target,
             owner=owner, href=href, availability=status, sha256=expected, reverse_key=token,
+            usage=support.get('usage') if support else None,
             template=(item["template_id"] + "@" + item["template_version"]) if item else None)
         owner_state = core
         if baseline:
@@ -113,6 +115,7 @@ def projection(root, registry, state):
                 href = "../requirement_history/" + quote(baseline["path"].rsplit("/", 1)[1]) if baseline else "../../" + quote(result["evidence"], safe="/")
                 node = add("verification:" + result["id"], "Verification", result["criterion"],
                            reference=result["requirement"], status="unknown" if issue else result["result"],
+                           increment=result['increment'], availability='historical' if baseline else None,
                            diagnostic=issue, sha256=result["sha256"], href=href)
                 results.append(node)
                 edges.add((node, req(result["requirement"]), "verifies"))
