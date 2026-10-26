@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from ipdctl.dashboard import render_dashboard
 from ipdctl.dashboard_files import project_file_navigation
 from ipdctl.dashboard_svg import render_svg
+from ipdctl.i18n import get_translator
 from ipdctl.state import create_initial_state
 from ipdctl.tailoring import tailor_profile
 from tests.test_dashboard import canonical_fixture, node_boxes
@@ -88,6 +89,8 @@ class DashboardNavigationTests(unittest.TestCase):
                     self.assertIn('value="owned_by" checked', html)
                     self.assertNotIn('__SVG_TEMPLATES__', html)
                     self.assertNotIn('<object ', html)
+                    complete = (root / '.ipd/dashboard/matrices/deliverable_matrix.html').read_text(encoding='utf-8')
+                    self.assertIn(get_translator(locale).text('matrix.back_to_dashboard'), complete)
 
     def test_inline_graphs_have_scoped_ids_and_portable_navigation_in_both_locales(self):
         process, state = canonical_fixture()

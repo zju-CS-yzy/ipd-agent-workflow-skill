@@ -270,7 +270,7 @@ WORDS = {
                       'The dependency graph shows current workflow facts; use the stage graph and baseline links for history.'),
     'no_approval': ('此材料没有独立审批状态；归属交付件状态不等于材料独立批准。',
                     'This material has no independent approval. Owner acceptance is not a separate material approval.'),
-    'full': ('打开完整矩阵', 'Open full matrix'), 'back': ('返回 Dashboard', 'Back to Dashboard'),
+    'full': ('打开完整矩阵', 'Open full matrix'), 'back': ('返回 Dashboard', 'Back to dashboard'),
     'copy': ('复制路径', 'Copy path'), 'copied': ('已复制', 'Copied'),
     'copy_fallback': ('请选择并复制路径', 'Select and copy the path'),
     'not_generated': ('尚未生成或不可用', 'Not generated or unavailable'),
