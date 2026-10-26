@@ -96,6 +96,13 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         page.locator('#phase-view').select_option(options[-1])
                         assert page.locator('[data-relation-toggle]:checked').evaluate_all('(xs)=>xs.map(x=>x.value)') == ['supports', 'verifies']
                         page.locator('#phase-view').select_option(options[0])
+                        # New entity details must preserve legacy governance navigation.
+                        gate=page.locator('#overview g[data-node-type="Gate"]').first
+                        if gate.count():
+                            identifier=gate.get_attribute('data-node-id');gate.click()
+                            page.locator('#details').wait_for(state='visible')
+                            assert identifier in page.locator('#detail-title').inner_text()
+                            page.locator('#details-close').click()
                         targets = page.evaluate('JSON.parse(document.getElementById("ipd-state").textContent).deliverables.filter(x=>x.owned_files?.some(f=>f.href)).map(x=>x.id)')
                         assert targets, 'No bound-file case in fixture'
                         target = next((x for x in targets if page.locator(f'#status-flow [data-node-id="{x}"]').count()), targets[0])

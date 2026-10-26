@@ -91,6 +91,9 @@ def run(output,channels):
                         assert not page.locator('#ipd-requirement-filter').count()
                         assert page.locator('#ipd-stage-flow').evaluate('(e)=>e.closest("main")!==null')
                         assert page.locator('#dependency-flow').evaluate('(e)=>e.compareDocumentPosition(document.getElementById("ipd-stage-flow")) & Node.DOCUMENT_POSITION_FOLLOWING')
+                        toggle=page.locator('[data-work-collapse]').first
+                        toggle.focus();page.keyboard.press('Enter');assert toggle.get_attribute('aria-expanded')=='false'
+                        page.keyboard.press('Enter');assert toggle.get_attribute('aria-expanded')=='true'
                         page.locator('#ipd-flow-stage').select_option('TR2')
                         assert page.locator('[data-flow-unit]:visible').count()==2
                         first=page.locator('[data-flow-unit]:visible').first
@@ -103,6 +106,8 @@ def run(output,channels):
                         assert main_node.count()==1
                         assert support.locator('rect').last.get_attribute('rx')==main_node.locator('rect').last.get_attribute('rx')
                         support.click(); assert 'plan.selection' in page.locator('#detail-title').inner_text()
+                        page.locator('#details-close').click();support.focus();page.keyboard.press('Enter')
+                        assert 'plan.selection' in page.locator('#detail-title').inner_text() and page.locator('#details').is_visible()
                         assert page.locator('.work-selected[data-work-key="deliverable:plan.selection"]').count()>=3
                         assert page.locator('#detail-body [data-work-unit]').count()==2
                         page.locator('#detail-body [data-work-unit]').last.click()
@@ -131,6 +136,16 @@ def run(output,channels):
                         page.locator('#work-phase').select_option('plan')
                         assert page.locator('#dependency-flow g[data-work-key="deliverable:plan.selection"]').count()==1
                         page.locator('#work-phase').select_option('')
+                        # The complete matrix uses the same entity details and
+                        # can navigate back into an exact stage unit.
+                        matrix_address=address.rsplit('/',1)[0]+'/matrices/deliverable_matrix.html'
+                        page.goto(matrix_address)
+                        assert page.locator('#work-matrix-increment').count()==1
+                        page.locator('#deliverable-search').fill('shared 资料')
+                        page.locator('#deliverable-rows tr[data-kind="Material"]:visible').first.click()
+                        page.locator('#detail-body [data-work-unit]').first.click()
+                        page.wait_for_url('**/index.html#su-*')
+                        assert page.locator('[data-flow-unit][open]:visible').count()>=1
                         duplicates=page.locator('[id]').evaluate_all('(xs)=>{const ids=xs.map(x=>x.id);return ids.filter((x,i)=>ids.indexOf(x)!==i)}')
                         assert not duplicates and not errors,(duplicates,errors)
                         assert before==facts(project)
