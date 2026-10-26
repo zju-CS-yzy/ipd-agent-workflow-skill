@@ -33,13 +33,17 @@ def synthetic(root: Path, locale: str) -> Path:
         additional.update(id='concept.browser_example', title='Browser interaction example')
         process['deliverables'].append(additional)
         ids.append(additional['id'])
+    from ipdctl.project import sync_state_with_process
+    state=sync_state_with_process(state,process)
+    next(d for d in state['deliverables'] if d['id']==ids[0])['evidence'].append('https://example.invalid/synthetic-evidence')
     state['traceability'] = [{'source': ids[1], 'target': ids[0], 'relation': relation}
                             for relation in ('depends_on', 'supports', 'verifies', 'supersedes', 'refines')]
     path = root / 'docs/中文 # & file.txt'
     path.parent.mkdir(exist_ok=True)
     path.write_text('browser file navigation fixture', encoding='utf-8')
     render_dashboard(root, process, state, locale=locale, bindings={'bindings': [
-        {'id': 'owned', 'paths': ['docs/中文 # & file.txt', 'docs/future.txt'], 'deliverable': ids[0]}]})
+        {'id': 'owned', 'paths': ['docs/中文 # & file.txt', 'docs/future.txt'], 'deliverable': ids[0]},
+        {'id':'shared','paths':['docs/中文 # & file.txt'],'role':'shared_evidence','deliverables':[ids[0]],'critical':False}]})
     return root
 
 
@@ -69,6 +73,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         page = context.new_page()
                         errors = []
                         page.on('pageerror', lambda error: errors.append(str(error)))
+                        if locale=='zh-CN' and protocol=='file':page.add_init_script("Object.defineProperty(navigator,'clipboard',{value:undefined})")
                         base = (project / '.ipd/dashboard/index.html').as_uri() if protocol == 'file' else f'http://127.0.0.1:{server.server_port}/.ipd/dashboard/index.html'
                         page.goto(base)
                         inputs = page.locator('[data-relation-toggle]')
@@ -117,6 +122,8 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         assert link.count() and link.get_attribute('href').startswith('../../')
                         if protocol == 'http': assert context.request.get(urljoin(base, link.get_attribute('href'))).ok
                         if kind == 'synthetic':
+                            assert page.locator('#detail-body [data-work-file-group="shared_files"] a').count()==1
+                            assert page.locator('#detail-body [data-work-file-group="evidence_files"] a').get_attribute('href')=='https://example.invalid/synthetic-evidence'
                             with page.expect_popup() as event: link.click()
                             popup = event.value
                             popup.wait_for_load_state()
@@ -127,6 +134,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         copy.click()
                         page.wait_for_timeout(100)
                         assert copy.inner_text() in ('Copied', '已复制', 'Select and copy the path', '请选择并复制路径')
+                        if copy.inner_text() in ('Select and copy the path','请选择并复制路径'):assert page.evaluate('getSelection().toString()')==copy.get_attribute('data-copy-path')
                         # Zoom remains functional for inline SVG.
                         page.locator('[data-zoom-for="status-flow"] [data-zoom="in"]').click()
                         assert 'scale(' in page.locator('#status-flow > svg').get_attribute('style')
