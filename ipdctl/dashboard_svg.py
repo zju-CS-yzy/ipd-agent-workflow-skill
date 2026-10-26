@@ -17,7 +17,9 @@ from urllib.parse import quote
 
 
 PHASE_ORDER = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
-TYPE_ORDER = {"Phase": 0, "TR": 1, "DCP": 2, "Gate": 3, "Activity": 4, "Deliverable": 5}
+TYPE_ORDER = {"Phase": 0, "TR": 1, "DCP": 2, "Gate": 3, "Activity": 4, "Deliverable": 5,
+              "Requirement": 6, "Document": 7, "Material": 8, "Reference": 9, "Verification": 10}
+CARD_TYPES = {"Deliverable", "Requirement", "Document", "Material", "Reference", "Verification"}
 RELATION_ORDER = {
     "depends_on": 0,
     "supports": 1,
@@ -36,6 +38,17 @@ STATUS_STYLES = {
     "rejected": ("#FEF3F2", "#D92D20", ""),
     "blocked": ("#FFF1F3", "#C01048", "6 3"),
     "superseded": ("#F2F4F7", "#667085", "2 4"),
+    "unknown": ("#F8FAFC", "#667085", "4 3"),
+    "current": ("#F8FAFC", "#667085", ""),
+    "missing": ("#FFFAEB", "#DC6803", "4 3"),
+    "stale": ("#FFFAEB", "#DC6803", "4 3"),
+    "invalid": ("#FEF3F2", "#D92D20", "4 3"),
+    "historical": ("#F2F4F7", "#667085", "2 4"),
+    "defined": ("#EFF8FF", "#1570EF", ""),
+    "draft": ("#F8FAFC", "#98A2B3", "4 3"),
+    "passed": ("#ECFDF3", "#039855", ""),
+    "failed": ("#FEF3F2", "#D92D20", ""),
+    "skipped": ("#F8FAFC", "#667085", "4 3"),
 }
 RELATION_STYLES = {
     "depends_on": ("#475467", "", "arrow-depends"),
@@ -43,7 +56,12 @@ RELATION_STYLES = {
     "verifies": ("#7F56D9", "2 4", "arrow-verifies"),
     "supersedes": ("#DC6803", "10 4 2 4", "arrow-supersedes"),
     "refines": ("#0E9384", "5 4", "arrow-refines"),
+    "input": ("#667085", "4 4", "arrow-input"),
+    "analyzes": ("#667085", "4 4", "arrow-analyzes"),
+    "produces": ("#0E9384", "", "arrow-produces"),
+    "owned_by": ("#667085", "2 4", "arrow-owned"),
 }
+RELATION_ORDER.update({"input": 5, "analyzes": 6, "produces": 7, "owned_by": 8})
 
 
 @dataclass(frozen=True)
@@ -57,6 +75,7 @@ class _Node:
     blocked: bool
     refinement_due: bool
     detail_key: str
+    caption: str = ''
 
 
 @dataclass(frozen=True)
@@ -134,6 +153,8 @@ def _canonical_type(value: Any) -> str:
         "gate": "Gate",
         "activity": "Activity",
         "deliverable": "Deliverable",
+        "requirement": "Requirement", "document": "Document", "material": "Material",
+        "reference": "Reference", "verification": "Verification",
     }.get(raw, "Deliverable")
 
 
@@ -169,6 +190,7 @@ def _normalise_graph(graph: Mapping[str, Any]) -> tuple[list[_Node], list[_Edge]
                 blocked=bool(raw.get("blocked")) or status == "blocked",
                 refinement_due=raw.get("refinement_due") is True,
                 detail_key=_text(raw.get("detail_key")).strip() or f"{node_type.lower()}:{node_id}",
+                caption=_text(raw.get('caption')),
             )
         )
 
@@ -268,6 +290,7 @@ def _node_size(node: _Node) -> tuple[float, float]:
         "Gate": (216, 68),
         "Activity": (244, 62),
         "Deliverable": (264, 92),
+        **{kind: (264, 110) for kind in CARD_TYPES - {"Deliverable"}},
     }[node.type]
 
 
@@ -367,6 +390,14 @@ def _process_layout(nodes: Sequence[_Node], edges: Sequence[_Edge]) -> tuple[dic
 def _dependency_layout(nodes: Sequence[_Node], edges: Sequence[_Edge]) -> tuple[dict[str, _Box], list[tuple[str, _Box]], float, float]:
     phases = sorted({node.phase for node in nodes}, key=_phase_key) or ["unassigned"]
     levels = _topological_levels(nodes, edges)
+    material_ids = {n.id for n in nodes if n.type in {'Material','Document','Reference'}}
+    if material_ids:
+        # Display-only ownership column; support is never an execution rank.
+        original = dict(levels)
+        levels = {key:value+1 for key,value in levels.items()}
+        for key in material_ids:
+            owners = [e.target for e in edges if e.source == key and e.relation == 'owned_by']
+            levels[key] = min((original[o] for o in owners), default=0)
     max_level = max(levels.values(), default=0)
     column_width = 316.0
     margin_x = 46.0
@@ -477,13 +508,7 @@ def _edge_path(source: _Box, target: _Box, edge_index: int) -> str:
 
 def _render_defs() -> str:
     marker_defs = []
-    for marker_id, colour in (
-        ("arrow-depends", "#475467"),
-        ("arrow-supports", "#1570EF"),
-        ("arrow-verifies", "#7F56D9"),
-        ("arrow-supersedes", "#DC6803"),
-        ("arrow-refines", "#0E9384"),
-    ):
+    for colour, _, marker_id in RELATION_STYLES.values():
         marker_defs.append(
             f'<marker id="{marker_id}" viewBox="0 0 10 10" refX="9" refY="5" '
             'markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
@@ -607,6 +632,7 @@ def _render_node(
     href = detail_href_prefix + quote(node.detail_key, safe=":")
     attrs = (
         f'data-node-id="{escape(node.id, quote=True)}" data-node-type="{node.type}" '
+        f'data-work-key="{escape(node.detail_key.removeprefix("work:"), quote=True)}" '
         f'data-status="{node.status}" data-x="{_fmt(box.x)}" data-y="{_fmt(box.y)}" '
         f'data-width="{_fmt(box.width)}" data-height="{_fmt(box.height)}" '
         f'data-refinement-due="{str(node.refinement_due).lower()}"'
@@ -623,7 +649,7 @@ def _render_node(
     )
     parts = [
         f'<a href="{escape(href, quote=True)}" target="_top" aria-label="{escape(_t(translator, "svg.open_node", "Open {type} {title}", type=node_type_label, title=node.title), quote=True)}">',
-        f'<g class="node node-{node.type.lower()} status-{node.status}" {attrs}>',
+        f'<g class="node node-{node.type.lower()} status-{node.status}" tabindex="0" role="button" {attrs}>',
         f"<title>{escape(_t(translator, 'svg.node_title', '{type} {id}: {title}; status {status}', type=node_type_label, id=node.id, title=node.title, status=status_label))}</title>",
     ]
     if node.current:
@@ -633,31 +659,31 @@ def _render_node(
         )
     parts.append(_node_shape(node, box, fill, stroke, dash))
 
-    if node.type == "Deliverable":
+    if node.type in CARD_TYPES:
         parts.append(
             f'<rect x="{_fmt(box.x)}" y="{_fmt(box.y)}" width="8" height="{_fmt(box.height)}" '
             f'rx="4" fill="{status_stroke}" stroke="none"/>'
         )
-    label_y = box.y + (26 if node.type == "Deliverable" else box.height / 2 - 2)
+    label_y = box.y + (26 if node.type in CARD_TYPES else box.height / 2 - 2)
     if node.type == "DCP":
         max_chars = 18
     elif node.type in {"TR", "Gate"}:
         max_chars = 22
     else:
         max_chars = 28
-    lines = _wrap_text(node.title, max_chars, 2 if node.type != "Deliverable" else 3)
+    lines = _wrap_text(node.title, max_chars, 3 if node.type in CARD_TYPES else 2)
     line_height = 16
     start_y = label_y - (len(lines) - 1) * line_height / 2
-    text_x = box.cx + (4 if node.type == "Deliverable" else 0)
+    text_x = box.cx + (4 if node.type in CARD_TYPES else 0)
     parts.append(f'<text x="{_fmt(text_x)}" y="{_fmt(start_y)}" text-anchor="middle" class="node-title">')
     for index, line in enumerate(lines):
         dy = 0 if index == 0 else line_height
         parts.append(f'<tspan x="{_fmt(text_x)}" dy="{dy}">{escape(line)}</tspan>')
     parts.append("</text>")
-    if node.type == "Deliverable":
+    if node.type in CARD_TYPES:
         parts.append(
             f'<text x="{_fmt(box.x + 18)}" y="{_fmt(box.bottom - 12)}" class="node-meta">'
-            f'{escape(node.id)} · {escape(status_label.upper() if getattr(translator, "locale", "en") == "en" else status_label)}</text>'
+            f'{escape(_wrap_text(node.caption or node.id, 34, 1)[0])} · {escape(status_label.upper() if getattr(translator, "locale", "en") == "en" else status_label)}</text>'
         )
     elif node.type in {"TR", "DCP", "Gate"}:
         parts.append(
@@ -690,6 +716,7 @@ def _render_legend(
     width: float,
     translator: Any,
     relations: set[str] | None = None,
+    node_types: set[str] | None = None,
 ) -> str:
     parts = [
         f'<g class="legend" transform="translate({_fmt(x)} {_fmt(y)})">',
@@ -704,6 +731,9 @@ def _render_legend(
         ("Activity", "#667085"),
         ("Deliverable", "#039855"),
     )
+    if node_types and node_types & (CARD_TYPES - {'Deliverable'}):
+        node_items = tuple((kind, '#039855' if kind == 'Deliverable' else '#667085')
+                           for kind in TYPE_ORDER if kind in node_types)
     for index, (label, colour) in enumerate(node_items):
         item_x = 18 + index * 118
         parts.append(
@@ -713,7 +743,7 @@ def _render_legend(
     edge_x = 18
     edge_relations = tuple(
         relation
-        for relation in ("depends_on", "supports", "verifies", "supersedes", "refines")
+        for relation in (tuple(RELATION_ORDER) if relations is not None else ("depends_on", "supports", "verifies", "supersedes", "refines"))
         if relations is None or relation in relations
     )
     for index, relation in enumerate(edge_relations):
@@ -740,7 +770,7 @@ def _render_legend(
             f'marker-end="url(#{marker})"/>'
             f'<text x="{item_x + 56}" y="{item_y + 5}" class="legend-label">{escape(relation_label)}</text>'
         )
-    statuses = tuple(STATUS_STYLES)
+    statuses = tuple(STATUS_STYLES)[:8]
     status_start_y = 122 + (28 if len(edge_relations) > 4 else 0)
     for index, status in enumerate(statuses):
         row, column = divmod(index, 4)
@@ -844,6 +874,7 @@ def render_svg(
                 blocked=node.blocked or node.id in blocked,
                 refinement_due=node.refinement_due,
                 detail_key=node.detail_key,
+                caption=node.caption,
             )
             for node in nodes
         ]
@@ -916,6 +947,7 @@ def render_svg(
                 min(width - 72, 760),
                 translator,
                 canonical_relations,
+                canonical_types,
             ),
             "</svg>",
         )
@@ -985,6 +1017,7 @@ def render_dependency_svg(
     title: str = "Deliverable Dependency",
     detail_href_prefix: str = "../index.html#node=",
     relations: Iterable[str] | None = ("depends_on", "refines"),
+    node_types: Iterable[str] = ("Deliverable",),
     filter_to_phase: bool = True,
     translator: Any | None = None,
     locale: str = "en",
@@ -1006,7 +1039,7 @@ def render_dependency_svg(
         layout="dependency",
         phase=phase if filter_to_phase else None,
         current_phase=phase,
-        node_types={"Deliverable"},
+        node_types=set(node_types),
         relations=relations,
         include_neighbours=filter_to_phase,
         detail_href_prefix=detail_href_prefix,

@@ -87,6 +87,12 @@ def start_derivations(project,stage,locale,request,counts,catalog):
     return drafts
 
 
+def shared_source_text(inc):
+    return ('Synthetic BRIEF@1: one room, single process, 08:00–18:00, 15-minute grid. '
+            '10 hours × 60 = 600 minutes; 600 / 15 = 40 possible slots. '
+            'No persistence or concurrency claim. Source: reference/'+inc+'/source-brief.md\n')
+
+
 def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=None):
     data=read_registry(project);inc=data['active_increment']
     plan=next(p for p in data['organization']['plans'] if p['increment']==inc and p['stage']==stage)
@@ -101,9 +107,9 @@ def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=
     shared=f'docs/shared/{inc}.md'
     if stage=='TR1':
         path=project/shared;path.parent.mkdir(parents=True,exist_ok=True)
-        path.write_text('Synthetic BRIEF@1: one room, single process, 08:00–18:00, 15-minute grid. '
-                        '10 hours × 60 = 600 minutes; 600 / 15 = 40 possible slots. '
-                        'No persistence or concurrency claim. Source: reference/'+inc+'/'+locale+'/source-brief.md\n',encoding='utf-8')
+        if 'support' in phase_owner:
+            assert path.read_text(encoding='utf-8')==shared_source_text(inc), 'Accepted support must not be rewritten by its consumer'
+        else:path.write_text(shared_source_text(inc),encoding='utf-8')
     records={r['id']+'@'+str(r['version']):r for r in data['requirements']}
     created={}
     ids={plan['index']}|{i for u in units for i in (u['conclusion'],u['register']) if i}
@@ -184,13 +190,16 @@ def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=
         if issues:raise RuntimeError(str(issues))
         created[item['id']]=item['path'];counts['documents']+=1
     for unit in units:
-        supports=[{'kind':'artifact','target':shared,'owner':phase_owner['concept'],'required':True,
+        supports=[{'kind':'artifact','target':shared,'owner':phase_owner.get('support',phase_owner['concept']),'required':True,
                    'rationale':'Shared source constraints for all branches','anchor':'','sha256':None}]
         if stage=='TR4':
             supports.extend({'kind':'artifact','target':target,'owner':owner,'required':True,
                              'rationale':'Actual implementation or fresh execution evidence','anchor':'','sha256':None}
                             for target,owner in [(f'implementation/{inc}/booking.py',phase_owner['develop']),
                                                  (evidence,phase_owner['qualify'])])
+        if data['schema_version']=='1.2':
+            for support in supports:
+                support['usage']='deliverable' if support['target']==shared else 'attachment'
         unit.update(finalized=True,supports=supports,
                     arguments=[{'requirement':r,'anchor':'derive-'+r.split('@')[0]} for r in unit['outputs']])
         request('stage_unit',actor='fixture-agent',unit=unit)

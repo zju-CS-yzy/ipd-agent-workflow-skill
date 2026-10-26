@@ -1,6 +1,21 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.4b1` and public label `v0.5.4-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.5b1` and public label `v0.5.5-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+
+## v0.5.5-beta candidate scope — 2026-10-26
+
+This section records the new candidate. Older records below qualify their own
+historical source, not version 0.5.5. Publication requires final-source evidence.
+
+- [x] Implement one read-only work index, one requirements/work matrix and shared graph details. Keep unassociated core Deliverables and separate material availability from approval.
+- [x] Place the stage SVG graph immediately below the dependency graph, with common rendering, zoom and cross-view identity.
+- [x] Add zero-write professional-work planning and explicit registry 1.2 / contract 0.5.5 support-role adoption with prior snapshots; preserve old-project facts on redraw.
+- [x] Pass 39 focused work-product/Dashboard regressions and actual v0.5.4 source upgrade, including old-client zero-write rejection. Complete an independent first-use synthetic planning pass.
+- [x] Pass Chrome/Edge × English/Chinese × file/HTTP for both browser suites: 16 cases, including 512 relation-toggle combinations, shared consumers, mobile containment and unchanged project facts.
+- [ ] Complete the frozen-source full behavior suite, bilingual first-use two-increment flows, historical upgrades, real isolated SVN, artifact byte checks and six isolated install probes. Interrupted or stale-source runs do not count.
+- [ ] Pass the full Windows/Linux × Python endpoint × locale CI, integrate the qualified source, then require this immutable Tag's own test run before publication. The release gate has a separate 350-minute wait budget.
+- [ ] Verify all four published assets, checksums and installed formats/locales against the accepted commit; record actual run IDs and limitations separately.
+- [x] No authorized private Golden fixture is available. Public synthetic decisions do not establish real-project acceptance. Native DOCX/XLSX, automatic historical migration and concurrent governance remain outside this release.
 
 ## v0.5.4-beta candidate scope — 2026-10-25
 

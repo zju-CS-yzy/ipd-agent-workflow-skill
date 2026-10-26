@@ -34,7 +34,8 @@ DEMO = ROOT / "docs/worked-projects/room-booking"
 PHASES = ("concept", "plan", "develop", "qualify", "launch", "lifecycle")
 
 
-def run(locale: str, project: Path, *, organized: bool = False) -> dict:
+def run(locale: str, project: Path, *, organized: bool = False, work_products: bool = False) -> dict:
+    organized = organized or work_products
     started = time.monotonic()
     project.mkdir(parents=True)
     count = 0
@@ -102,6 +103,27 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
     request("pin_templates", path="")
     if organized:
         request("adopt_organization",required_stages=["TR1","TR2","TR3","TR4"])
+    if work_products:
+        request('adopt_work_products',roles=[])
+        # Exercise the same zero-write planner and existing process compiler
+        # that a first-time author uses, before any work is accepted.
+        from ipdctl.work_planning import preview as work_preview, check as check_work
+        # The broad source binding is authored only after its Owner exists.
+        binding=load_state(bindings_path)
+        binding['bindings']=[b for b in binding['bindings'] if b['id']!='shared-source']
+        write_state(bindings_path,binding)
+        candidate=work_preview(project,{'request_id':'source-analysis','reason':'Explicit independent feasibility work',
+            'stage':'TR1','consumer':phase_owner['concept'],'materials':[{'id':'concept.source_analysis',
+            'title':'Shared source and feasibility analysis','path':'docs/shared/mvp.md','usage':'deliverable',
+            'required':True,'rationale':'Operating-day and grid calculations reused by every branch',
+            'execution_dependency':True}]})
+        assert candidate['ready_for_authoring'] and check_work(project,candidate)['status']=='current'
+        write_state(project/'.ipd/process_extensions.yaml',candidate['candidate_process_extensions'])
+        binding=candidate['candidate_artifact_bindings']
+        binding['bindings'].append({'id':'shared-source','glob':'docs/shared/**','deliverable':'concept.source_analysis','role':'owner','critical':True})
+        write_state(bindings_path,binding)
+        invoke('tailor',project,'--preview','--json');invoke('tailor',project)
+        phase_owner['support']='concept.source_analysis'
     catalog = json.loads((DEMO / "catalog.json").read_text(encoding="utf-8"))["requirements"]
     if organized:
         from stage_development_support import numbered_catalog
@@ -177,12 +199,22 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
             invoke("adopt-baseline", project, "--actor", "fixture-maintainer", "--actor-type", "human",
                    "--authorized", "--reason", "Accept explicit synthetic inputs for current stage")
             verify()
-            for deliverable in [d for d in state()["deliverables"] if d["phase"] == phase]:
+            pending=[d for d in state()['deliverables'] if d['phase']==phase]
+            ordered=[]
+            while pending:
+                ready=next((d for d in pending if not any(p['id'] in d['depends_on'] for p in pending)),None)
+                if ready is None:raise RuntimeError('Cyclic phase prerequisites')
+                ordered.append(ready);pending.remove(ready)
+            for deliverable in ordered:
                 owner = deliverable["id"]
                 invoke("claim", owner, "--project-root", project, "--actor", "fixture-agent")
                 evidence = f"evidence/{increment}/{owner}.md"
                 (project / evidence).parent.mkdir(parents=True, exist_ok=True)
                 (project / evidence).write_text(f"Synthetic {increment} {phase} work and review evidence\n", encoding="utf-8")
+                if work_products and owner==phase_owner['support']:
+                    from stage_development_support import shared_source_text
+                    path=project/f'docs/shared/{increment}.md';path.parent.mkdir(parents=True,exist_ok=True)
+                    path.write_text(shared_source_text(increment),encoding='utf-8')
                 if owner == phase_owner[phase]:
                     drafts={}
                     if organized and stage and phase!='qualify':
@@ -299,7 +331,7 @@ def run(locale: str, project: Path, *, organized: bool = False) -> dict:
         from stage_development_support import check_stage_outcomes
         stage_outcomes=check_stage_outcomes(project)
     return {"status": "passed", "locale": locale, "increments": 2, "baselines": 2,
-        "stage_organization":organized,
+        "stage_organization":organized,"work_products":work_products,
         "stage_outcomes":stage_outcomes,
         "requirements": len(catalog), "counts": counts, "history_preserved": True,
         "runtime_schema": "1.1", "synthetic_human_decisions": True,
@@ -311,13 +343,14 @@ if __name__ == "__main__":
     parser.add_argument("--locale", choices=("en", "zh-CN"), default="en")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--organized",action="store_true",help="Qualify 0.5.4 per-parent organization and work-product graphs")
+    parser.add_argument('--work-products',action='store_true',help='Qualify 0.5.5 independent supporting deliverables and unified views')
     parser.add_argument("--project", type=Path, help="Keep an isolated project; target must not exist")
     args = parser.parse_args()
     if args.project:
-        result = run(args.locale, args.project, organized=args.organized)
+        result = run(args.locale, args.project, organized=args.organized, work_products=args.work_products)
     else:
         with tempfile.TemporaryDirectory(prefix="ipd-increment-") as temp:
-            result = run(args.locale, Path(temp) / "project", organized=args.organized)
+            result = run(args.locale, Path(temp) / "project", organized=args.organized, work_products=args.work_products)
     text = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(text, encoding="utf-8")

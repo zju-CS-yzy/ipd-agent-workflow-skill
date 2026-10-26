@@ -3,14 +3,45 @@ name: release
 on:
   push:
     tags:
-      - "v0.5.4-beta"
+      - "v0.5.5-beta"
 
 permissions:
   contents: write
   actions: read
 
 jobs:
+  qualify-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require successful tests for this release Tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A branch run for the same commit cannot qualify the release Tag.
+          for attempt in $(seq 1 700); do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=100")"
+            tag_run="$(printf '%s' "$runs" | jq -c --arg tag "$GITHUB_REF_NAME" '[.workflow_runs[] | select(.head_branch == $tag)] | sort_by(.run_number) | last')"
+            if [ "$tag_run" != "null" ]; then
+              status="$(printf '%s' "$tag_run" | jq -r '.status')"
+              conclusion="$(printf '%s' "$tag_run" | jq -r '.conclusion')"
+              if [ "$status" = "completed" ]; then
+                test "$conclusion" = "success"
+                exit 0
+              fi
+            fi
+            sleep 30
+          done
+          echo "Release Tag test did not succeed within 350 minutes" >&2
+          exit 1
+
   build-and-release:
+    needs: qualify-tag
+    timeout-minutes: 360
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,11 +65,12 @@ jobs:
           python -B scripts/verify_v050_upgrade.py
           python -B scripts/verify_v051_upgrade.py
           python -B scripts/verify_v053_upgrade.py
+          python -B scripts/verify_v054_upgrade.py
           python -B scripts/verify_room_booking_walkthrough.py --execute
           python -B scripts/simulate_incremental_development.py --locale en
           python -B scripts/simulate_incremental_development.py --locale zh-CN
-          python -B scripts/simulate_incremental_development.py --organized --locale en
-          python -B scripts/simulate_incremental_development.py --organized --locale zh-CN
+          python -B scripts/simulate_incremental_development.py --work-products --locale en
+          python -B scripts/simulate_incremental_development.py --work-products --locale zh-CN
           python -B -m unittest discover -s tests -v
           IPD_TEST_LOCALE=en python -B -m unittest \
             tests.test_full_lifecycle_simulation -v
@@ -49,20 +81,20 @@ jobs:
           git archive \
             --format=zip \
             --prefix=ipd-agent-workflow-skill/ \
-            --output=dist/ipd-agent-workflow-skill-v0.5.4-beta.zip \
+            --output=dist/ipd-agent-workflow-skill-v0.5.5-beta.zip \
             HEAD
           cd dist
           sha256sum \
-            ipd-agent-workflow-skill-v0.5.4-beta.zip \
-            ipd_agent_workflow_skill-0.5.4b1-py3-none-any.whl \
-            ipd_agent_workflow_skill-0.5.4b1.tar.gz \
+            ipd-agent-workflow-skill-v0.5.5-beta.zip \
+            ipd_agent_workflow_skill-0.5.5b1-py3-none-any.whl \
+            ipd_agent_workflow_skill-0.5.5b1.tar.gz \
             > SHA256SUMS.txt
       - name: Inspect and smoke-test release artifacts
         shell: bash
         run: |
           wheel="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.whl' -print -quit)"
           sdist="$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.5.4-beta.zip"
+          skill_zip="$GITHUB_WORKSPACE/dist/ipd-agent-workflow-skill-v0.5.5-beta.zip"
           python -m zipfile -l "$wheel" | grep 'ipdctl/messages.yaml'
           python -m zipfile -l "$wheel" | grep 'schemas/artifact_bindings.schema.json'
           python -m zipfile -l "$wheel" | grep 'schemas/capability_policy.schema.json'
@@ -158,36 +190,15 @@ jobs:
               test "$(find "$project/.ipd/dashboard" -type f | wc -l)" -eq 16
             done
           done
-      - name: Require successful tests for this release Tag
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # A branch run for the same commit cannot qualify the release Tag.
-          for attempt in $(seq 1 160); do
-            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=100")"
-            tag_run="$(printf '%s' "$runs" | jq -c --arg tag "$GITHUB_REF_NAME" '[.workflow_runs[] | select(.head_branch == $tag)] | sort_by(.run_number) | last')"
-            if [ "$tag_run" != "null" ]; then
-              status="$(printf '%s' "$tag_run" | jq -r '.status')"
-              conclusion="$(printf '%s' "$tag_run" | jq -r '.conclusion')"
-              if [ "$status" = "completed" ]; then
-                test "$conclusion" = "success"
-                exit 0
-              fi
-            fi
-            sleep 15
-          done
-          echo "Release Tag test did not succeed within 40 minutes" >&2
-          exit 1
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@5113cdc90fd4d541c801c55356214017bf5ae34b # v3
         with:
-          name: "IPD Agent Workflow Framework v0.5.4-beta"
-          body_path: .github/release-notes/v0.5.4-beta.md
+          name: "IPD Agent Workflow Framework v0.5.5-beta"
+          body_path: .github/release-notes/v0.5.5-beta.md
           prerelease: true
           fail_on_unmatched_files: true
           files: |
-            dist/ipd-agent-workflow-skill-v0.5.4-beta.zip
-            dist/ipd_agent_workflow_skill-0.5.4b1-py3-none-any.whl
-            dist/ipd_agent_workflow_skill-0.5.4b1.tar.gz
+            dist/ipd-agent-workflow-skill-v0.5.5-beta.zip
+            dist/ipd_agent_workflow_skill-0.5.5b1-py3-none-any.whl
+            dist/ipd_agent_workflow_skill-0.5.5b1.tar.gz
             dist/SHA256SUMS.txt

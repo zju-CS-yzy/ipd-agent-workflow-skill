@@ -147,10 +147,12 @@ def input_snapshot(root: Path, registry: dict | None = None) -> dict:
         from .stage_organization import referenced_paths
         result.update(referenced_paths(root, registry))
         if "organization" in registry:
-            adopted = registry["organization"]["adoption"]
-            result[adopted["path"]] = file_hash(safe_path(root, adopted["path"]))
-            if result[adopted["path"]] != adopted["sha256"]:
-                raise RequirementError("HISTORY_TAMPERED: organization adoption snapshot changed")
+            for field in ('adoption', 'work_adoption'):
+                adopted = registry['organization'].get(field)
+                if adopted:
+                    result[adopted['path']] = file_hash(safe_path(root, adopted['path']))
+                    if result[adopted['path']] != adopted['sha256']:
+                        raise RequirementError('HISTORY_TAMPERED: organization adoption snapshot changed')
         for record in registry.get("template_records", []):
             read_record(root, record)
             result[record["path"]] = record["sha256"]
@@ -214,6 +216,8 @@ def _snapshot(root: Path, state: dict, runtime: dict, registry: dict | None) -> 
         paths.update(p for p, sha in referenced_paths(root, registry).items() if sha is not None)
         if "organization" in registry:
             paths.add(registry["organization"]["adoption"]["path"])
+            if registry['organization'].get('work_adoption'):
+                paths.add(registry['organization']['work_adoption']['path'])
         paths.update(i["path"] for i in registry["instances"] if i["increment"] == registry["active_increment"])
         paths.update(i["evidence"] for i in registry["verifications"] if i["increment"] == registry["active_increment"])
     for item in state["deliverables"] + state["gates"]:
@@ -440,11 +444,24 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         _fields(request, {"stage", "owner", "locale"})
         from .stage_organization import plan_stage
         plan_stage(registry, state, request["stage"], request["owner"], request["locale"])
+    elif op == 'adopt_work_products':
+        _fields(request, {'roles'})
+        active(registry)
+        if registry['schema_version'] != '1.1' or 'organization' not in registry:
+            raise RequirementError('WORK_ADOPTION: adopt organization 1.1 first; work roles are not yet adopted')
+        if any(g['status'] == 'approved' for g in state['gates']) or any(d['status'] == 'accepted' for d in state['deliverables']):
+            raise RequirementError('STAGE_GOVERNED: adopt work roles before accepting work in this increment')
+        from .work_planning import adopt_roles
+        relative = '.ipd/requirement_history/work-products-' + request['request_id'] + '.json'
+        snapshot = _snapshot(root, state, runtime, registry)
+        files[relative] = snapshot
+        adopt_roles(registry, request['roles'], {'path': relative, 'sha256': hashlib.sha256(snapshot.encode()).hexdigest()})
     elif op == "stage_unit":
         _fields(request, {"unit"})
         from .stage_organization import update_unit
         unit = deepcopy(request["unit"])
-        validate(unit, STAGE_UNIT)
+        from .requirement_contract import unit_contract
+        validate(unit, unit_contract(registry))
         if claim_operation:
             lease = runtime["active_claims"].get(unit.get("owner"))
             if not lease or _parse_time(lease["expires_at"]) <= utc_now():

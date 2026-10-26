@@ -72,13 +72,13 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         base = (project / '.ipd/dashboard/index.html').as_uri() if protocol == 'file' else f'http://127.0.0.1:{server.server_port}/.ipd/dashboard/index.html'
                         page.goto(base)
                         inputs = page.locator('[data-relation-toggle]')
-                        assert inputs.count() == 5
-                        assert page.locator('[data-relation-toggle]:checked').evaluate_all('(xs) => xs.map(x=>x.value)') == ['depends_on']
+                        assert inputs.count() == 6
+                        assert page.locator('[data-relation-toggle]:checked').evaluate_all('(xs) => xs.map(x=>x.value)') == ['depends_on', 'supports', 'owned_by']
                         counts = page.locator('#status-flow .edge[data-relation]').evaluate_all('(xs) => [...new Set(xs.map(x=>x.dataset.relation))]')
-                        if kind == 'synthetic': assert len(counts) == 5, counts
+                        if kind == 'synthetic': assert set(counts) == {'depends_on','supports','verifies','supersedes','refines','owned_by'}, counts
                         positions = page.locator('#status-flow [data-node-id]').evaluate_all('(xs)=>xs.map(x=>[x.dataset.nodeId,x.dataset.x,x.dataset.y])')
                         combinations = 0
-                        for bits in itertools.product((False, True), repeat=5):
+                        for bits in itertools.product((False, True), repeat=6):
                             selected = []
                             for i, bit in enumerate(bits):
                                 inputs.nth(i).set_checked(bit)
@@ -88,6 +88,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                             combinations += 1
                         assert page.locator('#status-flow [data-node-id]').evaluate_all('(xs)=>xs.map(x=>[x.dataset.nodeId,x.dataset.x,x.dataset.y])') == positions
                         page.locator('[data-relations-action="default"]').click()
+                        page.locator('[data-relation-toggle][value="owned_by"]').uncheck()
                         page.locator('[data-relation-toggle][value="depends_on"]').uncheck()
                         page.locator('[data-relation-toggle][value="supports"]').check()
                         page.locator('[data-relation-toggle][value="verifies"]').check()

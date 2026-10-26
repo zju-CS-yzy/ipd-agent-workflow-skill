@@ -1036,6 +1036,7 @@ __SVG_TEMPLATES__
   const deliverableSearch = document.getElementById('deliverable-search');
   const deliverableStatus = document.getElementById('deliverable-status');
   function filterDeliverables() {
+    if (state.work_products) return;
     const query = deliverableSearch.value.trim().toLowerCase(); const status = deliverableStatus.value; const phase = phaseSelect.value;
     document.querySelectorAll('#deliverable-rows tr[data-node]').forEach(row => { row.hidden = !((!query || row.textContent.toLowerCase().includes(query)) && (!status || row.dataset.status === status) && (!phase || row.dataset.phase === phase)); });
   }
@@ -1233,9 +1234,17 @@ __SVG_TEMPLATES__
     }
     for marker, value in replacements.items():
         html = html.replace(marker, value)
-    relations = ("depends_on", "supports", "verifies", "supersedes", "refines")
+    if state_data.get("work_products"):
+        from .dashboard_work import matrix, stage_panel, script, diagnostics_panel
+        work = state_data["work_products"]
+        html = re.sub(r'<section class="panel" id="deliverable-matrix">.*?</section>',
+                      lambda _: matrix(work, translator.locale), html, flags=re.S)
+        html = html.replace('<section class="panel" id="gate-matrix">',
+                            stage_panel(work, translator.locale) + '\n<section class="panel" id="gate-matrix">', 1)
+        html = html.replace('</main>', diagnostics_panel(work, translator.locale) + script(work, translator.locale) + '</main>', 1)
+    relations = ("depends_on", "supports", "verifies", "supersedes", "refines", "owned_by")
     controls = '<fieldset class="relation-tools"><legend>' + escape(translator.text("navigation.relations")) + '</legend>'
-    controls += "".join('<label><input type="checkbox" data-relation-toggle value="' + relation + '"' + (' checked' if relation == "depends_on" else '') + '>' + escape(translator.text("navigation.depends_on") if relation == "depends_on" else translator.text("relation." + relation)) + '</label>' for relation in relations)
+    controls += "".join('<label><input type="checkbox" data-relation-toggle value="' + relation + '"' + (' checked' if relation in {"depends_on", "supports", "owned_by"} and state_data.get("work_products") or relation == "depends_on" else '') + '>' + escape(("归属" if translator.locale == "zh-CN" else "Owned by") if relation == "owned_by" else translator.text("navigation.depends_on") if relation == "depends_on" else translator.text("relation." + relation)) + '</label>' for relation in relations)
     controls += '<button class="btn" type="button" data-relations-action="all">' + escape(translator.text("navigation.show_all")) + '</button><button class="btn" type="button" data-relations-action="default">' + escape(translator.text("navigation.restore_default")) + '</button></fieldset>'
     html = html.replace("__RELATION_CONTROLS__", controls)
     templates = []
@@ -1292,6 +1301,9 @@ def render_deliverable_matrix(
     """Render a standalone searchable deliverable matrix."""
 
     translator = _translator(translator, locale)
+    if state_data.get("work_products"):
+        from .dashboard_work import standalone
+        return standalone(state_data, translator.locale)
     deliverables = _items(state_data.get("deliverables"))
     phases = sorted({_text(item.get("phase")) for item in deliverables})
     phase_by_id = {

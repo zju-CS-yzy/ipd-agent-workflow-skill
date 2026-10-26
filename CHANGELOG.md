@@ -1,8 +1,17 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.4-beta` maps to package version `0.5.4b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.5-beta` maps to package version `0.5.5b1`.
 
 ## [Unreleased]
+
+## [0.5.5b1] - 2026-10-26
+
+- Unify requirements, Deliverables, governed documents and supporting files in one read-only matrix and shared entity projection.
+- Put the stage work-product SVG graph immediately below the Deliverable dependency graph, sharing card, edge, zoom and detail interactions.
+- Add explicit support roles and independent Deliverable planning through zero-write `work-plan`; applying candidates uses existing process, binding and baseline governance.
+- Preserve old facts during view redraw. Optional registry 1.2 / contract 0.5.5 adoption retains a hashed snapshot and makes older clients fail closed.
+- Verify renderer fingerprints and the canonical work projection. Qualify shared/historical contexts, bilingual first-use increments, real-browser navigation and published v0.5.4 upgrade.
+- Move release Tag qualification into its own bounded job so the complete CI matrix can finish before building and publishing assets.
 
 ## [0.5.4b1] - 2026-10-25
 

@@ -200,7 +200,8 @@ def support_path(root, registry, support):
 
 def update_unit(root, registry, state, unit, owner_check):
     org = organization(registry)
-    validate(unit, STAGE_UNIT)
+    from .requirement_contract import unit_contract
+    validate(unit, unit_contract(registry))
     old = next((u for u in org["units"] if u["id"] == unit["id"]), None)
     if not old or any(unit[k] != old[k] for k in ("increment", "stage", "owner", "locale")) or unit["increment"] != registry["active_increment"]:
         raise RequirementError("STAGE_UNIT: update a planned current unit without changing its identity")
@@ -210,6 +211,11 @@ def update_unit(root, registry, state, unit, owner_check):
     if PHASES.index(subject["phase"]) < PHASES.index(state["project"]["phase"]):
         raise RequirementError("STAGE_GOVERNED: cannot reinterpret a closed Phase")
     for support in unit["supports"]:
+        if registry['schema_version'] == '1.2':
+            if 'usage' not in support:
+                raise RequirementError('SUPPORT_USAGE: explicitly select deliverable, attachment or reference')
+            if support['usage'] == 'deliverable' and support['owner'] == unit['owner']:
+                raise RequirementError('SUPPORT_DELIVERABLE: independent support must have a different formal Deliverable')
         if support["kind"] == "instance" and support["target"] not in {i["id"] for i in live_instances(registry)}:
             raise RequirementError("SUPPORT_REFERENCE: select a live instance")
         relative = support_path(root, registry, support)
@@ -280,6 +286,9 @@ def validate_organization(registry):
         if unit["stage"] == "TR4" and (outputs or any(records[r]["kind"] != "AR" for r in inputs)):
             raise RequirementError("STAGE_PARENT: TR4 consumes AR without a fourth requirement layer")
         support_keys = [(s["kind"], s["target"]) for s in unit["supports"]]
+        if registry['schema_version'] == '1.2' and unit['increment'] == registry['active_increment']:
+            if any('usage' not in s or s['usage'] == 'deliverable' and s['owner'] == unit['owner'] for s in unit['supports']):
+                raise RequirementError('SUPPORT_USAGE: explicit role and independent Deliverable are required')
         if len(support_keys) != len(set(support_keys)) or any(s["kind"] == "instance" and s["target"] in {unit["conclusion"], unit["register"]} for s in unit["supports"]):
             raise RequirementError("SUPPORT_CYCLE: duplicate or self-supporting conclusion")
     terminals = {(u["increment"], target): u["id"] for u in org["units"] for target in (u["conclusion"], u["register"]) if target}
@@ -295,6 +304,14 @@ def validate_organization(registry):
     done = set()
     for node in graph:
         visit(node, set(), done)
+    roles = {}
+    for unit in org['units']:
+        for support in unit['supports']:
+            key = (unit['increment'], support['kind'], support['target'])
+            role = support.get('usage')
+            if key in roles and roles[key] != role:
+                raise RequirementError('SUPPORT_USAGE: shared material roles conflict')
+            roles[key] = role
 
 
 def referenced_paths(root, registry, *, references=None):

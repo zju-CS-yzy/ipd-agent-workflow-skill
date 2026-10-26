@@ -23,19 +23,36 @@ def fixture(destination,locale):
     case=StageOrganizationTests('runTest');case.setUp()
     try:
         case.tree();case.plan('TR2',locale);case.plan('TR3',locale)
-        owner=case.owner('plan');case.bindings(owner)
+        owner=case.owner('plan')
+        case.f.execute('adopt_work_products',roles=[])
+        from ipdctl.work_planning import preview as work_preview
+        from ipdctl.cli import main
+        from ipdctl.state import write_state
+        from contextlib import redirect_stdout
+        import io
+        candidate=work_preview(case.root,{'request_id':'browser-material','reason':'Synthetic independent supporting work',
+            'stage':'TR2','consumer':owner,'materials':[{'id':'plan.selection','title':'Shared selection analysis',
+            'path':'docs/shared 资料 #&.txt','usage':'deliverable','required':True,
+            'rationale':'Shared timing budget','execution_dependency':True}]})
+        assert candidate['ready_for_authoring']
+        write_state(case.root/'.ipd/process_extensions.yaml',candidate['candidate_process_extensions'])
+        write_state(case.root/'.ipd/artifact_bindings.yaml',candidate['candidate_artifact_bindings'])
+        with redirect_stdout(io.StringIO()): assert main(['tailor',str(case.root)])==0
+        case.bindings(owner,'docs/increments/**')
         material='docs/shared 资料 #&.txt'
         path=case.root/material;path.parent.mkdir(exist_ok=True);path.write_text('Synthetic shared selection evidence',encoding='utf-8')
         for unit in list(case.registry()['organization']['units']):
             if unit['stage']=='TR2':
-                unit['supports']=[{'kind':'artifact','target':material,'owner':owner,'required':True,'rationale':'Synthetic shared constraint','anchor':'','sha256':None}]
+                unit['supports']=[{'kind':'artifact','target':material,'owner':'plan.selection','usage':'deliverable','required':True,'rationale':'Synthetic shared constraint','anchor':'','sha256':None}]
                 case.f.execute('stage_unit',unit=unit)
         case.work(owner)
         for item in [x for x in blueprints(case.registry()) if x['owner']==owner]:
             case.f.execute('instantiate',actor='agent',instance=item);case.fill(item)
         for unit in list(case.registry()['organization']['units']):
             if unit['stage']=='TR2':
-                unit['finalized']=True
+                # Deliberately unaccepted support: display an incomplete draft,
+                # never bypass the independent support acceptance guard.
+                unit['finalized']=False
                 unit['arguments']=[{'requirement':r,'anchor':'derive-'+r.split('@')[0]} for r in unit['outputs']]
                 case.f.execute('stage_unit',actor='agent',unit=unit)
         shutil.copytree(case.root,destination)
@@ -69,25 +86,51 @@ def run(output,channels):
                         address=(project/'.ipd/dashboard/index.html').as_uri() if protocol=='file' else f'http://127.0.0.1:{server.server_port}/.ipd/dashboard/index.html'
                         page.goto(address);page.locator('#ipd-stage-flow').wait_for()
                         assert page.locator('[data-flow-unit]').count()==6
+                        page.locator('[data-flow-group]').evaluate_all('(xs)=>xs.forEach(x=>x.open=true)')
+                        assert page.locator('#deliverable-matrix').count()==1
+                        assert not page.locator('#ipd-requirement-filter').count()
+                        assert page.locator('#ipd-stage-flow').evaluate('(e)=>e.closest("main")!==null')
+                        assert page.locator('#dependency-flow').evaluate('(e)=>e.compareDocumentPosition(document.getElementById("ipd-stage-flow")) & Node.DOCUMENT_POSITION_FOLLOWING')
                         page.locator('#ipd-flow-stage').select_option('TR2')
                         assert page.locator('[data-flow-unit]:visible').count()==2
-                        first=page.locator('[data-flow-unit]:visible').first;first.locator('summary').click()
-                        assert first.locator('.ipd-work-columns>div').count()==4
-                        first.locator('[data-flow-open]').filter(has_text='TR3').first.click()
-                        assert page.locator('#ipd-flow-stage').input_value()=='TR3'
+                        first=page.locator('[data-flow-unit]:visible').first
+                        first.evaluate('(e)=>{e.closest("[data-flow-group]").open=true;e.open=true}')
+                        assert first.locator('svg[data-work-diagram]').count()==1
+                        assert first.locator('svg .edge[data-relation="supports"]').count()>=1
+                        support=first.locator('g[data-work-key="deliverable:plan.selection"]')
+                        assert support.count()==1
+                        main_node=page.locator('#dependency-flow g[data-work-key="deliverable:plan.selection"]')
+                        assert main_node.count()==1
+                        assert support.locator('rect').last.get_attribute('rx')==main_node.locator('rect').last.get_attribute('rx')
+                        support.click(); assert 'plan.selection' in page.locator('#detail-title').inner_text()
+                        assert page.locator('.work-selected[data-work-key="deliverable:plan.selection"]').count()>=3
+                        assert page.locator('#detail-body [data-work-unit]').count()==2
+                        page.locator('#detail-body [data-work-unit]').last.click()
                         assert page.locator('[data-flow-unit][open]:visible').count()>=1
-                        page.locator('#ipd-flow-stage').select_option('TR2');page.locator('#ipd-flow-search').fill('ir-001')
-                        assert page.locator('[data-flow-unit]:visible').count()==1
-                        selected=page.locator('[data-flow-unit]:visible');selected.evaluate('(e)=>e.open=true')
-                        href=selected.locator('[data-flow-node*="artifact:"]>a').first.get_attribute('href')
-                        assert '%20' in href and '%23' in href and '%26' in href
-                        assert selected.locator('[data-flow-node*="artifact:"] [data-flow-open]').count()==2
-                        selected.locator('[data-flow-owner]').first.click()
-                        assert page.locator('#deliverable-search').input_value()=='plan.integrated_plan'
-                        page.locator('#ipd-flow-search').fill('impossible-branch');assert page.locator('[data-flow-unit]:visible').count()==0
-                        page.locator('#ipd-flow-search').fill('');page.locator('#ipd-flow-stage').select_option('TR2')
+                        page.locator('#deliverable-search').fill('shared 资料')
+                        material=page.locator('#deliverable-rows tr[data-kind="Material"]:visible').first
+                        assert material.count()==1
+                        material.click();link=page.locator('#detail-body a').first
+                        href=link.get_attribute('href');assert '%20' in href and '%23' in href and '%26' in href
+                        assert ('no independent approval' if locale=='en' else '没有独立审批状态') in page.locator('#detail-body').inner_text()
+                        assert page.locator('#detail-body [data-work-unit]').count()==2
+                        page.locator('#deliverable-search').fill('impossible-branch')
+                        assert page.locator('[data-flow-unit]:visible').count()==0
+                        page.locator('#deliverable-search').fill('');page.locator('#ipd-flow-stage').select_option('TR2')
+                        page.locator('#details-close').click()
                         page.locator('#ipd-stage-flow').scroll_into_view_if_needed()
                         page.screenshot(path=str(output/f'{channel}-{locale}-{protocol}.png'))
+                        zoom=first.locator('[data-zoom="in"]');zoom.click()
+                        assert 'scale(' in first.locator('svg').get_attribute('style')
+                        page.set_viewport_size({'width':390,'height':844})
+                        page.locator('#ipd-stage-flow').scroll_into_view_if_needed()
+                        page.screenshot(path=str(output/f'{channel}-{locale}-{protocol}-mobile.png'))
+                        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+                        page.set_viewport_size({'width':1440,'height':1000})
+                        # Phase switching reuses SVGs without duplicate IDs.
+                        page.locator('#work-phase').select_option('plan')
+                        assert page.locator('#dependency-flow g[data-work-key="deliverable:plan.selection"]').count()==1
+                        page.locator('#work-phase').select_option('')
                         duplicates=page.locator('[id]').evaluate_all('(xs)=>{const ids=xs.map(x=>x.id);return ids.filter((x,i)=>ids.indexOf(x)!==i)}')
                         assert not duplicates and not errors,(duplicates,errors)
                         assert before==facts(project)

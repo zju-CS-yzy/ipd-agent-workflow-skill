@@ -2336,6 +2336,23 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                         "message": translator.text("report.dashboard.schema_unsupported"),
                     }
                 )
+            from .dashboard import renderer_fingerprint
+            if manifest.get('renderer_sha256') != renderer_fingerprint():
+                issue_rows.append({'path':'$.dashboard.renderer_sha256', 'code':'DASHBOARD_RENDERER_STALE',
+                                   'message':'Dashboard must be regenerated with the current renderer'})
+            if process is not None:
+                from .dashboard_model import build_dashboard_model
+                from .dashboard_files import project_file_navigation
+                from .dashboard_work import projection as work_projection, signature as work_signature
+                from .requirements import projection as requirement_projection
+                from .reconcile import load_artifact_bindings
+                expected_state, _ = build_dashboard_model(process, state, runtime, translator=translator, locale=locale)
+                project_file_navigation(paths['root'], expected_state['deliverables'], load_artifact_bindings(paths['bindings']))
+                expected_work = work_projection(expected_state, requirement_projection(paths['root']))
+                rendered_state = json.loads((paths['dashboard']/'data/state.json').read_text(encoding='utf-8'))
+                if 'work_products' not in rendered_state or work_signature(rendered_state['work_products']) != work_signature(expected_work):
+                    issue_rows.append({'path':'$.dashboard.work_products', 'code':'WORK_PRODUCTS_STALE',
+                                       'message':'Work-product index does not match canonical project facts'})
             if (paths["root"] / ".ipd/requirements.yaml").is_file():
                 from .requirements import source_snapshot
                 if manifest.get("requirements_sha256") != _stable_value_hash(source_snapshot(paths["root"])):
