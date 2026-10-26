@@ -33,6 +33,9 @@ def check_stage_outcomes(project):
             assert all(nodes[n]['status']=='passed' for n in unit['results'])
     for inc in ('mvp','extension'):
         assert len(flow['reverse']['artifact:docs/shared/'+inc+'.md']['units'])==16
+        locale=next(u['locale'] for u in data['organization']['units'] if u['increment']==inc)
+        source=f'reference/{inc}/{locale}/source-brief.md'
+        assert (project/source).is_file() and source in (project/f'docs/shared/{inc}.md').read_text(encoding='utf-8')
         for ir in range(1,4):
             for sr in range(1,3):
                 base=f'docs/increments/{inc}/tr3/ir-{ir:03}/sr-{ir:03}-{sr:03}/'
@@ -87,10 +90,10 @@ def start_derivations(project,stage,locale,request,counts,catalog):
     return drafts
 
 
-def shared_source_text(inc):
+def shared_source_text(inc, locale):
     return ('Synthetic BRIEF@1: one room, single process, 08:00–18:00, 15-minute grid. '
             '10 hours × 60 = 600 minutes; 600 / 15 = 40 possible slots. '
-            'No persistence or concurrency claim. Source: reference/'+inc+'/source-brief.md\n')
+            'No persistence or concurrency claim. Source: reference/'+inc+'/'+locale+'/source-brief.md\n')
 
 
 def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=None):
@@ -108,8 +111,8 @@ def write_stage(project, stage, locale, request, counts, phase_owner, *, drafts=
     if stage=='TR1':
         path=project/shared;path.parent.mkdir(parents=True,exist_ok=True)
         if 'support' in phase_owner:
-            assert path.read_text(encoding='utf-8')==shared_source_text(inc), 'Accepted support must not be rewritten by its consumer'
-        else:path.write_text(shared_source_text(inc),encoding='utf-8')
+            assert path.read_text(encoding='utf-8')==shared_source_text(inc,locale), 'Accepted support must not be rewritten by its consumer'
+        else:path.write_text(shared_source_text(inc,locale),encoding='utf-8')
     records={r['id']+'@'+str(r['version']):r for r in data['requirements']}
     created={}
     ids={plan['index']}|{i for u in units for i in (u['conclusion'],u['register']) if i}

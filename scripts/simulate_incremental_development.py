@@ -214,7 +214,7 @@ def run(locale: str, project: Path, *, organized: bool = False, work_products: b
                 if work_products and owner==phase_owner['support']:
                     from stage_development_support import shared_source_text
                     path=project/f'docs/shared/{increment}.md';path.parent.mkdir(parents=True,exist_ok=True)
-                    path.write_text(shared_source_text(increment),encoding='utf-8')
+                    path.write_text(shared_source_text(increment,locale),encoding='utf-8')
                 if owner == phase_owner[phase]:
                     drafts={}
                     if organized and stage and phase!='qualify':
