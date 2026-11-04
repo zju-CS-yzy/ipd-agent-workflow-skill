@@ -4,8 +4,8 @@ Use this checklist for every GitHub release. The target for this cycle is Python
 
 ## v0.5.6-beta candidate scope
 
-- [ ] Verify graph and landing-page byte stability with 10,000 additional bound history files. Check full detail navigation in both languages, offline and over HTTP.
-- [ ] Verify candidate plan previews, stale-plan rejection, stable links after merge/reorder, and unchanged execution facts. Check version inventory against an older pinned pack.
+- [x] Verify graph and landing-page byte stability with 10,000 additional bound history files. Check full detail navigation in both languages, offline and over HTTP.
+- [x] Verify candidate plan previews, stale-plan rejection, stable links after merge, and unchanged execution facts. Check version inventory against an older pinned pack.
 - [ ] Complete lifecycle regressions, historical upgrades, packaging and the Windows/Linux endpoint CI matrix on the final candidate.
 - [ ] Require the immutable release Tag's own successful test run before publication. Verify all four published assets and isolated installations.
 - [x] Private Golden coverage remains unavailable. Public synthetic evidence is recorded separately from real-project acceptance.
