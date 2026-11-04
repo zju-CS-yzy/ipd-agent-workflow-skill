@@ -53,12 +53,14 @@ class CliLifecycleTests(unittest.TestCase):
             context = json.loads(context_output)
             self.assertEqual(context["phase"], "concept")
             self.assertTrue(context["available_tasks"])
+            self.assertEqual(context["versions"]["templates"]["shipped"]["version"], "1.3.0")
 
             refresh_code, refresh_output, refresh_error = self.invoke(
                 ["refresh", str(root)]
             )
             self.assertEqual(refresh_code, 0, refresh_error)
-            self.assertIn("16 files including manifest", refresh_output)
+            state = load_state(root / ".ipd/project_state.yaml")
+            self.assertIn(f"{16 + len(state['deliverables'])} files including manifest", refresh_output)
             verify_code, verify_output, _ = self.invoke(["verify", str(root), "--json"])
             self.assertEqual(verify_code, 0, verify_output)
             self.assertEqual(json.loads(verify_output)["status"], "passed")
