@@ -71,6 +71,16 @@ EXPECTED_DASHBOARD_FILES = frozenset(
         "manifest.json",
     }
 )
+
+
+def expected_dashboard_files(state):
+    from ipdctl.dashboard_work import details_asset
+
+    return EXPECTED_DASHBOARD_FILES | {
+        details_asset("deliverable:" + item["id"]) for item in state["deliverables"]
+    }
+
+
 class SimulationFailure(RuntimeError):
     """Raised when a lifecycle invariant or expected CLI result is absent."""
 
@@ -1188,21 +1198,22 @@ class LifecycleScenario:
             for path in self.dashboard.rglob("*")
             if path.is_file()
         }
-        missing_outputs = sorted(EXPECTED_DASHBOARD_FILES - actual_files)
-        unexpected_outputs = sorted(actual_files - EXPECTED_DASHBOARD_FILES)
+        expected_files = expected_dashboard_files(state)
+        missing_outputs = sorted(expected_files - actual_files)
+        unexpected_outputs = sorted(actual_files - expected_files)
         _require(not missing_outputs, f"Dashboard outputs were missing: {missing_outputs}")
         _require(
             not unexpected_outputs,
             f"Dashboard generated unexpected files: {unexpected_outputs}",
         )
         _require(
-            set(manifest.get("files", [])) == EXPECTED_DASHBOARD_FILES,
-            "Dashboard manifest file inventory did not match the 15-output contract",
+            set(manifest.get("files", [])) == expected_files,
+            "Dashboard manifest file inventory did not match the output contract",
         )
         _require(
             {item.get("path", "").removeprefix(".ipd/dashboard/") for item in manifest.get("outputs", [])}
-            == EXPECTED_DASHBOARD_FILES - {"manifest.json"},
-            "Dashboard manifest hash inventory did not cover its 14 non-manifest outputs",
+            == expected_files - {"manifest.json"},
+            "Dashboard manifest hash inventory did not cover its non-manifest outputs",
         )
 
         _require(

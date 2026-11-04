@@ -888,7 +888,11 @@ def projection(root: Path) -> dict | None:
     result = deepcopy(registry)
     state = load_state(resolve_state_path(root))
     result["diagnostics"] = readiness(root, registry, state, stage="TR4", all_documents=True) if registry["active_increment"] else []
+    from .increment_planning import display, read
+    candidate_plan = read(root)
+    result["candidate_increments"] = display(candidate_plan)
     result["input_sha256"] = digest(source_snapshot(root, registry))
+    result["candidate_plan_sha256"] = digest(candidate_plan)
     result["coverage"] = []
     result["verification_diagnostics"] = {}
     accepted_increments = {i["id"] for i in registry["increments"] if i["status"] == "accepted"}

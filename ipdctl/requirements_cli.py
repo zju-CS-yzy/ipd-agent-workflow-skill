@@ -20,6 +20,15 @@ def register_commands(commands, translator) -> None:
     group.add_argument('--check-plan', help='核对已保存计划是否仍适用' if zh else 'Check saved plan freshness')
     parser.add_argument('--json', action='store_true')
     parser.set_defaults(handler=run_work_plan)
+    parser = commands.add_parser("increment-plan", help="候选增量规划" if zh else "Plan candidate increments", translator=translator)
+    parser.add_argument("target", nargs="?", default=".")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--request")
+    group.add_argument("--apply")
+    parser.add_argument("--actor", default="")
+    parser.add_argument("--authorized", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.set_defaults(handler=run_increment_plan)
     description = "需求、增量及交付件计划" if zh else "Requirement, increment and document plans"
     parser = commands.add_parser("requirements", help=description, description=description, translator=translator)
     parser.add_argument("target", nargs="?", default=".")
@@ -56,6 +65,21 @@ def run_work_plan(args):
     from .work_planning import preview as work_preview, check
     root = Path(args.target).resolve()
     result = work_preview(root, load_state(args.request)) if args.request else check(root, load_state(args.check_plan))
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
+    return 0
+
+
+def run_increment_plan(args):
+    from .increment_planning import apply, display, preview, read
+
+    root = Path(args.target).resolve()
+    if args.request:
+        result = preview(root, load_state(args.request))
+    elif args.apply:
+        result = apply(root, load_state(args.apply), actor=args.actor, authorized=args.authorized)
+    else:
+        data = read(root)
+        result = {**data, "candidates": display(data)}
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0
 

@@ -130,7 +130,13 @@ python -m ipdctl validate . --json
 
 The full command surface is `init`, `tailor`, `refine`, `context`, `adopt-baseline`, `claim`, `close`,
 `review`, `approve`, `reject`, `advance-phase`, `render-dashboard`, `refresh`, `verify`,
-`repository`, `reconcile`, `validate`, `requirements`, `templates`, `work-plan`, and the `status` alias for `context`.
+`repository`, `reconcile`, `validate`, `requirements`, `templates`, `work-plan`, `increment-plan`, and the `status` alias for `context`.
+
+Use `increment-plan` to propose, reorder and merge future increment candidates.
+Keep stable candidate IDs in links and references. Display order is computed
+from pending candidates. A planning merge records its destination. Use the
+governed `requirements` workflow to accept actual execution scope. Inspect
+`context --json` under `versions` for tool, contract, pack and instance versions.
 Use `init` only when no state exists. Do not use `--force` unless replacement
 is explicitly intended. Use `claim --recover` only to recover an orphaned
 `in_progress` deliverable identified by `context`; an unexpired claim owned by

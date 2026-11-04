@@ -378,8 +378,8 @@ def _localize_static_html(template: str, translator: Any) -> str:
             "dashboard.current_iteration_subject",
             "Current review subject",
         ),
-        "Progress": _t(translator, "dashboard.progress", "Progress"),
-        "Accepted": _t(translator, "dashboard.accepted", "Accepted"),
+        "Deliverable acceptance rate": "交付件接受比例" if translator.locale == "zh-CN" else "Deliverable acceptance rate",
+        "Accepted deliverables": "已接受交付件" if translator.locale == "zh-CN" else "Accepted deliverables",
         "Review queue": _t(translator, "dashboard.review_queue", "Review queue"),
         "Refinement due": _t(
             translator, "dashboard.refinement_due", "Refinement due"
@@ -696,6 +696,11 @@ def render_index(
         progress_number = 0.0
 
     first_task = available[0] if available else {}
+    next_action = {
+        "review": "dashboard.next_review",
+        "work": "dashboard.next_work",
+        "close": "dashboard.next_close",
+    }.get(project.get("workflow_step"), "dashboard.inspect_current_status")
     task_id = _text(
         first_task.get("id"),
         _t(translator, "dashboard.no_task_available", "No task is currently available"),
@@ -704,8 +709,8 @@ def render_index(
         first_task.get("display_label") or first_task.get("title"),
         _t(
             translator,
-            "dashboard.resolve_dependencies",
-            "Resolve dependencies or complete the active review.",
+            next_action,
+            "Inspect the current work status below.",
         ),
     )
     task_meta = " · ".join(
@@ -715,7 +720,7 @@ def render_index(
             _text(first_task.get("owner"), ""),
         )
         if part
-    ) or _t(translator, "dashboard.state_synchronized", "Workflow state is synchronized")
+    ) or _t(translator, "dashboard.state_revision", "State revision") + " " + _text(project.get("state_revision"))
 
     phase_options = "".join(
         '<option value="{}" data-src="{}"{}>{}</option>'.format(
@@ -803,8 +808,8 @@ def render_index(
     <div class="metric"><span class="metric-label">Current TR</span><strong class="metric-value">__CURRENT_TR__</strong></div>
     <div class="metric"><span class="metric-label">Current DCP / Gate</span><strong class="metric-value">__CURRENT_GATE__</strong></div>
     <div class="metric"><span class="metric-label">Current review subject</span><strong class="metric-value">__CURRENT_ITERATION_SUBJECT__</strong></div>
-    <div class="metric"><span class="metric-label">Progress</span><strong class="metric-value">__PROGRESS__%</strong><div class="progress" aria-hidden="true"><span style="width:__PROGRESS__%"></span></div></div>
-    <div class="metric"><span class="metric-label">Accepted</span><strong class="metric-value">__ACCEPTED__ / __TOTAL__</strong></div>
+    <div class="metric"><span class="metric-label">Deliverable acceptance rate</span><strong class="metric-value">__PROGRESS__%</strong><div class="progress" aria-hidden="true"><span style="width:__PROGRESS__%"></span></div></div>
+    <div class="metric"><span class="metric-label">Accepted deliverables</span><strong class="metric-value">__ACCEPTED__ / __TOTAL__</strong></div>
     <div class="metric"><span class="metric-label">Review queue</span><strong class="metric-value">__REVIEW_QUEUE__</strong></div>
     <div class="metric"><span class="metric-label">Waiting on prerequisites</span><strong class="metric-value">__WAITING__</strong></div>
     <div class="metric"><span class="metric-label">Refinement due</span><strong class="metric-value__REFINEMENT_ALERT_CLASS__">__REFINEMENT_DUE__</strong></div>
@@ -1107,7 +1112,10 @@ __SVG_TEMPLATES__
         "__DEFAULT_PHASE_SRC__": escape(default_phase_src, quote=True),
         "__GATE_ROWS__": _gate_rows(checkpoints, translator),
         "__DELIVERABLE_ROWS__": _deliverable_rows(deliverables, translator),
-        "__STATE_JSON__": _json_script(state_data),
+        "__STATE_JSON__": _json_script(
+            {key: state_data.get(key, []) for key in ("checkpoints", "phases", "activities")}
+            | {"work_products": True} if state_data.get("work_products") else state_data
+        ),
         "__GRAPH_JSON__": _json_script(graph_data),
         "__I18N_JSON__": _json_script(
             {
@@ -1235,13 +1243,17 @@ __SVG_TEMPLATES__
     for marker, value in replacements.items():
         html = html.replace(marker, value)
     if state_data.get("work_products"):
-        from .dashboard_work import matrix, stage_panel, script, diagnostics_panel
-        work = state_data["work_products"]
+        from .dashboard_work import candidates_panel, matrix, overview, stage_panel, script, word
+        work = overview(state_data["work_products"])
+        requirements = state_data.get("requirements", {})
         html = re.sub(r'<section class="panel" id="deliverable-matrix">.*?</section>',
-                      lambda _: matrix(work, translator.locale), html, flags=re.S)
+                      lambda _: candidates_panel(requirements.get("candidate_increments", []), translator.locale)
+                      + matrix(work, translator.locale), html, flags=re.S)
         html = html.replace('<section class="panel" id="gate-matrix">',
                             stage_panel(work, translator.locale) + '\n<section class="panel" id="gate-matrix">', 1)
-        html = html.replace('</main>', diagnostics_panel(work, translator.locale) + script(work, translator.locale) + '</main>', 1)
+        audit_link = ('<p><a class="btn" href="matrices/deliverable_matrix.html#work-audit">'
+                      + escape(word('diagnostics', translator.locale)) + '</a></p>')
+        html = html.replace('</main>', audit_link + script(work, translator.locale) + '</main>', 1)
     relations = ("depends_on", "supports", "verifies", "supersedes", "refines", "owned_by")
     controls = '<fieldset class="relation-tools"><legend>' + escape(translator.text("navigation.relations")) + '</legend>'
     controls += "".join('<label><input type="checkbox" data-relation-toggle value="' + relation + '"' + (' checked' if relation in {"depends_on", "supports", "owned_by"} and state_data.get("work_products") or relation == "depends_on" else '') + '>' + escape(("归属" if translator.locale == "zh-CN" else "Owned by") if relation == "owned_by" else translator.text("navigation.depends_on") if relation == "depends_on" else translator.text("relation." + relation)) + '</label>' for relation in relations)

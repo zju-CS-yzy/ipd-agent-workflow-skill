@@ -1,6 +1,13 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.5-beta` maps to package version `0.5.5b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.6-beta` maps to package version `0.5.6b1`.
+
+## [0.5.6b1] - 2026-11-05
+
+- Keep discovered Owner files out of the dependency graph and landing page payload. Open Owner details, the full work matrix and audit records on demand in offline or HTTP views.
+- Add authorized candidate increment planning with stable IDs, display reordering, merge history and explicit links to governed increments.
+- Display the source state revision and derive Dashboard status guidance and acceptance metrics from project facts.
+- Report CLI, project contract, shipped and pinned packs, publication records and instance versions in Context, including a read-only comparison with the shipped templates.
 
 ## [Unreleased]
 

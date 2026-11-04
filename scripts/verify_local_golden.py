@@ -97,7 +97,7 @@ def run(fixture: Path, baseline_source: Path, output: Path) -> dict:
     cli(ROOT, upgrade, 'render-dashboard', str(upgrade))
     assert hashes(upgrade / '.ipd/dashboard') == first, 'Non-deterministic rendering'
     manifest = json.loads((upgrade / '.ipd/dashboard/manifest.json').read_text(encoding='utf-8'))
-    assert manifest['schema_version'] == '2.2' and len(manifest['files']) == 16
+    assert manifest['schema_version'] == '2.2' and len(manifest['files']) > 16
     cli(ROOT, upgrade, 'validate', str(upgrade), '--json')
     refresh_before = hashes(upgrade)
     cli(ROOT, upgrade, 'refresh', str(upgrade), success=False if recovered else True)

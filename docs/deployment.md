@@ -2,7 +2,7 @@
 
 [English](deployment.md) | [简体中文](deployment.zh-CN.md)
 
-The current development target is `v0.5.5-beta` (`0.5.5b1`). Published-project
+The current development target is `v0.5.6-beta` (`0.5.6b1`). Published-project
 probes include `v0.5.0-beta`, opt-in adoption from `v0.5.1-beta`, and actual
 `v0.5.3-beta` source upgrading explicitly to the stage organization contract, plus actual
 `v0.5.4-beta` source adopting work roles 0.5.5.

@@ -1419,6 +1419,23 @@ def _cmd_context(args: argparse.Namespace) -> int:
     unavailable = translator.text("common.not_available")
     none = translator.text("common.none")
     print(translator.text("cli.context.project", value=snapshot["project"]))
+    versions = snapshot["versions"]
+    packs = versions["templates"]
+    zh = translator.locale == "zh-CN"
+    def pack_label(pack):
+        return pack["id"] + "@" + pack["version"] if pack else unavailable
+
+    for title, value in (
+        ("CLI", versions["cli"]["package"]),
+        ("需求契约 / 注册表" if zh else "Requirements contract / registry",
+         " / ".join(versions["contracts"][key] or unavailable for key in ("requirements", "registry"))),
+        ("随工具提供的模板包" if zh else "Shipped template pack", pack_label(packs["shipped"])),
+        ("项目锁定的模板包" if zh else "Project-pinned template pack", pack_label(packs["project_pin"])),
+        ("当前增量锁定的模板包" if zh else "Active increment template pack", pack_label(packs["active_increment_pin"])),
+        ("与随附模板不同或待核对的当前实例" if zh else "Live instances to review against shipped templates",
+         ", ".join(versions["upgrade_preview"]["live_instances_for_explicit_review"]) or none),
+    ):
+        print(f"{title} · {value}")
     print(translator.text("cli.context.phase", value=snapshot["phase"]))
     print(translator.text("cli.context.tr", value=snapshot["tr"] or unavailable))
     print(translator.text("cli.context.dcp", value=snapshot["dcp"] or unavailable))

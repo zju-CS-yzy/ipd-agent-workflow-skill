@@ -11,8 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.5b1"
-PUBLIC_VERSION = "0.5.5-beta"
+PACKAGE_VERSION = "0.5.6b1"
+PUBLIC_VERSION = "0.5.6-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
@@ -340,8 +340,8 @@ def _check_release_contract(findings: list[Finding], root: Path) -> None:
         ),
         (
             ".github/workflows/release.yml",
-            r'test "\$\(find "\$project/\.ipd/dashboard" -type f \| wc -l\)" -eq 16',
-            "release artifact smoke tests must require the 16-file Dashboard",
+            r'test -n "\$\(find "\$project/\.ipd/dashboard/assets/work" -name',
+            "release artifact smoke tests must require the Dashboard detail assets",
         ),
         (
             ".github/workflows/test.yml",

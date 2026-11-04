@@ -59,7 +59,8 @@ and the tool must not adopt a fresh baseline just to obtain a green report.
 For an unambiguous legacy review subject it checks unauthorized recovery and
 cross-subject rejection with zero writes, records simulated authorized recovery
 only in the test copy, and verifies unrelated facts are unchanged. It checks
-pure rendering, deterministic outputs, the 16-file/manifest-2.2 contract,
+pure rendering, deterministic outputs, the manifest-2.2 contract including
+on-demand Deliverable details,
 validation, review-step formal-refresh rejection, and unchanged verification
 diagnostics. Both locale variants are created as further independent copies.
 No simulated authorization constitutes a decision in the real project.

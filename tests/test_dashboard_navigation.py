@@ -82,7 +82,7 @@ class DashboardNavigationTests(unittest.TestCase):
                 with self.subTest(task_type=task_type, locale=locale), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
                     manifest = render_dashboard(root, process, state, locale=locale)
-                    self.assertEqual(len(manifest['files']), 16)
+                    self.assertGreater(len(manifest['files']), 16)
                     self.assertEqual(manifest['locale'], locale)
                     html = (root / '.ipd/dashboard/index.html').read_text(encoding='utf-8')
                     self.assertEqual(html.count('data-relation-toggle value='), 6)
@@ -124,6 +124,31 @@ class DashboardNavigationTests(unittest.TestCase):
                     'bindings': [{'id': 'file', 'paths': ['output.txt'],
                                   'deliverable': state['deliverables'][0]['id']}]})
                 self.assertEqual(first, {p.relative_to(dashboard): p.read_bytes() for p in dashboard.rglob('*') if p.is_file()})
+
+    def test_bound_history_files_do_not_change_landing_page_or_graph(self):
+        process, state = canonical_fixture()
+        owner = state['deliverables'][0]['id']
+        bindings = {'bindings': [{'id': 'archive', 'glob': 'history/**',
+                                  'role': 'owner', 'deliverable': owner}]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dashboard = root / '.ipd/dashboard'
+            history = root / 'history'
+            history.mkdir()
+            render_dashboard(root, process, state, bindings=bindings)
+            sources = ('index.html', 'data/graph.json', 'assets/deliverable_dependency.svg')
+            before = {path: (dashboard / path).read_bytes() for path in sources}
+            for number in range(10_000):
+                (history / f'old-{number:05}.txt').touch()
+            render_dashboard(root, process, state, bindings=bindings)
+            for path, content in before.items():
+                self.assertEqual((dashboard / path).read_bytes(), content, path)
+            from ipdctl.dashboard_work import details_asset
+
+            details = (dashboard / details_asset('deliverable:' + owner)).read_text(encoding='utf-8')
+            self.assertIn('history/old-09999.txt', details)
+            self.assertIn('history/old-09999.txt',
+                          (dashboard / 'matrices/deliverable_matrix.html').read_text(encoding='utf-8'))
 
     def test_large_graph_300_nodes_preserves_relations_direction_and_layout(self):
         graph = {'nodes': [{'id': f'd{i:03}', 'type': 'Deliverable', 'phase': 'concept',
