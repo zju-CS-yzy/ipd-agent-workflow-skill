@@ -11,8 +11,55 @@ import re
 import xml.etree.ElementTree as ET
 
 from ipdctl.documents import lint, template
+from ipdctl.state import load_state
 from ipdctl.requirements import read_registry
 from ipdctl.stage_organization import blueprints
+
+
+def check_dashboard_inventory(project, registry):
+    """Check exact current and historical detail assets from canonical Owners."""
+    dashboard = project / '.ipd/dashboard'
+    state = load_state(project / '.ipd/project_state.yaml')
+    instances = {item['id']: item for item in registry['instances']}
+    keys = {'deliverable:' + item['id'] for item in state['deliverables']}
+    for unit in registry['organization']['units']:
+        if unit['increment'] == registry['active_increment']:
+            continue
+        owners = {unit['owner'], *(support['owner'] for support in unit['supports'])}
+        owners.update(instances[key]['owner'] for key in (unit['conclusion'], unit['register']) if key)
+        keys.update('historical:' + unit['increment'] + ':deliverable:' + owner for owner in owners)
+    for plan in registry['organization']['plans']:
+        if plan['increment'] != registry['active_increment']:
+            keys.add('historical:' + plan['increment'] + ':deliverable:' + instances[plan['index']]['owner'])
+    expected = {
+        'index.html', 'governance.md', 'manifest.json',
+        'assets/ipd_flow.svg', 'assets/current_status_flow.svg', 'assets/deliverable_dependency.svg',
+        'matrices/deliverable_matrix.html', 'matrices/gate_matrix.html',
+        'data/state.json', 'data/graph.json', 'data/requirement_flow.json',
+        *('phases/' + phase + '.svg' for phase in
+          ('concept', 'plan', 'develop', 'qualify', 'launch', 'lifecycle')),
+    }
+    detail_files = {'assets/work/' + hashlib.sha256(key.encode()).hexdigest() + '.js': key for key in keys}
+    expected.update(detail_files)
+    actual = {path.relative_to(dashboard).as_posix() for path in dashboard.rglob('*') if path.is_file()}
+    assert actual == expected, {'missing': sorted(expected - actual), 'unexpected': sorted(actual - expected)}
+    manifest = json.loads((dashboard / 'manifest.json').read_text(encoding='utf-8'))
+    assert set(manifest['files']) == expected and len(manifest['files']) == len(expected)
+    outputs = {item['path'].removeprefix('.ipd/dashboard/'): item['sha256'] for item in manifest['outputs']}
+    assert len(outputs) == len(manifest['outputs']) and set(outputs) == expected - {'manifest.json'}
+    for relative, expected_hash in outputs.items():
+        assert hashlib.sha256((dashboard / relative).read_bytes()).hexdigest() == expected_hash, relative
+    decoder = json.JSONDecoder()
+    for relative, key in detail_files.items():
+        source = (dashboard / relative).read_text(encoding='utf-8')
+        prefix = 'window.ipdWorkDetails.set('
+        assert source.startswith(prefix), relative
+        identifier, end = decoder.raw_decode(source, len(prefix))
+        assert source[end] == ',', relative
+        item, end = decoder.raw_decode(source, end + 1)
+        assert identifier == item['id'] == key and item['kind'] == 'Deliverable', relative
+        assert source[end:].strip() == ');', relative
+    return len(actual)
 
 
 def check_stage_outcomes(project):
@@ -24,7 +71,7 @@ def check_stage_outcomes(project):
     from ipdctl.template_publications import live_instances
     assert len(flow['indexes'])==8 and len(live_instances(data))==72 and len(data['instances'])==92
     assert all(u['status']=='historical' for u in flow['units'])
-    assert len([p for p in (project/'.ipd/dashboard').rglob('*') if p.is_file()])==17
+    dashboard_files = check_dashboard_inventory(project, data)
     nodes={n['id']:n for n in flow['nodes']}
     records={r['id']+'@'+str(r['version']):r for r in data['requirements']}
     for unit in flow['units']:
@@ -55,7 +102,7 @@ def check_stage_outcomes(project):
                 count+=1
         formed[baseline['id']]=count
     assert formed=={'b1':21,'b2':0}
-    return {'units':32,'stage_indexes':8,'managed_documents':72,'retained_drafts':20,'dashboard_files':17,
+    return {'units':32,'stage_indexes':8,'managed_documents':72,'retained_drafts':20,'dashboard_files':dashboard_files,
             'requirements_formed_under_claim':21,
             'tr4_verification_layers':['AR','SR','IR'],'shared_consumers_per_increment':16,
             'frozen_owner_status':'accepted','historical_snapshots':True}
