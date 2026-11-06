@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 from ipdctl.cli import main
 from ipdctl.requirements import apply_plan, preview, read_registry
+from ipdctl.state import load_state
 
 
 def run():
@@ -66,6 +67,11 @@ def run():
             registry = read_registry(project)
             snapshot = json.loads((project / registry['components']['adoption']['path']).read_text(encoding='utf-8'))
             assert snapshot['registry'] == prior_registry
+            current_state = load_state(project / '.ipd/project_state.yaml')
+            assert current_state['deliverables'] == snapshot['state']['deliverables']
+            assert current_state['gates'] == snapshot['state']['gates']
+            prior_events = snapshot['runtime']['events']
+            assert load_state(project / '.ipd/agent_runtime.yaml')['events'][:len(prior_events)] == prior_events
             assert all((project / path).read_bytes() == content for path, content in before.items()
                        if path not in {'.ipd/requirements.yaml', '.ipd/project_state.yaml', '.ipd/agent_runtime.yaml'})
             after = facts()

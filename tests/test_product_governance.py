@@ -225,6 +225,9 @@ class ProductGovernanceTests(unittest.TestCase):
         self.assertEqual(registry['components']['acceptances'], before)
         self.assertIn('PRODUCT_WITHDRAWN:rec-1',
                       claim_issues(self.root, registry, self.fixture.state(), 'concept.consume'))
+        self.invoke('refresh', self.root)
+        self.invoke('verify', self.root, '--json')
+        self.invoke('claim', 'concept.recorder', '--project-root', self.root, '--actor', 'fixture-agent')
 
     def test_stale_plan_and_transaction_failure_leave_no_product_history(self):
         from unittest.mock import patch
@@ -258,6 +261,16 @@ class ProductGovernanceTests(unittest.TestCase):
         planned = handoff_preview(self.root, request)
         self.assertEqual(before, self.fixture.bytes())
         self.assertEqual(planned['candidate_bindings'][0]['deliverable'], 'concept.adopt')
+        bindings_path = self.root / '.ipd/artifact_bindings.yaml'
+        original_bindings = bindings_path.read_bytes()
+        ignored = load_state(bindings_path)
+        ignored['ignore'].append('docs/en/**')
+        write_state(bindings_path, ignored)
+        ignored_plan = handoff_preview(self.root, request)
+        self.assertIn('HANDOFF_IGNORED:docs/en/interface.md', ignored_plan['issues'])
+        self.assertFalse(ignored_plan['ready_for_authoring'])
+        self.assertEqual(ignored_plan['candidate_bindings'], [])
+        bindings_path.write_bytes(original_bindings)
         bindings = load_state(self.root / '.ipd/artifact_bindings.yaml')
         bindings['bindings'].append({'id': 'handoff-docs', 'glob': 'docs/**',
                                      'deliverable': 'concept.adopt', 'role': 'owner'})

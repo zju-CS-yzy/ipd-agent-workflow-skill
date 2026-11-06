@@ -258,10 +258,7 @@ def decision_inputs(root, registry, owners):
     paths = {proof['path']: proof for record in inputs.values() for proof in proofs(record)}
     files = {path: hashlib.sha256(safe_path(root, path).read_bytes()).hexdigest()
              if safe_path(root, path).is_file() else None for path in paths}
-    own_releases = {work['record']['id'] for work in own if work['kind'] == 'release'}
-    withdrawals = [item for item in model(registry)['withdrawals'] if
-                   'release:' + item['release'] in inputs and item['release'] not in own_releases]
-    return {'works': own, 'uses': uses, 'inputs': inputs, 'files': files, 'withdrawals': withdrawals}
+    return {'works': own, 'uses': uses, 'inputs': inputs, 'files': files}
 
 
 def transition(root, registry, state, runtime, request):
@@ -307,8 +304,11 @@ def transition(root, registry, state, runtime, request):
         issues(root, registry, work['kind'], work['record'])
         if work['kind'] == 'adoption':
             record = work['record']
-            prior = next((item for item in selections(registry) if item['record']['key'] == record['key']), None)
-            if record['prior'] != (prior['id'] if prior and prior['id'] != work['id'] else previous['record']['prior'] if previous else None):
+            accepted = {item['work'] for item in data['acceptances']}
+            prior = next((item for item in selections(registry) if
+                          item['record']['key'] == record['key'] and item['id'] in accepted), None)
+            expected_prior = prior['id'] if prior else None
+            if record['prior'] != expected_prior:
                 raise RequirementError('PRODUCT_UPGRADE: pin the exact previous adoption')
             if any(consumer not in core or not _dependency(state, consumer, owner) or
                    core[consumer]['status'] in {'accepted', 'superseded'} for consumer in record['consumers']):
@@ -326,6 +326,12 @@ def transition(root, registry, state, runtime, request):
         work = next((item for item in data['works'] if item['id'] == request['work']), None)
         if not work or work['increment'] != registry['active_increment']:
             raise RequirementError('PRODUCT_REFERENCE: choose current product work')
+        if work['kind'] == 'adoption':
+            accepted = records(registry, 'adoption')
+            prior = next((item for item in selections(registry) if
+                          item['record']['key'] == work['record']['key'] and item['id'] in accepted), None)
+            if work['record']['prior'] != (prior['id'] if prior else None):
+                raise RequirementError('PRODUCT_UPGRADE: accepted adoption changed; reassess this work')
         owner = core[work['owner']]
         decision = next((review for review in reversed(owner['reviews']) if
                          review.get('reviewer_type') == 'human' and review.get('authorized')), {})
@@ -455,9 +461,12 @@ def handoff_preview(root, request):
         paths.add(item['target'].casefold())
         mapping = map_paths_to_deliverables([item['target']], binding)
         bound = {owner for rule in mapping['paths'].get(item['target'], []) for owner in rule['owner_deliverable_ids']}
+        ignored = item['target'] in mapping['ignored']
+        if ignored:
+            diagnostics.append('HANDOFF_IGNORED:' + item['target'])
         if bound and bound != {target['id']}:
             diagnostics.append('HANDOFF_OWNER_CONFLICT:' + item['target'])
-        if not bound:
+        if not bound and not ignored:
             candidates.append({'id': 'handoff-' + request['request_id'] + '-' + str(len(rows)),
                                'glob': _literal_glob(item['target']), 'role': 'owner', 'deliverable': target['id']})
         proof = {'path': item['source'], 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()}
@@ -467,6 +476,7 @@ def handoff_preview(root, request):
                      'prior_reviews_sha256': digest(owners[request['source_owner']]['reviews'])})
     return {'schema_version': '1.0', 'read_only': True, 'request': request, 'source_sha256': digest(snapshot),
             'files': rows, 'candidate_bindings': candidates, 'issues': diagnostics,
+            'ready_for_authoring': not diagnostics,
             'next_steps': ['accept explicit target bindings', 'claim target Owner',
                            'preview and apply handoff_instance', 'edit draft and submit normal review']}
 

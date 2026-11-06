@@ -82,6 +82,8 @@ def verification_context(root: Path, registry: dict, reference: str) -> str:
         inputs = decision_inputs(root, registry, owners)
         if inputs['works'] or inputs['uses']:
             value['product_inputs'] = inputs
+            value['product_withdrawals'] = [item for item in registry['components']['withdrawals']
+                                            if 'release:' + item['release'] in inputs['inputs']]
     return digest(value)
 
 
