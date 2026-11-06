@@ -165,7 +165,8 @@ class ProductGovernanceTests(unittest.TestCase):
         self.start('check')
         record = self.check(environment='dev-pc')
         record['cases'][0]['result'] = 'unknown'
-        self.work('compatibility', 'check', record)
+        plan = self.work('compatibility', 'check', record)
+        self.assertFalse(plan['ready_for_review'])
         self.invoke('close', 'concept.check', '--project-root', self.root, '--actor', 'fixture-agent',
                     '--evidence', record['evidence']['path'], expected=1)
         record['cases'][0]['result'] = 'passed'
@@ -269,14 +270,20 @@ class ProductGovernanceTests(unittest.TestCase):
                         'owner': 'concept.adopt', 'document_type': 'interface_spec',
                         'path': 'docs/' + locale + '/interface.md', 'title': 'Maintained interface',
                         'scope': 'Current tool', 'locale': locale}
-            self.fixture.execute('handoff_instance', actor='fixture-agent',
+            plan = self.fixture.execute('handoff_instance', actor='fixture-agent',
                                  source=record['artifacts'][0]['path'], source_owner='concept.recorder',
                                  sha256=record['artifacts'][0]['sha256'], editor='fixture-agent', instance=instance)
+            self.assertIn(instance['path'], plan['documents'])
             text = (self.root / instance['path']).read_text(encoding='utf-8')
             self.assertIn('[[TODO:', text)
             self.assertIn('ipd-origin', text)
         self.assertEqual(original, (self.root / record['artifacts'][0]['path']).read_bytes())
         self.assertEqual(old_owner, next(item for item in self.fixture.state()['deliverables'] if item['id'] == 'concept.recorder'))
+        self.proof(record['artifacts'][0]['path'], 'source changed after handoff')
+        from ipdctl.requirements import readiness
+        self.assertIn('HANDOFF_STALE:draft-en',
+                      readiness(self.root, read_registry(self.root), self.fixture.state(),
+                                stage='TR4', owner='concept.adopt'))
 
     def test_version_switch_invalidates_consumer_verification_only_after_accepted_adoption(self):
         from ipdctl.requirement_verification import verification_context

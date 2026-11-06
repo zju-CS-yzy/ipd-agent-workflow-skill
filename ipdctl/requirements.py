@@ -763,10 +763,14 @@ def preview(root: Path, request: dict) -> dict:
             "impact": next((c for c in reversed(registry["changes"]) if c["request_id"] == request["request_id"]), None)
                       if request["operation"] in {"requirement", "numbered_requirement"} else None,
             "unmapped": registry["migration"]["unmapped"],
-            "documents": files if request["operation"] in {"instantiate", "revise_instance"} else {}}
+            "documents": files if request["operation"] in {"instantiate", "revise_instance", "handoff_instance"} else {}}
     if 'components' in registry:
         from .product_governance import change_preview
         result['change_impact'] = change_preview(root, registry, state, request)
+        if request['operation'] == 'product_work':
+            from .product_governance import issues as product_issues
+            result['product_readiness'] = product_issues(root, registry, request['kind'], request['record'])
+            result['ready_for_review'] = not result['product_readiness']
     if "organization" in registry:
         from .stage_organization import blueprints
         result["numbering"] = registry["organization"]["codes"]

@@ -179,6 +179,9 @@ def selections(registry):
 
 
 def impact(registry, old, new):
+    releases = records(registry, 'release')
+    if old not in releases:
+        raise RequirementError('PRODUCT_UPGRADE: choose an existing accepted source version')
     adoptions = [work for work in model(registry)['works']
                  if work['kind'] == 'adoption' and old in work['record']['releases']]
     consumers = sorted({owner for work in adoptions for owner in work['record']['consumers']})
@@ -186,7 +189,6 @@ def impact(registry, old, new):
     checks = sorted(item['id'] for item in records(registry, 'compatibility').values() if old in item['releases'])
     requirements = sorted({link['requirement'] for link in registry['links'] if link['target'] in consumers})
     changed = []
-    releases = records(registry, 'release')
     if new:
         if old not in releases or new not in releases or releases[old]['product'] != releases[new]['product']:
             raise RequirementError('PRODUCT_UPGRADE: choose two accepted versions of the same product')
@@ -283,7 +285,7 @@ def transition(root, registry, state, runtime, request):
     elif operation == 'product_work':
         _fields(request, {'kind', 'owner', 'record'})
         from .requirement_contract import RECORDS
-        if request['kind'] not in RECORDS:
+        if not isinstance(request['kind'], str) or request['kind'] not in RECORDS:
             raise RequirementError('PRODUCT_REFERENCE: unknown work kind')
         validate(request['record'], RECORDS[request['kind']])
         validate(request['owner'], ID)
@@ -320,6 +322,7 @@ def transition(root, registry, state, runtime, request):
             data['works'].append(work)
     elif operation == 'product_accept':
         _fields(request, {'work'})
+        validate(request['work'], ID)
         work = next((item for item in data['works'] if item['id'] == request['work']), None)
         if not work or work['increment'] != registry['active_increment']:
             raise RequirementError('PRODUCT_REFERENCE: choose current product work')
@@ -336,6 +339,7 @@ def transition(root, registry, state, runtime, request):
                                    'approval_sha256': digest(approval), 'manifest_sha256': manifest})
     elif operation == 'product_withdraw':
         _fields(request, {'release'})
+        validate(request['release'], ID)
         if request['release'] not in records(registry, 'release'):
             raise RequirementError('PRODUCT_REFERENCE: unknown accepted release')
         data['withdrawals'].append({'release': request['release'], 'reason': request['reason']})

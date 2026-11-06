@@ -31,6 +31,9 @@ Each artifact uses `{"path":"relative/path","sha256":"..."}`. Source contains
 `backend`, `repository`, `revision` and `path`. Git uses a full commit,
 SVN a numeric revision, and content sources the digest of the artifact manifest.
 Repository citations are declared provenance. Local content hashes are checked.
+Keep adopted tool artifacts at versioned paths that remain available. Changing
+an adopted file in place marks that input unavailable until its exact bytes are
+restored or a new adoption is accepted.
 
 For an existing approved tool version, use `product_import` with `import`
 containing the release, `approver`, an approval evidence path/hash, and

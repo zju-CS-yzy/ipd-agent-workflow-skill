@@ -14,6 +14,8 @@ Recorder 和 Replay 分别登记稳定的产品 ID、版本及批准历史。工
 
 版本记录包含 `id`、`product`、`version`、`scope`、`source`、`protocol`、`environments`、`capabilities`、`requirements`、`artifacts`。每份产物用项目相对 `path` 与 `sha256` 固定。来源包含 `backend`、`repository`、`revision`、`path`。Git 使用完整提交，SVN 使用数字版本，内容后端使用产物清单摘要。仓库出处属于声明的来源信息，本版验证本地内容摘要。
 
+已采用的工具产物应保存在可持续读取的版本化路径中。原地改写已采用文件，会使该输入不可用，直到恢复精确内容或接受新的采用记录。
+
 已有旧版批准时，使用 `product_import`，其中 `import` 包含 `release`、`approver`、批准证据的路径与摘要，以及 `identity_source: historical-local-declaration`。旧批准保留原适用范围，主产品采用还要完成本地适用性评审。
 
 新版工具先领取对应规范交付件 Owner 的 Claim，写出产物后，用 `product_work` 登记 `kind: release`、`owner` 和版本 `record`。新增证据路径须属于该 Owner。随后按正常 CLI 关闭、评审并取得明确的人类批准，再以工作 ID 应用 `product_accept`。接受操作会核对当前工作是否属于该次精确评审。主产品同一增量内可串行接受多次工具发版。
