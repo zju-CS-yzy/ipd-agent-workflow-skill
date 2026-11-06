@@ -691,9 +691,11 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         item = deepcopy(request['instance'])
         _create_instance(root, registry, state, runtime, item, files)
         prior = next(d for d in state['deliverables'] if d['id'] == request['source_owner'])
+        from .governance_documents import _latest_human_decision
+        approved_source = prior['status'] == 'accepted' and _latest_human_decision(prior['reviews']) == 'approve'
         item['origin'] = {'path': request['source'], 'sha256': request['sha256'],
                           'owner': request['source_owner'], 'editor': request['editor'],
-                          'approval_sha256': digest(prior['reviews']) if prior['reviews'] else None}
+                          'approval_sha256': digest(prior['reviews']) if approved_source else None}
         files[item['path']] += ('\n\n<!-- ipd-origin ' + json.dumps(item['origin'], ensure_ascii=False) +
                                ' -->\n\n' + source.read_text(encoding='utf-8'))
     elif op == "baseline":
