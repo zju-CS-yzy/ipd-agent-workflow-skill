@@ -464,6 +464,7 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
 
 
 _COMMAND_NAMES = {
+    "products", "work-plan", "increment-plan",
     "requirements", "templates",
     "init",
     "tailor",
@@ -504,6 +505,7 @@ _TRANSACTIONAL_COMMANDS = {
     "status",
 }
 _OPTIONS_WITH_VALUES = {
+    "--impact", "--replacement", "--handoff-plan",
     "--request", "--apply", "--type",
     "--name",
     "--task-type",
@@ -1739,6 +1741,11 @@ def _cmd_claim(args: argparse.Namespace) -> int:
                 action="claim",
                 translator=translator,
             )
+        from .product_governance import claim_issues
+        from .requirements import read_registry
+        product_issues = claim_issues(root, read_registry(root) or {}, state, args.deliverable)
+        if product_issues:
+            raise ValueError("PRODUCT_NOT_READY: " + ", ".join(product_issues))
         updated_state = claim_deliverable(state, args.deliverable)
     updated_state = _set_workflow_step(updated_state, "work")
     from .reconcile import (

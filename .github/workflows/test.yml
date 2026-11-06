@@ -55,6 +55,8 @@ jobs:
         run: python -B scripts/verify_v053_upgrade.py
       - name: Qualify actual v0.5.4 work-role adoption
         run: python -B scripts/verify_v054_upgrade.py
+      - name: Qualify explicit v0.5.5 product-governance adoption
+        run: python -B scripts/verify_v055_upgrade.py
       - name: Compile Python sources
         run: python -m compileall -q ipdctl
       - name: Run behavior tests
@@ -325,3 +327,5 @@ jobs:
         run: python -B scripts/verify_dashboard_browser.py --output "$RUNNER_TEMP/dashboard-browser"
       - name: Verify per-parent work-product navigation
         run: python -B scripts/verify_stage_browser.py --output "$RUNNER_TEMP/stage-browser"
+      - name: Verify enabling-product adoption navigation
+        run: python -B scripts/verify_product_browser.py --output "$RUNNER_TEMP/product-browser"

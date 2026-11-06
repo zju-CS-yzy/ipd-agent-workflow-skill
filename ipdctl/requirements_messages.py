@@ -1,6 +1,21 @@
 """Chinese explanations for stable requirement/template diagnostics."""
 
 ZH = {
+    "PRODUCT_CONTRACT": "须先显式采纳子产品治理契约；已有阶段组织须先采纳支撑角色。",
+    "PRODUCT_DUPLICATE": "子产品、版本、工作或验证用例的标识重复。",
+    "PRODUCT_REFERENCE": "子产品或精确版本引用无效。",
+    "PRODUCT_SOURCE": "来源须绑定精确仓库修订或内容摘要，并排除凭据。",
+    "PRODUCT_CLAIM": "须由当前工作 Owner 的有效 Claim 持有者登记。",
+    "PRODUCT_IMMUTABLE": "须保留已接受工作及其身份、版本和 Owner。",
+    "PRODUCT_DEPENDENCY": "消费交付件须通过显式依赖引用采用 Owner，且仍可编辑。",
+    "PRODUCT_UPGRADE": "升级须固定同一子产品的精确版本和原采用记录。",
+    "PRODUCT_IMPACT": "须逐项评估原有及新增消费交付件的影响。",
+    "PRODUCT_APPROVAL": "此工作尚未获得当前精确输入下的 Owner 人工批准。",
+    "PRODUCT_NOT_READY": "子产品、兼容性、环境、数据或采用证据尚未满足要求。",
+    "PRODUCT_EVIDENCE_CHANGED": "登记的产物或证据不存在，或其内容摘要已变化。",
+    "HANDOFF_STALE": "交接来源内容已变化，须重新预览并确认。",
+    "HANDOFF_OWNER": "请选择已有且仍可编辑的目标 Owner。",
+    "HANDOFF_PATH": "须使用现有 Markdown 来源和不重复的新 docs 路径。",
     "ORGANIZATION_REQUIRED": "须先显式采纳 v0.5.4 阶段组织契约。",
     "ORGANIZATION_ENABLED": "项目已采纳阶段组织方式。",
     "NUMBER_PARENT": "层级编号须匹配规范父需求；请使用编号预览分配新需求。",

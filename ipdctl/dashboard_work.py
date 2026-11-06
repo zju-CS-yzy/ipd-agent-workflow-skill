@@ -176,6 +176,35 @@ def projection(state, requirements=None):
                 status='current' if file.get('exists') else 'missing', availability='current' if file.get('exists') else 'missing',
                 historical=False, parent=None, depth=0, governance_owner=identifier, details=deepcopy(file), href=file.get('href'))
             relations.add((key, _id('deliverable', identifier), 'owned_by'))
+    products = data.get('product_governance') or {}
+    selected = set(products.get('selected_adoptions', []))
+    product_rows = products.get('records', [])
+    visible_products = {row['id'] for row in product_rows if row['id'] in selected or row['status'] == 'pending'}
+    for row in product_rows:
+        if row['id'] in selected:
+            visible_products.update(row['record']['releases'] + row['record']['datasets'] + row['record']['checks'])
+    for row in product_rows:
+        record = row['record']
+        key = 'product:' + row['id']
+        owner = row['owner']
+        phase = core.get(owner, {}).get('phase', '')
+        title = (record['product'] + '@' + record['version'] + ' · ' + record['scope']) if row['kind'] == 'release' else (
+            record.get('purpose') or record['id'])
+        add(key, kind='Reference', product_kind=row['kind'], label=record['id'],
+            title=title, phase=phase, owner=core.get(owner, {}).get('owner') or '',
+            status=row['status'], availability=None, historical=row['id'] not in visible_products,
+            governance_owner=owner, parent=None, depth=0, details=deepcopy(row),
+            requirements=record.get('requirements', []),
+            increments=[row['increment']] if row.get('increment') and row['kind'] != 'release' else [])
+        for identifier in record.get('releases', [record['recorder']] if row['kind'] == 'dataset' else []):
+            relations.add(('product:' + identifier, key, 'supports'))
+        for identifier in record.get('datasets', []) + record.get('checks', []):
+            relations.add(('product:' + identifier, key, 'supports'))
+        if owner:
+            relations.add((key, _id('deliverable', owner), 'owned_by'))
+        if row['kind'] == 'adoption' and row['id'] in selected:
+            for consumer in record['consumers']:
+                relations.add((key, _id('deliverable', consumer), 'supports'))
     edges = []
     for key, item in entities.items():
         if item['kind'] != 'Requirement':
@@ -227,9 +256,12 @@ def overview(model):
         if item['kind'] == 'Deliverable':
             details = {'actionability': {'binding_ready': details.get('actionability', {}).get('binding_ready')},
                        'depends_on': details.get('depends_on', [])}
+        if item.get('product_kind'):
+            details = {'approval_source': details.get('approval_source')}
         entities.append({**item, 'related': [key for key in item['related'] if key in visible],
                          'details': details, 'files': [],
-                         **({'detail_asset': details_asset(item['id'])} if item['kind'] == 'Deliverable' else {})})
+                         **({'detail_asset': details_asset(item['id'])}
+                            if item['kind'] == 'Deliverable' or item.get('product_kind') else {})})
     relations = [edge for edge in model['relations'] if edge['source'] in visible and edge['target'] in visible]
     return {**model, 'entities': entities, 'relations': relations, 'diagnostics': [], 'baselines': [], 'changes': []}
 
@@ -315,6 +347,14 @@ WORDS = {
     'not_ready': ('绑定未就绪', 'Binding not ready'), 'ready': ('绑定就绪', 'Binding ready'),
     'loading': ('正在加载详情…', 'Loading details…'),
     'details_failed': ('无法加载详情，请打开完整矩阵。', 'Could not load details. Open the full matrix.'),
+    'release': ('子产品版本', 'Product release'), 'compatibility': ('版本组合验证', 'Version compatibility'),
+    'dataset': ('受控数据集', 'Controlled dataset'), 'adoption': ('主产品采用', 'Main-product adoption'),
+    'pending': ('待接受', 'Pending acceptance'), 'suspended': ('已暂停使用', 'Use suspended'),
+    'product_context': ('采用或验证上下文', 'Adoption or verification context'),
+    'approval_source': ('批准来源', 'Approval source'),
+    'imported-history': ('历史批准声明，适用原范围', 'Historical approval declaration, original scope'),
+    'governed-owner': ('当前 Owner 的人工批准', 'Human approval of the work Owner'),
+    'pending-owner': ('等待 Owner 工作及人工批准', 'Pending Owner work and human approval'),
     'candidate_plan': ('候选增量计划', 'Candidate increment plan'),
     'candidate': ('候选', 'Candidate'), 'merged': ('已合入规划', 'Merged in plan'), 'linked': ('已关联', 'Linked'),
     'candidate_hint': ('此处记录规划顺序和关联。执行范围以正式增量登记为准。',
@@ -412,7 +452,7 @@ def matrix(model, locale, *, standalone=False):
         href = ('../index.html' if standalone else '') + '#node=' + quote(key if kind == 'Deliverable' and not entity['historical'] else 'work:' + key, safe=':')
         rows.append('<tr id="' + target + '" tabindex="0" data-kind="' + kind + '" data-work-key="' + esc(key) + '"' + data_node + ' data-work-depth="' + str(display_depth) + '" data-work-parent="' + esc(display_parent or '') + '">'
             '<td style="padding-left:' + str(10+display_depth*18) + 'px">' + button + '<a class="work-link" href="' + href + '" data-work-select="' + esc(key) + '">' + esc(entity['label']) + '</a><div class="muted">' + esc(entity['title']) + '</div></td>'
-            '<td>' + esc(w(kind)) + '</td><td>' + context + '</td><td>' + esc(entity['owner'] or '—') + '</td><td>' + status_html + extra + '</td><td>' + esc((w('parent') + ': ' + (detail['parent'] or '—')) if kind == 'Requirement' else ', '.join(entity['requirements']) or '—') + '</td><td>' + related + '</td><td><button class="btn" type="button" data-work-select="' + esc(key) + '">' + esc(files) + '</button></td></tr>')
+            '<td>' + esc(w(entity.get('product_kind', kind))) + '</td><td>' + context + '</td><td>' + esc(entity['owner'] or '—') + '</td><td>' + status_html + extra + '</td><td>' + esc((w('parent') + ': ' + (detail['parent'] or '—')) if kind == 'Requirement' else ', '.join(entity['requirements']) or '—') + '</td><td>' + related + '</td><td><button class="btn" type="button" data-work-select="' + esc(key) + '">' + esc(files) + '</button></td></tr>')
     headers = ['identity', 'kind', 'context', 'owner', 'state', 'requirements', 'relations', 'files']
     return '<section class="panel work-panel" id="deliverable-matrix"><div class="panel-head"><div><h2>' + w('matrix') + '</h2><p>' + w('hint') + '</p></div><a class="btn" href="' + ('../index.html#deliverable-matrix' if standalone else 'matrices/deliverable_matrix.html') + '">' + w('back' if standalone else 'full') + '</a></div><div class="panel-body filters">' + ('<div class="filters">' + _filters(model, locale, stage=True, namespace='work-matrix-') + '</div>') + '<input class="search" id="deliverable-search" data-work-filter="search" type="search" placeholder="' + w('search') + '">' + _filters(model, locale) + '<span class="muted" data-work-count></span></div><div id="ipd-requirements" class="table-scroll"><table><thead><tr>' + ''.join('<th>'+w(h)+'</th>' for h in headers) + '</tr></thead><tbody id="deliverable-rows">' + ''.join(rows) + '</tbody></table><p class="empty" data-work-empty hidden>' + w('empty') + '</p></div></section>'
 
@@ -526,13 +566,14 @@ const phaseControl=document.getElementById('phase-view');phaseControl?.addEventL
 document.querySelectorAll('.phase-card').forEach(c=>c.addEventListener('click',()=>{filters.phase=c.dataset.phase;document.querySelectorAll('[data-work-filter="phase"]').forEach(c=>c.value=filters.phase);phaseGraph();update();}));
 document.querySelectorAll('[data-work-filter]').forEach(control=>control.addEventListener(control.tagName==='INPUT'?'input':'change',()=>{filters[control.dataset.workFilter]=control.value;document.querySelectorAll('[data-work-filter]').forEach(other=>{if(other.dataset.workFilter===control.dataset.workFilter)other.value=control.value;});if(control.dataset.workFilter==='phase')phaseGraph();if(control.dataset.workFilter==='group'){const body=document.getElementById('deliverable-rows');const ordered=control.value==='deliverables'?[...rows].sort((a,b)=>{const x=entities.get(a.dataset.workKey),y=entities.get(b.dataset.workKey);return (x.governance_owner||'~'+x.label).localeCompare(y.governance_owner||'~'+y.label)||(x.kind==='Deliverable'?0:1)-(y.kind==='Deliverable'?0:1)||x.label.localeCompare(y.label);}):rows;ordered.forEach(r=>body.append(r));}update();}));
 document.querySelectorAll('[data-work-collapse]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.workCollapse;if(collapsed.has(id)){collapsed.delete(id);b.textContent='−';b.setAttribute('aria-expanded','true');}else{collapsed.add(id);b.textContent='+';b.setAttribute('aria-expanded','false');}update();}));
-function select(id,scroll=false){const e=detailCache.get(id)||entities.get(id);if(!e)return;selected=id;document.querySelectorAll('[data-work-key]').forEach(n=>n.classList.toggle('work-selected',n.dataset.workKey===id));const details=document.getElementById('details');if(!details)return;details.hidden=false;document.getElementById('workspace')?.classList.remove('detail-closed');document.getElementById('detail-kind').textContent=label(e.kind);document.getElementById('detail-title').textContent=e.label+' · '+e.title;
+function select(id,scroll=false){const e=detailCache.get(id)||entities.get(id);if(!e)return;selected=id;document.querySelectorAll('[data-work-key]').forEach(n=>n.classList.toggle('work-selected',n.dataset.workKey===id));const details=document.getElementById('details');if(!details)return;details.hidden=false;document.getElementById('workspace')?.classList.remove('detail-closed');document.getElementById('detail-kind').textContent=label(e.product_kind||e.kind);document.getElementById('detail-title').textContent=e.label+' · '+e.title;
 if(e.detail_asset){const body=document.getElementById('detail-body');body.textContent=label('loading');loadDetail(e).then(()=>{if(selected===id&&!details.hidden)select(id,scroll);},()=>{if(selected===id&&!details.hidden)body.textContent=label('details_failed');});return;}
 const section=(title,value)=>`<section class="detail-section"><h3>${esc(title)}</h3>${value}</section>`,list=xs=>`<ul class="detail-list">${xs.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`,button=k=>`<button class="work-link" type="button" data-work-select="${esc(k)}">${esc(entities.get(k)?.label||k)}</button>`;
 const hrefAtView=href=>location.pathname.endsWith('/matrices/deliverable_matrix.html')&&href.startsWith('../')?'../'+href:href;
 const fileList=files=>`<ul class="detail-list">${files.map(f=>`<li><code>${esc(f.path)}</code> ${f.exists===false?esc(label('not_generated')):''}<div class="file-actions">${f.href&&/^(\.\.\/|https?:\/\/)/.test(f.href)?`<a href="${esc(hrefAtView(f.href))}" target="_blank" rel="noopener noreferrer">${esc(label('open'))}</a>`:''} <button class="btn" type="button" data-copy-path="${esc(f.path)}">${esc(label('copy'))}</button></div></li>`).join('')}</ul>`;
 let body=section(label('state'),`<p><span class="badge status-${esc(e.status)}">${esc(label(e.status))}</span></p>`)+section(label('context'),list([e.phase,...e.stages,...e.increments].filter(Boolean)));
-if(['Document','Material','Reference'].includes(e.kind)){const governing=e.related.find(k=>entities.get(k)?.kind==='Deliverable'&&entities.get(k)?.governance_owner===e.governance_owner);body+=section(label('governance'),`<p>${esc(label('no_approval'))}</p>`+(governing?button(governing):''));}
+if(['Document','Material','Reference'].includes(e.kind)&&!e.product_kind){const governing=e.related.find(k=>entities.get(k)?.kind==='Deliverable'&&entities.get(k)?.governance_owner===e.governance_owner);body+=section(label('governance'),`<p>${esc(label('no_approval'))}</p>`+(governing?button(governing):''));}
+if(e.product_kind){const record=e.details.record;body+=section(label('product_context'),list([record.product,record.version,record.protocol,record.environment,...(record.environments||[]),...(record.releases||[]),...(record.datasets||[])].filter(Boolean)))+section(label('approval_source'),'<p>'+esc(label(e.details.approval_source))+'</p>');const proofs=[...(record.artifacts||[]),...(record.files||[]),...(record.evidence?[record.evidence]:[])];body+=section(label('files'),fileList(proofs.map(p=>({...p,href:'../../'+p.path.split('/').map(encodeURIComponent).join('/')}))));}
 body+=section(label('owner'),`<p>${esc(e.owner||'—')}</p>`)+section(label('requirements'),list(e.requirements));
 if(e.href&&/^(\.\.\/|https?:\/\/)/.test(e.href))body+=section(label('files'),`<p><a href="${esc(hrefAtView(e.href))}" target="_blank" rel="noopener noreferrer">${esc(label('open'))}</a></p>`);
 if(e.kind==='Deliverable'){

@@ -137,6 +137,17 @@ Keep stable candidate IDs in links and references. Display order is computed
 from pending candidates. A planning merge records its destination. Use the
 governed `requirements` workflow to accept actual execution scope. Inspect
 `context --json` under `versions` for tool, contract, pack and instance versions.
+
+For independently versioned tools that enable main-product design or testing,
+read [product adoption](docs/product-adoption.md)
+([中文](docs/product-adoption.zh-CN.md)). Register Recorder and Replay as
+separate products when their release and approval histories are independent.
+Use normal Owner Claims and human review for new releases, datasets,
+compatibility results and applicability work. Pin the accepted versions,
+purpose and environment in each adoption. An imported approval retains its
+historical scope and identity declaration. Use `products --impact` before
+switching versions and `products --handoff-plan` before preparing legacy-work
+drafts. Each new draft needs its own target Owner Claim and binding.
 Use `init` only when no state exists. Do not use `--force` unless replacement
 is explicitly intended. Use `claim --recover` only to recover an orphaned
 `in_progress` deliverable identified by `context`; an unexpired claim owned by

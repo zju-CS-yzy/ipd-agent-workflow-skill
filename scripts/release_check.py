@@ -11,12 +11,19 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_VERSION = "0.5.6b1"
-PUBLIC_VERSION = "0.5.6-beta"
+PACKAGE_VERSION = "0.5.7b1"
+PUBLIC_VERSION = "0.5.7-beta"
 RELEASE_NOTES_PATH = f".github/release-notes/v{PUBLIC_VERSION}.md"
 GH_RELEASE_ACTION_SHA = "5113cdc90fd4d541c801c55356214017bf5ae34b"
 
 REQUIRED_FILES = (
+    "ipdctl/product_governance.py",
+    "schemas/product_governance.schema.json",
+    "schemas/product_work.schema.json",
+    "scripts/verify_v055_upgrade.py",
+    "scripts/verify_product_browser.py",
+    "docs/product-adoption.md",
+    "docs/product-adoption.zh-CN.md",
     ".gitattributes",
     "README.md",
     "README.zh-CN.md",

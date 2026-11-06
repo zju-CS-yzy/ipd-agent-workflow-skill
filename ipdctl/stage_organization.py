@@ -129,9 +129,12 @@ def adopt(registry, required_stages, adoption):
     validate(required_stages, ORGANIZATION["properties"]["required_stages"])
     if len(set(required_stages)) != len(required_stages):
         raise RequirementError("STAGE_CONTRACT: select distinct supported stages")
-    registry.update(schema_version="1.1", contract="0.5.4")
+    if 'components' not in registry:
+        registry.update(schema_version="1.1", contract="0.5.4")
     registry["organization"] = {"policy": "hierarchical-v1", "required_stages": list(required_stages),
                                 "codes": [], "plans": [], "units": [], "adoption": adoption}
+    if 'components' in registry:
+        registry['organization']['work_adoption'] = deepcopy(adoption)
     for item in sorted(registry["requirements"], key=lambda r: ({"IR": 0, "SR": 1, "AR": 2}[r["kind"]], r["id"], r["version"])):
         assign_code(registry, item)
 
@@ -211,7 +214,7 @@ def update_unit(root, registry, state, unit, owner_check):
     if PHASES.index(subject["phase"]) < PHASES.index(state["project"]["phase"]):
         raise RequirementError("STAGE_GOVERNED: cannot reinterpret a closed Phase")
     for support in unit["supports"]:
-        if registry['schema_version'] == '1.2':
+        if registry['schema_version'] in {'1.2', '1.3'}:
             if 'usage' not in support:
                 raise RequirementError('SUPPORT_USAGE: explicitly select deliverable, attachment or reference')
             if support['usage'] == 'deliverable' and support['owner'] == unit['owner']:
@@ -286,7 +289,7 @@ def validate_organization(registry):
         if unit["stage"] == "TR4" and (outputs or any(records[r]["kind"] != "AR" for r in inputs)):
             raise RequirementError("STAGE_PARENT: TR4 consumes AR without a fourth requirement layer")
         support_keys = [(s["kind"], s["target"]) for s in unit["supports"]]
-        if registry['schema_version'] == '1.2' and unit['increment'] == registry['active_increment']:
+        if registry['schema_version'] in {'1.2', '1.3'} and unit['increment'] == registry['active_increment']:
             if any('usage' not in s or s['usage'] == 'deliverable' and s['owner'] == unit['owner'] for s in unit['supports']):
                 raise RequirementError('SUPPORT_USAGE: explicit role and independent Deliverable are required')
         if len(support_keys) != len(set(support_keys)) or any(s["kind"] == "instance" and s["target"] in {unit["conclusion"], unit["register"]} for s in unit["supports"]):

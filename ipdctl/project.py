@@ -2354,7 +2354,7 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                 expected_work = work_projection(expected_state, requirements_view)
                 required_outputs.update(
                     ".ipd/dashboard/" + details_asset(item["id"])
-                    for item in expected_work["entities"] if item["kind"] == "Deliverable"
+                    for item in expected_work["entities"] if item["kind"] == "Deliverable" or item.get('product_kind')
                 )
                 if requirements_view and manifest.get("candidate_plan_sha256") != requirements_view["candidate_plan_sha256"]:
                     issue_rows.append({"path": "$.dashboard", "code": "CANDIDATE_PLAN_VIEW_STALE",

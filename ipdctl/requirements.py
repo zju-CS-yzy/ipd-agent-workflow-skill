@@ -130,6 +130,8 @@ def check_relations(registry: dict) -> None:
             raise RequirementError("VERIFICATION_METHOD: unknown criterion or different method")
     from .stage_organization import validate_organization
     validate_organization(registry)
+    from .product_governance import check_relations as product_relations
+    product_relations(registry)
 
 
 def file_hash(path: Path) -> str | None:
@@ -144,6 +146,12 @@ def input_snapshot(root: Path, registry: dict | None = None) -> dict:
                      ".ipd/process_extensions.yaml", ".ipd/artifact_bindings.yaml"):
         result[relative] = file_hash(safe_path(root, relative))
     if registry:
+        from .product_governance import referenced_paths as product_paths
+        result.update(product_paths(root, registry))
+        for item in ([registry['components']['adoption'], *registry['components']['history']]
+                     if 'components' in registry else []):
+            if result.get(item['path']) != item['sha256']:
+                raise RequirementError('HISTORY_TAMPERED: product governance history changed')
         from .stage_organization import referenced_paths
         result.update(referenced_paths(root, registry))
         if "organization" in registry:
@@ -204,6 +212,8 @@ def impact(registry: dict, changed: str) -> list[str]:
         if set(unit["inputs"] + unit["outputs"]) & affected:
             affected.add("unit:" + unit["id"])
             affected.update("instance:" + i for i in (unit["conclusion"], unit["register"]) if i)
+    from .product_governance import requirement_impact
+    affected.update(requirement_impact(registry, affected))
     return sorted(affected)
 
 
@@ -212,6 +222,8 @@ def _snapshot(root: Path, state: dict, runtime: dict, registry: dict | None) -> 
     paths = {".ipd/tailored_process.yaml", ".ipd/task_profile.yaml",
              ".ipd/process_extensions.yaml", ".ipd/artifact_bindings.yaml"}
     if registry:
+        if 'components' in registry:
+            paths.update(item['path'] for item in [registry['components']['adoption'], *registry['components']['history']])
         from .stage_organization import referenced_paths
         paths.update(p for p, sha in referenced_paths(root, registry).items() if sha is not None)
         if "organization" in registry:
@@ -285,6 +297,9 @@ def _accepted_source(root: Path, source: dict) -> None:
     registry = read_registry(root)
     if registry:
         paths.update(b["path"] for b in [registry["migration"], *registry["baselines"]])
+        if 'components' in registry:
+            from .product_governance import referenced_paths as product_paths
+            paths.update(path for path, sha in product_paths(root, registry).items() if sha is not None)
         paths.update(r["path"] for r in registry.get("template_records", []))
         paths.update(i["path"] for i in registry["instances"] if i["increment"] == registry["active_increment"])
         paths.update(v["evidence"] for v in registry["verifications"] if v["increment"] == registry["active_increment"])
@@ -397,7 +412,7 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
     from .stage_organization import CLAIM_EDITS, authorize_claim_edit
     stage_edit = (registry is not None and 'organization' in registry and op in CLAIM_EDITS
                   and bool(runtime['active_claims']) and state['project']['workflow_step']=='work')
-    claim_operation = op in {"instantiate", "replace_templates", "revise_instance"} or (
+    claim_operation = op in {"instantiate", "replace_templates", "revise_instance", "handoff_instance", "product_work"} or (
         op == "stage_unit" and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or (
         op in {"verification", "draft_templates", "review_templates", "publish_templates"}
         and runtime["active_claims"] and state["project"]["workflow_step"] == "work") or stage_edit
@@ -430,6 +445,26 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         raise RequirementError("REQUIREMENTS_DISABLED: explicitly enable the model first")
     elif registry["product_state"] == "retired":
         raise RequirementError("PRODUCT_RETIRED: product is read-only")
+    elif op == 'adopt_product_governance':
+        _fields(request, set())
+        active(registry)
+        if 'components' in registry or ('organization' in registry and registry['schema_version'] != '1.2'):
+            raise RequirementError('PRODUCT_CONTRACT: adopt work roles before product governance on organized projects')
+        relative = '.ipd/requirement_history/products-' + request['request_id'] + '.json'
+        files[relative] = _snapshot(root, state, runtime, registry)
+        registry.update(schema_version='1.3', contract='0.5.7', components={
+            'adoption': {'path': relative, 'sha256': hashlib.sha256(files[relative].encode()).hexdigest()},
+            'products': [], 'imports': [], 'works': [], 'acceptances': [], 'withdrawals': [], 'history': [],
+        })
+    elif isinstance(op, str) and op.startswith('product_'):
+        active(registry)
+        from .product_governance import transition as product_transition
+        product_transition(root, registry, state, runtime, request)
+        relative = '.ipd/product_history/' + request['request_id'] + '.json'
+        files[relative] = json.dumps({'request': request, 'components': registry['components']},
+                                    ensure_ascii=False, sort_keys=True, indent=2) + '\n'
+        registry['components']['history'].append({
+            'path': relative, 'sha256': hashlib.sha256(files[relative].encode()).hexdigest()})
     elif op == "adopt_organization":
         _fields(request, {"required_stages"})
         active(registry)
@@ -498,6 +533,8 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         if stage_edit:
             authorize_claim_edit(registry,state,runtime,op,request)
         increment = active(registry)
+        from .product_governance import guard_scope_change
+        guard_scope_change(registry, request['scope'])
         if any(g["status"] == "approved" for g in state["gates"]):
             old = {(s["requirement"], c) for s in increment["scope"] for c in s["criteria"]}
             new = {(s["requirement"], c) for s in request["scope"] for c in s["criteria"]}
@@ -643,6 +680,22 @@ def _simulate(root: Path, request: dict) -> tuple[dict, dict, dict, dict[str, st
         if not old or any(item.get(k) != old[k] for k in ("owner", "key", "document_type", "locale")):
             raise RequirementError("INSTANCE_REPLACEMENT: preserve current Owner, key, type and locale")
         _create_instance(root, registry, state, runtime, item, files, supersedes=old["id"])
+    elif op == 'handoff_instance':
+        _fields(request, {'source', 'source_owner', 'sha256', 'editor', 'instance'})
+        from .product_governance import model
+        model(registry)
+        source = safe_path(root, request['source'])
+        if not source.is_file() or file_hash(source) != request['sha256']:
+            raise RequirementError('HANDOFF_STALE: source content changed')
+        _owner(root, state, request['source'], request['source_owner'])
+        item = deepcopy(request['instance'])
+        _create_instance(root, registry, state, runtime, item, files)
+        prior = next(d for d in state['deliverables'] if d['id'] == request['source_owner'])
+        item['origin'] = {'path': request['source'], 'sha256': request['sha256'],
+                          'owner': request['source_owner'], 'editor': request['editor'],
+                          'approval_sha256': digest(prior['reviews']) if prior['reviews'] else None}
+        files[item['path']] += ('\n\n<!-- ipd-origin ' + json.dumps(item['origin'], ensure_ascii=False) +
+                               ' -->\n\n' + source.read_text(encoding='utf-8'))
     elif op == "baseline":
         _fields(request, {"id", "source"})
         validate(request["id"], ID)
@@ -711,6 +764,9 @@ def preview(root: Path, request: dict) -> dict:
                       if request["operation"] in {"requirement", "numbered_requirement"} else None,
             "unmapped": registry["migration"]["unmapped"],
             "documents": files if request["operation"] in {"instantiate", "revise_instance"} else {}}
+    if 'components' in registry:
+        from .product_governance import change_preview
+        result['change_impact'] = change_preview(root, registry, state, request)
     if "organization" in registry:
         from .stage_organization import blueprints
         result["numbering"] = registry["organization"]["codes"]
@@ -751,6 +807,11 @@ def apply_plan(root: Path, plan: dict, *, actor: str, authorized: bool) -> dict:
         from .stage_organization import CLAIM_EDITS
         if operation in CLAIM_EDITS and runtime['active_claims'] and next(iter(runtime['active_claims'].values()))['actor'] != actor:
             raise RequirementError('INSTANCE_CLAIM: actor does not hold the stage Owner Claim')
+        if operation == 'product_work' and runtime['active_claims'].get(request['owner'], {}).get('actor') != actor:
+            raise RequirementError('PRODUCT_CLAIM: applying actor must hold the work Owner Claim')
+        if operation == 'handoff_instance' and (request['editor'] != actor or
+                runtime['active_claims'].get(request['instance']['owner'], {}).get('actor') != actor):
+            raise RequirementError('INSTANCE_CLAIM: applying editor must hold the target Owner Claim')
         if operation in {"draft_templates", "review_templates", "publish_templates"} and request["actor"] != actor:
             raise RequirementError("TEMPLATE_ACTOR: applying actor must match the human declaration")
         if request["operation"] in {"instantiate", "revise_instance"} and runtime["active_claims"][request["instance"]["owner"]]["actor"] != actor:
@@ -791,7 +852,8 @@ def readiness(root: Path, registry: dict, state: dict, *, stage: str,
     increment = active(registry)
     requirements = {ref(r): r for r in registry["requirements"]}
     scope = {s["requirement"]: s["criteria"] for s in increment["scope"]}
-    issues = []
+    from .product_governance import readiness as product_readiness
+    issues = product_readiness(root, registry, state, owner=owner, phase=phase)
     level = int(stage[-1])
     if not scope and owner is None:
         issues.append("REQUIREMENT_SCOPE_EMPTY")
@@ -813,6 +875,8 @@ def readiness(root: Path, registry: dict, state: dict, *, stage: str,
     for item in instances:
         try:
             _owner(root, state, item["path"], item["owner"])
+            if 'origin' in item and file_hash(safe_path(root, item['origin']['path'])) != item['origin']['sha256']:
+                issues.append('HANDOFF_STALE:' + item['id'])
             issues.extend(i + ":" + item["id"] for i in document_issues[item["id"]])
         except (ValueError, OSError) as exc:
             issues.append("DOCUMENT_INVALID:" + item["id"] + ":" + str(exc))
@@ -893,6 +957,8 @@ def projection(root: Path) -> dict | None:
     result["candidate_increments"] = display(candidate_plan)
     result["input_sha256"] = digest(source_snapshot(root, registry))
     result["candidate_plan_sha256"] = digest(candidate_plan)
+    from .product_governance import projection as products_view
+    result['product_governance'] = products_view(root, registry, state)
     result["coverage"] = []
     result["verification_diagnostics"] = {}
     accepted_increments = {i["id"] for i in registry["increments"] if i["status"] == "accepted"}
@@ -1004,4 +1070,12 @@ def decision_manifest(root: Path, state: dict, subject: str, kind: str) -> str |
         manifest["organization"] = {"policy": org["policy"], "codes": [c for c in org["codes"] if c["requirement"] in selected],
             "plans": [p for p in org["plans"] if p["increment"] == increment["id"] and p["owner"] in owners and int(p["stage"][-1]) <= level],
             "units": units, "support_files": referenced_paths(root, {**registry, "organization": {**org, "units": units}})}
+    if 'components' in registry:
+        from .product_governance import decision_inputs
+        inputs = decision_inputs(root, registry, owners)
+        if inputs['works'] or inputs['uses']:
+            manifest['components'] = inputs
+    origins = [item['origin'] for item in instances if 'origin' in item]
+    if origins:
+        manifest['origin_files'] = {item['path']: file_hash(safe_path(root, item['path'])) for item in origins}
     return digest(manifest)

@@ -1,0 +1,961 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "adoption": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ]
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "scope"
+        ]
+      }
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "release": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "product": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "backend": {
+                    "type": "string",
+                    "enum": [
+                      "git",
+                      "svn",
+                      "content"
+                    ]
+                  },
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "backend",
+                  "repository",
+                  "revision",
+                  "path"
+                ]
+              },
+              "protocol": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "environments": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                },
+                "minItems": 1
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
+              "requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+                }
+              },
+              "artifacts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "sha256"
+                  ]
+                },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "product",
+              "version",
+              "scope",
+              "source",
+              "protocol",
+              "environments",
+              "capabilities",
+              "requirements",
+              "artifacts"
+            ]
+          },
+          "approver": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approval": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ]
+          },
+          "identity_source": {
+            "type": "string",
+            "enum": [
+              "historical-local-declaration"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "release",
+          "approver",
+          "approval",
+          "identity_source"
+        ]
+      }
+    },
+    "works": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "increment": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "release"
+                ]
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "product": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "backend": {
+                        "type": "string",
+                        "enum": [
+                          "git",
+                          "svn",
+                          "content"
+                        ]
+                      },
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "backend",
+                      "repository",
+                      "revision",
+                      "path"
+                    ]
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "environments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "minItems": 1
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "requirements": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+                    }
+                  },
+                  "artifacts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "path",
+                        "sha256"
+                      ]
+                    },
+                    "minItems": 1
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "product",
+                  "version",
+                  "scope",
+                  "source",
+                  "protocol",
+                  "environments",
+                  "capabilities",
+                  "requirements",
+                  "artifacts"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "owner",
+              "increment",
+              "kind",
+              "record"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "increment": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "compatibility"
+                ]
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "releases": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "minItems": 1
+                  },
+                  "datasets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    }
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "cases": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                        },
+                        "criterion": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "expected": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "observed": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "unknown",
+                            "skipped"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "criterion",
+                        "expected",
+                        "observed",
+                        "result"
+                      ]
+                    },
+                    "minItems": 1
+                  },
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "sha256"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "releases",
+                  "datasets",
+                  "protocol",
+                  "environment",
+                  "cases",
+                  "evidence"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "owner",
+              "increment",
+              "kind",
+              "record"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "increment": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "dataset"
+                ]
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "recorder": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "configuration": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "calibration": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "time_basis": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "quality": {
+                    "type": "object",
+                    "properties": {
+                      "cases": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "criterion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "expected": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "observed": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "result": {
+                              "type": "string",
+                              "enum": [
+                                "passed",
+                                "failed",
+                                "unknown",
+                                "skipped"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "criterion",
+                            "expected",
+                            "observed",
+                            "result"
+                          ]
+                        },
+                        "minItems": 1
+                      },
+                      "evidence": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "minLength": 1,
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "path",
+                          "sha256"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "cases",
+                      "evidence"
+                    ]
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "path",
+                        "sha256"
+                      ]
+                    },
+                    "minItems": 1
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "recorder",
+                  "protocol",
+                  "environment",
+                  "configuration",
+                  "calibration",
+                  "time_basis",
+                  "quality",
+                  "files"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "owner",
+              "increment",
+              "kind",
+              "record"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "increment": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "adoption"
+                ]
+              },
+              "record": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "releases": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "minItems": 1
+                  },
+                  "datasets": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    }
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "minItems": 1
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "consumers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "minItems": 1
+                  },
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "sha256"
+                    ]
+                  },
+                  "prior": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "assessments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "target": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": [
+                            "reverify",
+                            "unaffected"
+                          ]
+                        },
+                        "rationale": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "target",
+                        "action",
+                        "rationale"
+                      ]
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "key",
+                  "purpose",
+                  "releases",
+                  "datasets",
+                  "checks",
+                  "protocol",
+                  "environment",
+                  "consumers",
+                  "evidence",
+                  "prior",
+                  "assessments"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "owner",
+              "increment",
+              "kind",
+              "record"
+            ]
+          }
+        ]
+      }
+    },
+    "acceptances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "work": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "reviewer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approval_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "manifest_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "work",
+          "reviewer",
+          "approval_sha256",
+          "manifest_sha256"
+        ]
+      }
+    },
+    "withdrawals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "release": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "release",
+          "reason"
+        ]
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "adoption",
+    "products",
+    "imports",
+    "works",
+    "acceptances",
+    "withdrawals",
+    "history"
+  ]
+}

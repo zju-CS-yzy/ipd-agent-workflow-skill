@@ -74,7 +74,8 @@ def renderer_fingerprint() -> str:
     root = Path(__file__).parent
     names = ('dashboard.py', 'dashboard_model.py', 'dashboard_files.py', 'dashboard_html.py',
              'dashboard_svg.py', 'dashboard_work.py', 'stage_flow.py', 'i18n.py', 'messages.yaml',
-             'requirements.py', 'requirement_verification.py', 'stage_organization.py', 'increment_planning.py', 'version.py')
+             'requirements.py', 'requirement_verification.py', 'stage_organization.py', 'increment_planning.py',
+             'product_governance.py', 'version.py')
     return _value_sha256({name: (root/name).read_text(encoding='utf-8') for name in names})
 
 
@@ -183,7 +184,7 @@ def render_dashboard(
         _atomic_write(staging / "data" / "state.json", _json_text(state_data))
         _atomic_write(staging / "data" / "graph.json", _json_text(graph_data))
         for item in state_data["work_products"]["entities"]:
-            if item["kind"] == "Deliverable":
+            if item["kind"] == "Deliverable" or item.get('product_kind'):
                 _atomic_write(staging / details_asset(item["id"]), details_script(item))
         if requirement_data is not None and "flow" in requirement_data:
             _atomic_write(staging / "data" / "requirement_flow.json", _json_text(requirement_data["flow"]))

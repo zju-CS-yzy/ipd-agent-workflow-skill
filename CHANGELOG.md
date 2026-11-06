@@ -1,6 +1,14 @@
 # Changelog
 
-This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.6-beta` maps to package version `0.5.6b1`.
+This project follows Keep a Changelog conventions and uses PEP 440 package versions. The public label `v0.5.7-beta` maps to package version `0.5.7b1`.
+
+## [0.5.7b1] - 2026-11-06
+
+- Add opt-in registry 1.3 / contract 0.5.7 for independent enabling-product releases, controlled datasets, version compatibility and main-product adoption.
+- Reuse serial Owner Claims and exact-input human reviews for new product facts. Preserve imported historical approval scope and declared identity.
+- Pin adopted release combinations and target environments, preview upgrade/requirement impact, and bind affected requirement verification to product inputs.
+- Add read-only legacy-work handoff planning and new bilingual template drafts with source hash, historical Owner and editor provenance.
+- Extend shared Dashboard work views and publish bilingual product-adoption guidance.
 
 ## [0.5.6b1] - 2026-11-05
 
