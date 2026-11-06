@@ -35,7 +35,7 @@ def run():
                 result = subprocess.run([sys.executable, '-B', '-m', 'ipdctl', *map(str, arguments)],
                                         cwd=work, env=env, capture_output=True, text=True, encoding='utf-8')
                 assert (result.returncode == 0) == passed, (arguments, result.stdout, result.stderr)
-                return result.stdout
+                return result.stdout if passed else result.stdout + result.stderr
             def facts():
                 return {path.relative_to(project).as_posix(): path.read_bytes() for path in project.rglob('*')
                         if path.is_file() and '.ipd/dashboard/' not in path.relative_to(project).as_posix()}
@@ -75,7 +75,10 @@ def run():
             assert all((project / path).read_bytes() == content for path, content in before.items()
                        if path not in {'.ipd/requirements.yaml', '.ipd/project_state.yaml', '.ipd/agent_runtime.yaml'})
             after = facts()
-            legacy('requirements', project, '--json', passed=False)
+            assert 'REQUIREMENT_CONTRACT' in legacy('requirements', project, '--json', passed=False)
+            assert 'REQUIREMENT_CONTRACT' in legacy(
+                'claim', current_state['deliverables'][0]['id'], '--project-root', project,
+                '--actor', 'old-client-agent', passed=False)
             assert facts() == after
             assert apply_plan(project, plan, actor='fixture-human', authorized=True)['status'] == 'already_applied'
             reports.append({'locale': locale, 'preview_zero_write': True, 'old_client_rejected_without_writes': True,
