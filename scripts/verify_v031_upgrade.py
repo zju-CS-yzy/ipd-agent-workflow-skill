@@ -436,7 +436,8 @@ def qualify() -> dict[str, Any]:
             "context_eligible": True,
             "dashboard_eligible": True,
             "reconcile_status": "passed",
-            "dashboard_files": 16,
+            "dashboard_files": 16 + len(yaml.safe_load(
+                (project / ".ipd/project_state.yaml").read_text(encoding="utf-8"))["deliverables"]),
         }
         if checks != expected:
             raise RuntimeError(f"v0.3.1 upgrade qualification mismatch: {checks}")

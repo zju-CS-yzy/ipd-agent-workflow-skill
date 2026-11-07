@@ -81,7 +81,9 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         assert inputs.count() == 6
                         assert page.locator('[data-relation-toggle]:checked').evaluate_all('(xs) => xs.map(x=>x.value)') == ['depends_on', 'supports', 'owned_by']
                         counts = page.locator('#status-flow .edge[data-relation]').evaluate_all('(xs) => [...new Set(xs.map(x=>x.dataset.relation))]')
-                        if kind == 'synthetic': assert set(counts) == {'depends_on','supports','verifies','supersedes','refines','owned_by'}, counts
+                        if kind == 'synthetic':
+                            assert set(counts) == {'depends_on', 'supports', 'verifies', 'supersedes', 'refines'}, counts
+                            assert not page.locator('#dependency-flow [data-node-type="Material"]').count()
                         positions = page.locator('#status-flow [data-node-id]').evaluate_all('(xs)=>xs.map(x=>[x.dataset.nodeId,x.dataset.x,x.dataset.y])')
                         combinations = 0
                         for bits in itertools.product((False, True), repeat=6):
@@ -109,7 +111,9 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                             page.locator('#details').wait_for(state='visible')
                             assert identifier in page.locator('#detail-title').inner_text()
                             page.locator('#details-close').click()
-                        targets = page.evaluate('JSON.parse(document.getElementById("ipd-state").textContent).deliverables.filter(x=>x.owned_files?.some(f=>f.href)).map(x=>x.id)')
+                        rendered = json.loads((project / '.ipd/dashboard/data/state.json').read_text(encoding='utf-8'))
+                        targets = [item['id'] for item in rendered['deliverables']
+                                   if any(file.get('href') for file in item.get('owned_files', []))]
                         assert targets, 'No bound-file case in fixture'
                         target = next((x for x in targets if page.locator(f'#status-flow [data-node-id="{x}"]').count()), targets[0])
                         node = page.locator(f'#status-flow [data-node-id="{target}"]')
@@ -118,7 +122,7 @@ def run(output: Path, channels: list[str], external: dict[str, str]) -> dict:
                         page.locator('#details').wait_for(state='visible')
                         assert page.locator('#details').is_visible()
                         assert target in page.locator('#detail-title').inner_text()
-                        assert page.locator('#detail-body [data-copy-path]').count()
+                        page.locator('#detail-body [data-copy-path]').first.wait_for()
                         link = page.locator('#detail-body a').first
                         assert link.count() and link.get_attribute('href').startswith('../../')
                         if protocol == 'http': assert context.request.get(urljoin(base, link.get_attribute('href'))).ok

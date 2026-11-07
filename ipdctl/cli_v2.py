@@ -464,6 +464,7 @@ def _build_parser(translator: Translator | None = None) -> argparse.ArgumentPars
 
 
 _COMMAND_NAMES = {
+    "products", "work-plan", "increment-plan",
     "requirements", "templates",
     "init",
     "tailor",
@@ -504,6 +505,7 @@ _TRANSACTIONAL_COMMANDS = {
     "status",
 }
 _OPTIONS_WITH_VALUES = {
+    "--impact", "--replacement", "--handoff-plan",
     "--request", "--apply", "--type",
     "--name",
     "--task-type",
@@ -1419,6 +1421,23 @@ def _cmd_context(args: argparse.Namespace) -> int:
     unavailable = translator.text("common.not_available")
     none = translator.text("common.none")
     print(translator.text("cli.context.project", value=snapshot["project"]))
+    versions = snapshot["versions"]
+    packs = versions["templates"]
+    zh = translator.locale == "zh-CN"
+    def pack_label(pack):
+        return pack["id"] + "@" + pack["version"] if pack else unavailable
+
+    for title, value in (
+        ("CLI", versions["cli"]["package"]),
+        ("需求契约 / 注册表" if zh else "Requirements contract / registry",
+         " / ".join(versions["contracts"][key] or unavailable for key in ("requirements", "registry"))),
+        ("随工具提供的模板包" if zh else "Shipped template pack", pack_label(packs["shipped"])),
+        ("项目锁定的模板包" if zh else "Project-pinned template pack", pack_label(packs["project_pin"])),
+        ("当前增量锁定的模板包" if zh else "Active increment template pack", pack_label(packs["active_increment_pin"])),
+        ("与随附模板不同或待核对的当前实例" if zh else "Live instances to review against shipped templates",
+         ", ".join(versions["upgrade_preview"]["live_instances_for_explicit_review"]) or none),
+    ):
+        print(f"{title} · {value}")
     print(translator.text("cli.context.phase", value=snapshot["phase"]))
     print(translator.text("cli.context.tr", value=snapshot["tr"] or unavailable))
     print(translator.text("cli.context.dcp", value=snapshot["dcp"] or unavailable))
@@ -1722,6 +1741,11 @@ def _cmd_claim(args: argparse.Namespace) -> int:
                 action="claim",
                 translator=translator,
             )
+        from .product_governance import claim_issues
+        from .requirements import read_registry
+        product_issues = claim_issues(root, read_registry(root) or {}, state, args.deliverable)
+        if product_issues:
+            raise ValueError("PRODUCT_NOT_READY: " + ", ".join(product_issues))
         updated_state = claim_deliverable(state, args.deliverable)
     updated_state = _set_workflow_step(updated_state, "work")
     from .reconcile import (

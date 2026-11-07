@@ -441,7 +441,11 @@ def qualify() -> dict[str, Any]:
             raise RuntimeError("render-dashboard changed project state bytes")
         if runtime_path.read_bytes() != runtime_before_render:
             raise RuntimeError("render-dashboard changed Agent Runtime bytes")
-        if _dashboard_inventory(project) != EXPECTED_DASHBOARD_FILES:
+        expected_files = EXPECTED_DASHBOARD_FILES | {
+            "assets/work/" + hashlib.sha256(("deliverable:" + item["id"]).encode()).hexdigest() + ".js"
+            for item in recovered_state["deliverables"]
+        }
+        if _dashboard_inventory(project) != expected_files:
             raise RuntimeError(
                 "v0.5.1 Dashboard inventory mismatch: "
                 f"{sorted(_dashboard_inventory(project))}"
@@ -525,7 +529,7 @@ def qualify() -> dict[str, Any]:
             "init_replayed": False,
             "legacy_manifest_schema": "2.1",
             "current_manifest_schema": "2.2",
-            "dashboard_files": len(EXPECTED_DASHBOARD_FILES),
+            "dashboard_files": len(expected_files),
             "legacy_mid_review_failed_closed": True,
             "review_subject_recovered": REVIEW_SUBJECT,
             "review_subject_mismatch_zero_write": True,

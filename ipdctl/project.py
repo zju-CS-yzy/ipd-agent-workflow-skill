@@ -2006,9 +2006,15 @@ def context_snapshot(project_root: str | Path) -> dict[str, Any]:
         "eligibility": eligibility,
         "repository": repo.as_dict(),
     }
+    from .version_context import inventory
     if (paths["root"] / ".ipd/requirements.yaml").is_file():
         from .requirements import projection
         result["requirements"] = projection(paths["root"])
+    result["versions"] = inventory(
+        paths["root"], result.get("requirements"),
+        process_schema=process.get("schema_version") if process else None,
+        runtime_schema=runtime.get("schema_version"),
+    )
     return result
 
 
@@ -2310,10 +2316,6 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                                        "message": "stage work-product graph does not match canonical facts"})
         except (ValueError, OSError) as exc:
             issue_rows.append({"path": "$.dashboard.requirement_flow", "code": "REQUIREMENTS_FLOW_INVALID", "message": str(exc)})
-    expected_files = sorted(
-        Path(relative).relative_to(".ipd/dashboard").as_posix()
-        for relative in required_outputs
-    ) + ["manifest.json"]
     manifest_path = paths["dashboard"] / "manifest.json"
     if not manifest_path.exists():
         issue_rows.append(
@@ -2343,12 +2345,20 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
             if process is not None:
                 from .dashboard_model import build_dashboard_model
                 from .dashboard_files import project_file_navigation
-                from .dashboard_work import projection as work_projection, signature as work_signature
+                from .dashboard_work import details_asset, projection as work_projection, signature as work_signature
                 from .requirements import projection as requirement_projection
                 from .reconcile import load_artifact_bindings
                 expected_state, _ = build_dashboard_model(process, state, runtime, translator=translator, locale=locale)
                 project_file_navigation(paths['root'], expected_state['deliverables'], load_artifact_bindings(paths['bindings']))
-                expected_work = work_projection(expected_state, requirement_projection(paths['root']))
+                requirements_view = requirement_projection(paths['root'])
+                expected_work = work_projection(expected_state, requirements_view)
+                required_outputs.update(
+                    ".ipd/dashboard/" + details_asset(item["id"])
+                    for item in expected_work["entities"] if item["kind"] == "Deliverable" or item.get('product_kind')
+                )
+                if requirements_view and manifest.get("candidate_plan_sha256") != requirements_view["candidate_plan_sha256"]:
+                    issue_rows.append({"path": "$.dashboard", "code": "CANDIDATE_PLAN_VIEW_STALE",
+                                       "message": "candidate increment plan changed"})
                 rendered_state = json.loads((paths['dashboard']/'data/state.json').read_text(encoding='utf-8'))
                 if 'work_products' not in rendered_state or work_signature(rendered_state['work_products']) != work_signature(expected_work):
                     issue_rows.append({'path':'$.dashboard.work_products', 'code':'WORK_PRODUCTS_STALE',
@@ -2376,6 +2386,10 @@ def verify_project(project_root: str | Path) -> dict[str, Any]:
                         }
                     )
             files = manifest.get("files")
+            expected_files = sorted(
+                Path(relative).relative_to(".ipd/dashboard").as_posix()
+                for relative in required_outputs
+            ) + ["manifest.json"]
             if files != expected_files:
                 issue_rows.append(
                     {

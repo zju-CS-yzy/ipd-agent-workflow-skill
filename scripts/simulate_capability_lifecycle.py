@@ -30,6 +30,7 @@ from scripts.simulate_project_lifecycle import (
     EXPECTED_PHASES,
     LifecycleScenario,
     SimulationFailure,
+    expected_dashboard_files,
     _json_output,
     _require,
 )
@@ -681,8 +682,8 @@ class CapabilityLifecycleScenario(LifecycleScenario):
             if path.is_file()
         }
         _require(
-            dashboard_files == EXPECTED_DASHBOARD_FILES,
-            "Dashboard output inventory diverged from the 16-file contract",
+            dashboard_files == expected_dashboard_files(self._state()),
+            "Dashboard output inventory diverged from the managed contract",
         )
         graph_data = final["graph_data"]
         state_data = final["state_data"]

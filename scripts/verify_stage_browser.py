@@ -109,6 +109,7 @@ def run(output,channels):
                         page.locator('#details-close').click();support.focus();page.keyboard.press('Enter')
                         assert 'plan.selection' in page.locator('#detail-title').inner_text() and page.locator('#details').is_visible()
                         assert page.locator('.work-selected[data-work-key="deliverable:plan.selection"]').count()>=3
+                        page.locator('#detail-body [data-work-unit]').first.wait_for()
                         assert page.locator('#detail-body [data-work-unit]').count()==2
                         page.locator('#detail-body [data-work-unit]').last.click()
                         assert page.locator('[data-flow-unit][open]:visible').count()>=1

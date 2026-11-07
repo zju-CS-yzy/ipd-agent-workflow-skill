@@ -1,6 +1,23 @@
 # GitHub Release Checklist
 
-Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.5b1` and public label `v0.5.5-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+Use this checklist for every GitHub release. The target for this cycle is Python package `0.5.7b1` and public label `v0.5.7-beta`. No release may start until the upgrade and simulated-lifecycle gates below pass with no missing artifacts or severity-one workflow blockers.
+
+## v0.5.7-beta candidate scope
+
+- [ ] Qualify separate Recorder/Replay imports and serial new-version work through normal Claim, review and exact human approval.
+- [ ] Qualify per-purpose adoption, target-environment compatibility, dataset identity, evidence drift, withdrawal and affected verification.
+- [ ] Verify zero-write handoff previews, new bilingual drafts, preserved historical Owner/source bytes, stale-plan rejection and rollback.
+- [ ] Qualify explicit old-project adoption and old-client write rejection, final-source broad tests, browser, package/install and endpoint CI.
+- [ ] Complete accepted-main integration, immutable Tag CI and public-asset validation before publication.
+- [x] Private Golden remains unavailable. Content readiness and authenticated identity mapping retain their separate planned scope.
+
+## v0.5.6-beta candidate scope
+
+- [x] Verify graph and landing-page byte stability with 10,000 additional bound history files. Check full detail navigation in both languages, offline and over HTTP.
+- [x] Verify candidate plan previews, stale-plan rejection, stable links after merge, and unchanged execution facts. Check version inventory against an older pinned pack.
+- [ ] Complete lifecycle regressions, historical upgrades, packaging and the Windows/Linux endpoint CI matrix on the final candidate.
+- [ ] Require the immutable release Tag's own successful test run before publication. Verify all four published assets and isolated installations.
+- [x] Private Golden coverage remains unavailable. Public synthetic evidence is recorded separately from real-project acceptance.
 
 ## v0.5.5-beta candidate scope — 2026-10-26
 

@@ -404,7 +404,11 @@ class RequirementTests(unittest.TestCase):
         for axis in ('Definition', 'Decomposition', 'Implementation', 'Independent verification', 'Full-scope fulfillment'):
             self.assertIn(axis, index)
         self.assertIn("ir-1@1", index)
-        self.assertIn("VERIFICATION_NOT_PASSED", index)
+        self.assertIn('href="matrices/deliverable_matrix.html#work-audit"', index)
+        self.assertNotIn("VERIFICATION_NOT_PASSED", index)
+        complete = (self.root / ".ipd/dashboard/matrices/deliverable_matrix.html").read_text(encoding="utf-8")
+        self.assertIn('id="work-audit"', complete)
+        self.assertIn("VERIFICATION_NOT_PASSED", complete)
 
     def test_two_governed_increments_preserve_baselines_partial_ir_and_exact_reuse(self):
         import subprocess

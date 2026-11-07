@@ -75,6 +75,15 @@ def verification_context(root: Path, registry: dict, reference: str) -> str:
     if "organization" in registry:
         from .stage_organization import context
         value["stage_context"] = context(root, registry, reference)
+    if 'components' in registry:
+        from .product_governance import decision_inputs
+        owners = {link['target'] for link in links if link['relation'] != 'shared_constraint'}
+        owners.update(instance['owner'] for instance in instances)
+        inputs = decision_inputs(root, registry, owners)
+        if inputs['works'] or inputs['uses']:
+            value['product_inputs'] = inputs
+            value['product_withdrawals'] = [item for item in registry['components']['withdrawals']
+                                            if 'release:' + item['release'] in inputs['inputs']]
     return digest(value)
 
 

@@ -133,12 +133,65 @@ WORK_SCHEMA['properties'].update(schema_version=enum('1.2'), contract=enum('0.5.
 WORK_SCHEMA['properties']['organization']['properties']['units'] = arr(STAGE_UNIT_V2)
 WORK_SCHEMA['properties']['organization']['properties']['work_adoption'] = obj({'path': S, 'sha256': HASH})
 WORK_SCHEMA['properties']['organization']['required'].append('work_adoption')
+PROOF = obj({"path": S, "sha256": HASH})
+PROOFS = {**arr(PROOF), "minItems": 1}
+SOURCE = obj({"backend": enum("git", "svn", "content"), "repository": S, "revision": S, "path": S})
+PRODUCT = obj({"id": ID, "title": S, "scope": S})
+RELEASE = obj({
+    "id": ID, "product": ID, "version": S, "scope": S, "source": SOURCE,
+    "protocol": ID, "environments": {**arr(ID), "minItems": 1},
+    "capabilities": {**arr(S), "minItems": 1}, "requirements": arr(REF), "artifacts": PROOFS,
+})
+CASE = obj({"id": ID, "criterion": S, "expected": S, "observed": S,
+            "result": enum("passed", "failed", "unknown", "skipped")})
+CHECK = obj({
+    "id": ID, "releases": {**arr(ID), "minItems": 1}, "datasets": arr(ID),
+    "protocol": ID, "environment": ID, "cases": {**arr(CASE), "minItems": 1}, "evidence": PROOF,
+})
+DATASET = obj({
+    "id": ID, "recorder": ID, "protocol": ID, "environment": ID, "configuration": S,
+    "calibration": S, "time_basis": S,
+    "quality": obj({"cases": {**arr(CASE), "minItems": 1}, "evidence": PROOF}), "files": PROOFS,
+})
+ASSESSMENT = obj({"target": S, "action": enum("reverify", "unaffected"), "rationale": S})
+ADOPTION = obj({
+    "id": ID, "key": ID, "purpose": S, "releases": {**arr(ID), "minItems": 1},
+    "datasets": arr(ID), "checks": {**arr(ID), "minItems": 1},
+    "protocol": ID, "environment": ID, "consumers": {**arr(ID), "minItems": 1},
+    "evidence": PROOF, "prior": {"oneOf": [ID, NULL]}, "assessments": arr(ASSESSMENT),
+})
+RECORDS = {"release": RELEASE, "compatibility": CHECK, "dataset": DATASET, "adoption": ADOPTION}
+WORK = {"oneOf": [
+    obj({"id": ID, "owner": ID, "increment": ID, "kind": enum(kind), "record": record})
+    for kind, record in RECORDS.items()
+]}
+ACCEPTANCE = obj({"work": ID, "reviewer": S, "approval_sha256": HASH, "manifest_sha256": HASH})
+IMPORT = obj({"release": RELEASE, "approver": S, "approval": PROOF,
+              "identity_source": enum("historical-local-declaration")})
+HISTORY = obj({"path": S, "sha256": HASH})
+ORIGIN = obj({"path": S, "sha256": HASH, "owner": ID,
+              "approval_sha256": {"oneOf": [HASH, NULL]}, "editor": S})
+COMPONENTS = obj({
+    "adoption": HISTORY, "products": arr(PRODUCT), "imports": arr(IMPORT), "works": arr(WORK),
+    "acceptances": arr(ACCEPTANCE), "withdrawals": arr(obj({"release": ID, "reason": S})),
+    "history": arr(HISTORY),
+})
+
+PRODUCT_SCHEMA = deepcopy(LEGACY_SCHEMA)
+PRODUCT_SCHEMA['title'] = 'Incremental requirement registry 1.3'
+PRODUCT_SCHEMA['properties'].update(
+    schema_version=enum('1.3'), contract=enum('0.5.7'), components=COMPONENTS,
+    organization=deepcopy(WORK_SCHEMA['properties']['organization']),
+)
+PRODUCT_SCHEMA['required'].append('components')
+PRODUCT_SCHEMA['properties']['instances']['items']['properties'].update(requirements=arr(REF), origin=ORIGIN)
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "Incremental requirement registries", "oneOf": [LEGACY_SCHEMA, ORGANIZED_SCHEMA, WORK_SCHEMA]}
+          "title": "Incremental requirement registries",
+          "oneOf": [LEGACY_SCHEMA, ORGANIZED_SCHEMA, WORK_SCHEMA, PRODUCT_SCHEMA]}
 
 
 def unit_contract(registry):
-    return STAGE_UNIT_V2 if registry['schema_version'] == '1.2' else STAGE_UNIT
+    return STAGE_UNIT_V2 if registry['schema_version'] in {'1.2', '1.3'} else STAGE_UNIT
 
 
 def validate(value: Any, schema: dict = SCHEMA, path: str = "$") -> None:

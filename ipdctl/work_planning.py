@@ -153,7 +153,7 @@ def preview(root, request):
             units.append(value)
     result = {'schema_version':'1.0', 'command':'work-plan', 'request':deepcopy(request),
               'source_sha256':digest(base), 'state_revision':state['revision'], 'read_only':True,
-              'work_role_adoption_required':registry['schema_version'] != '1.2',
+              'work_role_adoption_required':registry['schema_version'] not in {'1.2', '1.3'},
               'materials':planned, 'issues':sorted(set(issues)), 'candidate_process_extensions':extension,
               'candidate_artifact_bindings':bindings, 'tailor_diff':preview_process_diff(process, compiled),
               'candidate_stage_units':units,

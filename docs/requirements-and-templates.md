@@ -143,7 +143,22 @@ Creation requires an unexpired Owner Claim, the matching actor and existing expl
 
 ## QA packs, baselines and reuse
 
-`ipd-starter@1.2.1` is the public pack, containing 18 types and 36 bilingual files including four overall stage discussion drafts. The `1.0.0`, `1.1.0` and `1.2.0` packs are archived unchanged for existing pins. A project explicitly pins one effective pack with a `core`, `organization`, or `project` layer; resolution is explicit rather than a silent per-file overlay. QA can copy the pack locally, change its ID/version, applicability, sections and content, and recalculate per-template SHA-256 digests. Changed content requires a new version. Normal pinning cannot change a pack after instance creation; the controlled replacement operation below creates new files and preserves old instances. Missing versions, tampered files, incompatible contracts and unavailable type/locale combinations block affected writes. Private packs are never fetched or bundled automatically.
+`ipd-starter@1.3.0` is the shipped pack, with 23 types in both languages. The `1.0.0`, `1.1.0`, `1.2.0` and `1.2.1` packs remain available for existing pins. A project explicitly pins one effective pack with a `core`, `organization`, or `project` layer. QA can copy the pack locally, change its ID/version, applicability, sections and content, and recalculate per-template SHA-256 digests. Changed content requires a new version. The controlled replacement operation below creates new files and preserves old instances. Missing versions, tampered files, incompatible contracts and unavailable type/locale combinations block affected writes. Private packs are never fetched or bundled automatically.
+
+`ipdctl context . --json` reports the installed CLI, process and requirement contracts, shipped pack, project and active increment pins, publication records and each instance version under `versions`. The upgrade preview compares template identity, version and digest with the shipped pack. Differences are review candidates. Publishing or pinning a pack and replacing an instance still require their own explicit operations.
+
+### Plan future increments
+
+After enabling requirements, use `ipdctl increment-plan . --request request.yaml` to preview, save its JSON result, then apply with `ipdctl increment-plan . --apply plan.json --actor NAME --authorized`. Every request contains a unique `request_id`, a `reason` and one operation.
+
+| Operation | Additional fields |
+|---|---|
+| `add` | `id`, `title` |
+| `reorder` | `order`, listing each pending candidate ID once |
+| `merge` | `ids` and the active `increment` |
+| `link` | Candidate `id` and an existing governed `increment` |
+
+For example, merge `inc-01` and `inc-02` into `mvp`. The remaining `inc-03` and `inc-04` display as Increment 1 and 2. Both merged records remain addressable by their stable Dashboard links. Save `.ipd/increment_plan.yaml` with other shared project facts if the team needs the same plan. Candidate planning leaves scope adoption to the existing requirements workflow. To incorporate actual requirements in the MVP, use that workflow to revise or adopt scope as applicable.
 
 Delivery baselines differ from `adopt-baseline` reconciliation baselines. They require all six phases, approved Gates and current Verify. Read-only Git/SVN commands compare specified immutable source revisions with governance facts. Git needs a full commit ID; SVN needs a numeric revision and project path. Runtime refresh/verification caches may be regenerated after the source is accepted; authoritative Claim/Review events must match. The authorized maintainer identifies the accepted source; trusted platform approval mapping belongs to v0.6.1.
 

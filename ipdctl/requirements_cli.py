@@ -20,6 +20,27 @@ def register_commands(commands, translator) -> None:
     group.add_argument('--check-plan', help='核对已保存计划是否仍适用' if zh else 'Check saved plan freshness')
     parser.add_argument('--json', action='store_true')
     parser.set_defaults(handler=run_work_plan)
+    parser = commands.add_parser("increment-plan", help="候选增量规划" if zh else "Plan candidate increments", translator=translator)
+    parser.add_argument("target", nargs="?", default=".")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--request")
+    group.add_argument("--apply")
+    parser.add_argument("--actor", default="")
+    parser.add_argument("--authorized", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.set_defaults(handler=run_increment_plan)
+    parser = commands.add_parser("products", help="子产品、采用与升级影响" if zh else "Enabling products, adoption and upgrade impact", translator=translator)
+    parser.add_argument("target", nargs="?", default=".")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--request")
+    group.add_argument("--apply")
+    group.add_argument("--impact", help="已接受版本 ID" if zh else "Accepted release ID")
+    group.add_argument("--handoff-plan", help="旧成果交接请求文件（只读）" if zh else "Legacy-work handoff request file (read-only)")
+    parser.add_argument("--replacement", help="候选替换版本 ID" if zh else "Proposed replacement release ID")
+    parser.add_argument("--actor", default="")
+    parser.add_argument("--authorized", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.set_defaults(handler=run_products)
     description = "需求、增量及交付件计划" if zh else "Requirement, increment and document plans"
     parser = commands.add_parser("requirements", help=description, description=description, translator=translator)
     parser.add_argument("target", nargs="?", default=".")
@@ -60,6 +81,21 @@ def run_work_plan(args):
     return 0
 
 
+def run_increment_plan(args):
+    from .increment_planning import apply, display, preview, read
+
+    root = Path(args.target).resolve()
+    if args.request:
+        result = preview(root, load_state(args.request))
+    elif args.apply:
+        result = apply(root, load_state(args.apply), actor=args.actor, authorized=args.authorized)
+    else:
+        data = read(root)
+        result = {**data, "candidates": display(data)}
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
+    return 0
+
+
 def run_templates(args: argparse.Namespace) -> int:
     root = Path(args.target).resolve()
     registry = read_registry(root)
@@ -74,4 +110,25 @@ def run_templates(args: argparse.Namespace) -> int:
         print(text, end="")
     else:
         print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def run_products(args):
+    from .product_governance import handoff_preview, impact, projection as product_projection
+    from .state import resolve_state_path
+
+    root = Path(args.target).resolve()
+    if args.replacement and not args.impact:
+        raise ValueError("PRODUCT_UPGRADE: --replacement requires --impact")
+    if args.handoff_plan:
+        result = handoff_preview(root, load_state(args.handoff_plan))
+    elif args.request:
+        result = preview(root, load_state(args.request))
+    elif args.apply:
+        result = apply_plan(root, load_state(args.apply), actor=args.actor, authorized=args.authorized)
+    elif args.impact:
+        result = impact(read_registry(root), args.impact, args.replacement)
+    else:
+        result = product_projection(root, read_registry(root) or {}, load_state(resolve_state_path(root)))
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0

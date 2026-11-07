@@ -74,7 +74,8 @@ def renderer_fingerprint() -> str:
     root = Path(__file__).parent
     names = ('dashboard.py', 'dashboard_model.py', 'dashboard_files.py', 'dashboard_html.py',
              'dashboard_svg.py', 'dashboard_work.py', 'stage_flow.py', 'i18n.py', 'messages.yaml',
-             'requirements.py', 'requirement_verification.py', 'stage_organization.py', 'version.py')
+             'requirements.py', 'requirement_verification.py', 'stage_organization.py', 'increment_planning.py',
+             'product_governance.py', 'version.py')
     return _value_sha256({name: (root/name).read_text(encoding='utf-8') for name in names})
 
 
@@ -151,7 +152,10 @@ def render_dashboard(
     from .dashboard_files import project_file_navigation
     project_file_navigation(Path(project_root), state_data["deliverables"], bindings)
     from .requirements import projection as requirement_projection
-    from .dashboard_work import projection as work_projection, enrich_graph, graph_slice as work_graph_slice
+    from .dashboard_work import (
+        details_asset, details_script, enrich_graph, graph_slice as work_graph_slice,
+        projection as work_projection,
+    )
     requirement_data = requirement_projection(Path(project_root))
     if requirement_data is not None:
         state_data["requirements"] = requirement_data
@@ -179,6 +183,9 @@ def render_dashboard(
 
         _atomic_write(staging / "data" / "state.json", _json_text(state_data))
         _atomic_write(staging / "data" / "graph.json", _json_text(graph_data))
+        for item in state_data["work_products"]["entities"]:
+            if item["kind"] == "Deliverable" or item.get('product_kind'):
+                _atomic_write(staging / details_asset(item["id"]), details_script(item))
         if requirement_data is not None and "flow" in requirement_data:
             _atomic_write(staging / "data" / "requirement_flow.json", _json_text(requirement_data["flow"]))
         _atomic_write(
@@ -315,6 +322,7 @@ def render_dashboard(
         }
         if requirement_data is not None:
             manifest["requirements_sha256"] = requirement_data["input_sha256"]
+            manifest["candidate_plan_sha256"] = requirement_data["candidate_plan_sha256"]
             if "flow" in requirement_data:
                 manifest["views"]["requirement_flow"] = "data/requirement_flow.json"
         _atomic_write(staging / "manifest.json", _json_text(manifest))

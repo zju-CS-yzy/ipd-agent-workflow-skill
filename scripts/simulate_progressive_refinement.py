@@ -263,11 +263,16 @@ class ProgressiveRefinementScenario:
             for path in self.dashboard.rglob("*")
             if path.is_file()
         }
+        from ipdctl.dashboard_work import details_asset
+
+        expected_files = EXPECTED_DASHBOARD_FILES | {
+            details_asset("deliverable:" + item["id"]) for item in self.state()["deliverables"]
+        }
         _require(
-            actual_files == EXPECTED_DASHBOARD_FILES,
+            actual_files == expected_files,
             f"Dashboard inventory mismatch for {label}: "
-            f"missing={sorted(EXPECTED_DASHBOARD_FILES - actual_files)}, "
-            f"extra={sorted(actual_files - EXPECTED_DASHBOARD_FILES)}",
+            f"missing={sorted(expected_files - actual_files)}, "
+            f"extra={sorted(actual_files - expected_files)}",
         )
         state_data = json.loads(
             (self.dashboard / "data" / "state.json").read_text(encoding="utf-8")
@@ -742,7 +747,7 @@ class ProgressiveRefinementScenario:
             "refinement_events": len(events),
             "root_leaf_closure": root_leaves,
             "intermediate_leaf_closure": intermediate_leaves,
-            "dashboard_files": len(EXPECTED_DASHBOARD_FILES),
+            "dashboard_files": len(list(self.dashboard.rglob("*.js"))) + len(EXPECTED_DASHBOARD_FILES),
             "concept_gate_epoch": 2,
             "history_preserved": True,
             "owner_preflight_exercised": True,

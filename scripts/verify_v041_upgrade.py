@@ -170,7 +170,11 @@ def _assert_dashboard_readable(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     dashboard = project / ".ipd" / "dashboard"
     inventory = _dashboard_inventory(project)
-    expected = LEGACY_DASHBOARD_FILES if legacy else EXPECTED_DASHBOARD_FILES
+    state = _json_output((dashboard / "data" / "state.json").read_text(encoding="utf-8"))
+    expected = LEGACY_DASHBOARD_FILES if legacy else EXPECTED_DASHBOARD_FILES | {
+        "assets/work/" + hashlib.sha256(("deliverable:" + item["id"]).encode()).hexdigest() + ".js"
+        for item in state["deliverables"]
+    }
     if inventory != expected:
         raise RuntimeError(
             "Dashboard inventory mismatch: "
@@ -179,7 +183,6 @@ def _assert_dashboard_readable(
         )
     if len((dashboard / "index.html").read_text(encoding="utf-8")) < 100:
         raise RuntimeError("Dashboard index.html is empty or truncated")
-    state = _json_output((dashboard / "data" / "state.json").read_text(encoding="utf-8"))
     graph = _json_output((dashboard / "data" / "graph.json").read_text(encoding="utf-8"))
     return state, graph
 
@@ -592,7 +595,7 @@ def qualify() -> dict[str, Any]:
             "reviews_preserved": current_root.get("reviews") == legacy_root.get("reviews"),
             "refinement_records_preserved": len(legacy_refinements),
             "runtime_events_preserved": len(legacy_runtime_events),
-            "dashboard_files": len(EXPECTED_DASHBOARD_FILES),
+            "dashboard_files": len(_dashboard_inventory(project)),
             "capability_preview": NEW_CAPABILITY,
             "capability_deliverables_previewed": len(added_deliverables),
             "capability_preview_zero_write": True,
@@ -612,7 +615,7 @@ def qualify() -> dict[str, Any]:
             "reviews_preserved": True,
             "refinement_records_preserved": 1,
             "runtime_events_preserved": len(legacy_runtime_events),
-            "dashboard_files": 16,
+            "dashboard_files": 16 + len(current_dashboard_state["deliverables"]),
             "capability_preview": "interface_contract_and_integration",
             "capability_deliverables_previewed": 3,
             "capability_preview_zero_write": True,

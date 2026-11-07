@@ -352,10 +352,12 @@ class DashboardTests(unittest.TestCase):
                 "data/graph.json",
                 "manifest.json",
             }
-            expected = required | {"phases/lifecycle.svg"}
+            from ipdctl.dashboard_work import details_asset
+            expected = required | {"phases/lifecycle.svg"} | {
+                details_asset("deliverable:" + item["id"]) for item in state["deliverables"]
+            }
             self.assertEqual(set(generated_files(dashboard)), expected)
             self.assertEqual(set(manifest["files"]), expected)
-            self.assertEqual(len(expected), 16)
             self.assertEqual(manifest["schema_version"], "2.2")
             self.assertEqual(manifest["locale"], "en")
             self.assertEqual(manifest["state_revision"], state["revision"])
@@ -934,7 +936,7 @@ class DashboardTests(unittest.TestCase):
         self.assertNotEqual(first["eligibility_sha256"], second["eligibility_sha256"])
         self.assertNotEqual(second["bindings_sha256"], third["bindings_sha256"])
         self.assertNotEqual(second["eligibility_sha256"], third["eligibility_sha256"])
-        self.assertEqual(len(files), 16)
+        self.assertEqual(set(files), set(first["files"]))
 
     def test_phase_acceptance_requires_all_phase_gates_approved(self) -> None:
         process = process_fixture()
